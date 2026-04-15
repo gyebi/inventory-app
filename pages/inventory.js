@@ -11,6 +11,9 @@ function renderInventory() {
       <div class="card">
         <strong>${p.name}</strong><br>
         Category: ${p.category}<br>
+        Bulk Unit: ${p.bulkUnit}<br>
+        Base Unit: ${p.baseUnit}<br>
+        Base Units Per Bulk Unit: ${p.unitsPerBulk}<br>
         Stock: ${p.quantity} ${p.baseUnit}(s)<br>
         Equivalent: ${formatStock(p)}<br>
         Cost Price: ${p.costPrice}<br>
