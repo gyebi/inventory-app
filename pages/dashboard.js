@@ -1,5 +1,5 @@
 function renderDashboard() {
-  let totalSales = state.sales.reduce((sum, s) => sum + s.qty, 0);
+  let totalSales = state.sales.reduce((sum, s) => sum + (s.actualQtySold || s.qty), 0);
 
   let totalProfit = state.sales.reduce((sum, s) => sum + s.totalProfit, 0);
 

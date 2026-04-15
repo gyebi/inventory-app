@@ -15,6 +15,24 @@ nav button {
   margin-top: 10px;
 }
 
+.message {
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+}
+
+.error {
+  border-color: #b00020;
+  color: #b00020;
+  background: #fff5f7;
+}
+
+.success {
+  border-color: #0f7b34;
+  color: #0f7b34;
+  background: #f3fff6;
+}
+
 hr {
   margin: 10px 0;
 }
@@ -23,6 +41,27 @@ button {
   padding: 10px;
   margin: 5px;
   cursor: pointer;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  gap: 8px;
+}
+
+.form-column label {
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+.form-column input,
+.form-column select {
+  padding: 10px;
+}
+
+.form-column button {
+  margin: 12px 0 0;
 }
 
 /* Modal  styles */

@@ -5,7 +5,7 @@ const modalBody = document.getElementById("modal-body");
 
 function navigate(page) {
   if (page === "dashboard") renderDashboard();
-  if (page === "addProduct") openAddProductModal();
+  if (page === "addProduct") renderAddProduct();
   if (page === "sales") renderSales();
   if (page === "inventory") renderInventory();
 }
