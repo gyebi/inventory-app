@@ -55,39 +55,6 @@ function addProduct() {
   setTimeout(() => navigate("inventory"), 1000);
 }
 
-
-
-
-function recordSale() {
-  const index = document.getElementById("productIndex").value;
-  const qty = Number(document.getElementById("qty").value);
-
-  const product = state.products[index];
-
-  const profitPerUnit = product.sellingPrice - product.costPrice;
-  const totalProfit = profitPerUnit * qty;
-  const totalAmount = product.sellingPrice * qty;
-
-  product.quantity -= qty;
-
-  const sale = {
-    product: product.name,
-    qty,
-    sellingPrice: product.sellingPrice,
-    totalAmount,
-    totalProfit,
-    date: new Date().toLocaleString()
-  };
-
-  state.sales.push(sale);
-
-  saveState();
-
-  // 👉 NEW: Show receipt
-  renderReceipt(sale);
-}
-
-
 function formatStock(product) {
   const fullBulk = Math.floor(product.quantity / product.unitsPerBulk);
   const remainder = product.quantity % product.unitsPerBulk;

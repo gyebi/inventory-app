@@ -62,6 +62,7 @@ function recordSale() {
   state.sales.push(sale);
   saveState();
 
+  renderReceipt(sale);
 }
 
  function renderReceipt(sale) {
