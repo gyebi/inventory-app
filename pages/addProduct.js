@@ -1,14 +1,3 @@
-const unitReference = {
-  Crate: {
-    baseUnit: "Bottle",
-    unitsPerBulk: 30
-  },
-  Pack: {
-    baseUnit: "Sachet",
-    unitsPerBulk: 20
-  }
-};
-
 function renderAddProduct(error = "") {
   app.innerHTML = `
     <h2>➕ Add Product</h2>
@@ -43,7 +32,7 @@ function renderAddProduct(error = "") {
 
       <div class="form-row">
         <label for="bulkUnit">Bulk Unit</label>
-        <select id="bulkUnit" onchange="updateBaseUnitForBulk()">
+        <select id="bulkUnit">
           <option>Crate</option>
           <option>Carton</option>
           <option>Pack</option>
@@ -69,20 +58,6 @@ function renderAddProduct(error = "") {
       <button onclick="addProduct()">Add Product</button>
     </div>
   `;
-
-  updateBaseUnitForBulk();
-}
-
-function updateBaseUnitForBulk() {
-  const bulkUnit = document.getElementById("bulkUnit").value;
-  const baseUnit = document.getElementById("baseUnit");
-  const unitsPerBulk = document.getElementById("unitsPerBulk");
-  const unitDetails = unitReference[bulkUnit];
-
-  if (unitDetails) {
-    baseUnit.value = unitDetails.baseUnit;
-    unitsPerBulk.value = unitDetails.unitsPerBulk;
-  }
 }
 
 function addProduct() {
@@ -150,7 +125,7 @@ function addProduct() {
 
   saveState();
 
-  app.innerHTML = `<div class="message success">Product added.</div>`;
+  app.innerHTML = `<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`;
   setTimeout(() => navigate("inventory"), 1000);
 }
 
