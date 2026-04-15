@@ -1,6 +1,7 @@
 body {
   font-family: Arial;
   padding: 20px;
+  margin: 0;
 }
 
 nav button {
@@ -41,6 +42,70 @@ button {
   padding: 10px;
   margin: 5px;
   cursor: pointer;
+}
+
+.login-page {
+  align-items: center;
+  display: flex;
+  min-height: 90vh;
+}
+
+.login-panel {
+  width: min(560px, 100%);
+}
+
+.app-header {
+  align-items: center;
+  border-bottom: 1px solid #ccc;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+}
+
+.app-header h1 {
+  margin-bottom: 4px;
+}
+
+.app-header p {
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.menu-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  max-width: 900px;
+}
+
+.menu-card {
+  align-items: flex-start;
+  background: white;
+  border: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 130px;
+  padding: 18px;
+  text-align: left;
+}
+
+.menu-card strong {
+  font-size: 18px;
+}
+
+.menu-card small {
+  color: #555;
+  font-size: 14px;
+}
+
+.menu-icon {
+  font-size: 30px;
 }
 
 .form-column {

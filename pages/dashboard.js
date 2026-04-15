@@ -5,7 +5,7 @@ function renderDashboard() {
 
   let lowStock = state.products.filter(p => p.quantity < 10).length;
 
-  app.innerHTML = `
+  renderPage(`
     <h2>📊 Dashboard</h2>
 
     <div class="card">🧾 Total Products: ${state.products.length}</div>
@@ -17,7 +17,7 @@ function renderDashboard() {
     <div class="card">⚠️ Low Stock Items: ${lowStock}</div>
 
     <button onclick = "resetData()">Reset Data</button>
-  `;
+  `);
 
 
 }

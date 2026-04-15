@@ -1,10 +1,10 @@
 function renderReceiveStock(error = "") {
   if (state.products.length === 0) {
-    app.innerHTML = `
+    renderPage(`
       <h2>📥 Receive Stock</h2>
       <div class="message error">Add a product before receiving stock.</div>
       <button onclick="navigate('addProduct')">Add Product</button>
-    `;
+    `);
     return;
   }
 
@@ -12,7 +12,7 @@ function renderReceiveStock(error = "") {
     (product, index) => `<option value="${index}">${product.name}</option>`
   ).join("");
 
-  app.innerHTML = `
+  renderPage(`
     <h2>📥 Receive Stock</h2>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
@@ -35,7 +35,7 @@ function renderReceiveStock(error = "") {
 
       <button onclick="receiveStock()">Receive Stock</button>
     </div>
-  `;
+  `);
 }
 
 function receiveStock() {
@@ -69,11 +69,11 @@ function receiveStock() {
 
   saveState();
 
-  app.innerHTML = `
+  renderPage(`
     <div class="message success">
       Stock received. Current stock is ${formatStock(product)}.
     </div>
-  `;
+  `);
 
   setTimeout(() => navigate("inventory"), 1000);
 }

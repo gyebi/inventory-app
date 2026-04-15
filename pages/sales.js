@@ -1,10 +1,10 @@
 function renderSales(error = "") {
   if (state.products.length === 0) {
-    app.innerHTML = `
+    renderPage(`
       <h2>💰 Record Sale</h2>
       <div class="message error">Add a product before recording a sale.</div>
       <button onclick="navigate('addProduct')">Add Product</button>
-    `;
+    `);
     return;
   }
 
@@ -12,7 +12,7 @@ function renderSales(error = "") {
     (p, i) => `<option value="${i}">${p.name}</option>`
   ).join("");
 
-  app.innerHTML = `
+  renderPage(`
     <h2>💰 Record Sale</h2>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
@@ -27,7 +27,7 @@ function renderSales(error = "") {
     <input id="qty" type="number" min="1" step="1" placeholder="Quantity">
 
     <button onclick="recordSale()">Sell</button>
-  `;
+  `);
 }
 
 
@@ -86,7 +86,7 @@ function recordSale() {
 }
 
  function renderReceipt(sale) {
-  app.innerHTML = `
+  renderPage(`
     <h2>🧾 Receipt</h2>
 
     <div class="card">
@@ -102,5 +102,5 @@ function recordSale() {
 
     <button onclick="navigate('dashboard')">Back to Dashboard</button>
     <button onclick="printReceipt()">🖨 Print</button>
-  `;
+  `);
 }

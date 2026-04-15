@@ -1,5 +1,5 @@
 function renderAddProduct(error = "") {
-  app.innerHTML = `
+  renderPage(`
     <h2>➕ Add Product</h2>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
@@ -57,7 +57,7 @@ function renderAddProduct(error = "") {
 
       <button onclick="addProduct()">Add Product</button>
     </div>
-  `;
+  `);
 }
 
 function addProduct() {
@@ -125,7 +125,7 @@ function addProduct() {
 
   saveState();
 
-  app.innerHTML = `<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`;
+  renderPage(`<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`);
   setTimeout(() => navigate("inventory"), 1000);
 }
 

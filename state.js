@@ -2,8 +2,13 @@ const savedState = JSON.parse(localStorage.getItem("inventoryState"));
 
 const state = savedState || {
   products: [],
-  sales: []
+  sales: [],
+  suppliers: []
 };
+
+if (!state.suppliers) {
+  state.suppliers = [];
+}
 
 function saveState() {
   localStorage.setItem("inventoryState", JSON.stringify(state));

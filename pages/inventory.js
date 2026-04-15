@@ -1,6 +1,6 @@
 function renderInventory() {
   if (state.products.length === 0) {
-    app.innerHTML = `<div class="card">No products yet.</div>`;
+    renderPage(`<div class="card">No products yet.</div>`);
     return;
   }
 
@@ -22,5 +22,5 @@ function renderInventory() {
     `;
   });
 
-  app.innerHTML = html;
+  renderPage(html);
 }
