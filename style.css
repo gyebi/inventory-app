@@ -46,7 +46,7 @@ button {
 .form-column {
   display: flex;
   flex-direction: column;
-  max-width: 620px;
+  max-width: 560px;
   gap: 12px;
 }
 
@@ -57,18 +57,21 @@ button {
 }
 
 .form-row label {
-  flex: 0 0 210px;
+  flex: 0 0 220px;
   font-weight: bold;
 }
 
 .form-row input,
 .form-row select {
   flex: 1;
+  box-sizing: border-box;
   padding: 10px;
 }
 
 .form-row .number-field {
-  flex: 0 0 140px;
+  flex: 0 0 auto;
+  width: 110px;
+  max-width: 110px;
 }
 
 .form-column button {
