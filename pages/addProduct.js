@@ -1,10 +1,13 @@
 function renderAddProduct(error = "") {
   renderPage(`
-    <h2>➕ Add Product</h2>
+    <div class="page-title">
+      <h2>➕ Add Product</h2>
+      <p>Create the product record first. Use Receive Stock when suppliers deliver goods.</p>
+    </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <div class="form-column">
+    <div class="form-column panel">
       <div class="form-row">
         <label for="name">Product Name</label>
         <input id="name">

@@ -1,7 +1,10 @@
 function renderSales(error = "") {
   if (state.products.length === 0) {
     renderPage(`
-      <h2>💰 Record Sale</h2>
+      <div class="page-title">
+        <h2>💰 Record Sale</h2>
+        <p>Sell from existing stock after products have been received.</p>
+      </div>
       <div class="message error">Add a product before recording a sale.</div>
       <button onclick="navigate('addProduct')">Add Product</button>
     `);
@@ -11,26 +14,63 @@ function renderSales(error = "") {
   let options = state.products.map(
     (p, i) => `<option value="${i}">${p.name}</option>`
   ).join("");
+  const selectedProduct = state.products[0];
 
   renderPage(`
-    <h2>💰 Record Sale</h2>
+    <div class="page-title">
+      <h2>💰 Record Sale</h2>
+      <p>Choose a product, unit type, and quantity to complete a sale.</p>
+    </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <select id="productIndex">${options}</select>
+    <div class="sale-panel">
+      <div class="sale-summary">
+        <strong>Available Stock</strong>
+        <span>${formatStock(selectedProduct)}</span>
+        <small>${selectedProduct.quantity} ${selectedProduct.baseUnit}(s) in stock</small>
+      </div>
 
-    <select id="saleUnit">
-      <option value="base">Base Unit</option>
-      <option value="bulk">Bulk Unit</option>
-    </select>
+      <div class="form-column">
+        <div class="form-row">
+          <label for="productIndex">Product</label>
+          <select id="productIndex" onchange="updateSalePreview()">${options}</select>
+        </div>
 
-    <input id="qty" type="number" min="1" step="1" placeholder="Quantity">
+        <div class="form-row">
+          <label for="saleUnit">Sale Unit</label>
+          <select id="saleUnit" onchange="updateSalePreview()">
+            <option value="base">Base Unit</option>
+            <option value="bulk">Bulk Unit</option>
+          </select>
+        </div>
 
-    <button onclick="recordSale()">Sell</button>
+        <div class="form-row">
+          <label for="qty">Quantity</label>
+          <input id="qty" class="number-field" type="number" min="1" step="1">
+        </div>
+
+        <button onclick="recordSale()">Complete Sale</button>
+      </div>
+    </div>
   `);
 }
 
+function updateSalePreview() {
+  const index = Number(document.getElementById("productIndex").value);
+  const product = state.products[index];
+  const summary = document.querySelector(".sale-summary");
 
+  if (!product || !summary) {
+    return;
+  }
+
+  summary.innerHTML = `
+    <strong>Available Stock</strong>
+    <span>${formatStock(product)}</span>
+    <small>${product.quantity} ${product.baseUnit}(s) in stock</small>
+  `;
+}
 
 function recordSale() {
   const index = Number(document.getElementById("productIndex").value);

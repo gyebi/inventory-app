@@ -1,7 +1,10 @@
 function renderReceiveStock(error = "") {
   if (state.products.length === 0) {
     renderPage(`
-      <h2>📥 Receive Stock</h2>
+      <div class="page-title">
+        <h2>📥 Receive Stock</h2>
+        <p>Add supplier deliveries to an existing product.</p>
+      </div>
       <div class="message error">Add a product before receiving stock.</div>
       <button onclick="navigate('addProduct')">Add Product</button>
     `);
@@ -13,11 +16,14 @@ function renderReceiveStock(error = "") {
   ).join("");
 
   renderPage(`
-    <h2>📥 Receive Stock</h2>
+    <div class="page-title">
+      <h2>📥 Receive Stock</h2>
+      <p>Add bulk units, loose base units, or both.</p>
+    </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <div class="form-column">
+    <div class="form-column panel">
       <div class="form-row">
         <label for="stockProductIndex">Product</label>
         <select id="stockProductIndex">${options}</select>

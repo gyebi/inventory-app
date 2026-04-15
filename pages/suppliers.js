@@ -1,7 +1,7 @@
 function renderSuppliers(error = "") {
   const supplierCards = state.suppliers.length === 0
     ? `<div class="card">No suppliers saved yet.</div>`
-    : state.suppliers.map((supplier) => `
+    : `<div class="list-grid">${state.suppliers.map((supplier) => `
       <div class="card">
         <strong>${supplier.name}</strong><br>
         Contact Person: ${supplier.contactPerson || "N/A"}<br>
@@ -10,14 +10,17 @@ function renderSuppliers(error = "") {
         Address: ${supplier.address || "N/A"}<br>
         Notes: ${supplier.notes || "N/A"}
       </div>
-    `).join("");
+    `).join("")}</div>`;
 
   renderPage(`
-    <h2>👥 Suppliers</h2>
+    <div class="page-title">
+      <h2>👥 Suppliers</h2>
+      <p>Keep supplier contact details close to stock records.</p>
+    </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <div class="form-column">
+    <div class="form-column panel">
       <div class="form-row">
         <label for="supplierName">Supplier Name</label>
         <input id="supplierName">

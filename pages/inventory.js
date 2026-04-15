@@ -1,10 +1,22 @@
 function renderInventory() {
   if (state.products.length === 0) {
-    renderPage(`<div class="card">No products yet.</div>`);
+    renderPage(`
+      <div class="page-title">
+        <h2>📦 Inventory</h2>
+        <p>Current stock will appear here after products and deliveries are added.</p>
+      </div>
+      <div class="card">No products yet.</div>
+    `);
     return;
   }
 
-  let html = "<h2>📦 Inventory</h2>";
+  let html = `
+    <div class="page-title">
+      <h2>📦 Inventory</h2>
+      <p>Stock is stored in base units and shown as bulk equivalents.</p>
+    </div>
+    <div class="list-grid">
+  `;
 
   state.products.forEach((p) => {
     html += `
@@ -21,6 +33,8 @@ function renderInventory() {
       </div>
     `;
   });
+
+  html += "</div>";
 
   renderPage(html);
 }

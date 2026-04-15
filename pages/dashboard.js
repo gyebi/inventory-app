@@ -6,17 +6,38 @@ function renderDashboard() {
   let lowStock = state.products.filter(p => p.quantity < 10).length;
 
   renderPage(`
-    <h2>📊 Dashboard</h2>
+    <div class="page-title">
+      <h2>📊 Dashboard</h2>
+      <p>Quick view of products, sales, profit, and low stock.</p>
+    </div>
 
-    <div class="card">🧾 Total Products: ${state.products.length}</div>
+    <div class="stats-grid">
+      <div class="card stat-card">
+        <span>🧾</span>
+        <strong>${state.products.length}</strong>
+        <small>Total Products</small>
+      </div>
 
-    <div class="card">📦 Items Sold: ${totalSales}</div>
+      <div class="card stat-card">
+        <span>📦</span>
+        <strong>${totalSales}</strong>
+        <small>Items Sold</small>
+      </div>
 
-    <div class="card">💰 Total Profit: ${totalProfit}</div>
+      <div class="card stat-card">
+        <span>💰</span>
+        <strong>${totalProfit}</strong>
+        <small>Total Profit</small>
+      </div>
 
-    <div class="card">⚠️ Low Stock Items: ${lowStock}</div>
+      <div class="card stat-card">
+        <span>⚠️</span>
+        <strong>${lowStock}</strong>
+        <small>Low Stock Items</small>
+      </div>
+    </div>
 
-    <button onclick = "resetData()">Reset Data</button>
+    <button class="danger-button" onclick="resetData()">Reset Data</button>
   `);
 
 

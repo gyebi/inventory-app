@@ -41,7 +41,7 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <section class="login-page">
       <div class="login-panel">
-        <h1>Inventory System Demo</h1>
+        <h1>Chakem Trading Enterprise</h1>
         <h2>Login</h2>
 
         ${error ? `<div class="message error">${error}</div>` : ""}
@@ -86,7 +86,7 @@ function renderShell() {
   app.innerHTML = `
     <header class="app-header">
       <div>
-        <h1>Inventory System Demo</h1>
+        <h1>Chakem Trading Enterprise</h1>
         <p>Track products, suppliers, stock, and sales.</p>
       </div>
       <div class="header-actions">
@@ -110,17 +110,24 @@ function renderHome() {
   `).join("");
 
   page.innerHTML = `
-    <h2>Home</h2>
-    <div class="menu-grid">${cards}</div>
+    <section class="page-section">
+      <div class="page-title">
+        <h2>Home</h2>
+        <p>Choose what you want to do next.</p>
+      </div>
+      <div class="menu-grid">${cards}</div>
+    </section>
   `;
 }
 
 function renderPage(content) {
   const page = document.getElementById("page");
+  const wrappedContent = `<section class="page-section">${content}</section>`;
+
   if (page) {
-    page.innerHTML = content;
+    page.innerHTML = wrappedContent;
   } else {
-    app.innerHTML = content;
+    app.innerHTML = wrappedContent;
   }
 }
 
