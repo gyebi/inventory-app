@@ -46,22 +46,49 @@ button {
 .form-column {
   display: flex;
   flex-direction: column;
-  max-width: 420px;
-  gap: 8px;
+  max-width: 620px;
+  gap: 12px;
 }
 
-.form-column label {
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-row label {
+  flex: 0 0 210px;
   font-weight: bold;
-  margin-top: 8px;
 }
 
-.form-column input,
-.form-column select {
+.form-row input,
+.form-row select {
+  flex: 1;
   padding: 10px;
+}
+
+.form-row .number-field {
+  flex: 0 0 140px;
 }
 
 .form-column button {
   margin: 12px 0 0;
+  align-self: flex-start;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-row label,
+  .form-row input,
+  .form-row select,
+  .form-row .number-field {
+    flex: none;
+  }
 }
 
 /* Modal  styles */

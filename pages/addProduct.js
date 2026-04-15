@@ -5,44 +5,60 @@ function renderAddProduct(error = "") {
     ${error ? `<div class="message error">${error}</div>` : ""}
 
     <div class="form-column">
-      <label for="name">Product Name</label>
-      <input id="name">
+      <div class="form-row">
+        <label for="name">Product Name</label>
+        <input id="name">
+      </div>
 
-      <label for="category">Category</label>
-      <select id="category">
-        <option>Water</option>
-        <option>Soft Drink</option>
-        <option>Juice</option>
-        <option>Energy Drink</option>
-      </select>
+      <div class="form-row">
+        <label for="category">Category</label>
+        <select id="category">
+          <option>Water</option>
+          <option>Soft Drink</option>
+          <option>Juice</option>
+          <option>Energy Drink</option>
+        </select>
+      </div>
 
-      <label for="baseUnit">Base Unit</label>
-      <select id="baseUnit">
-        <option>Bottle</option>
-        <option>Sachet</option>
-        <option>Can</option>
-        <option>Piece</option>
-      </select>
+      <div class="form-row">
+        <label for="baseUnit">Base Unit</label>
+        <select id="baseUnit">
+          <option>Bottle</option>
+          <option>Sachet</option>
+          <option>Can</option>
+          <option>Piece</option>
+        </select>
+      </div>
 
-      <label for="bulkUnit">Bulk Unit</label>
-      <select id="bulkUnit">
-        <option>Crate</option>
-        <option>Carton</option>
-        <option>Pack</option>
-        <option>Bag</option>
-      </select>
+      <div class="form-row">
+        <label for="bulkUnit">Bulk Unit</label>
+        <select id="bulkUnit">
+          <option>Crate</option>
+          <option>Carton</option>
+          <option>Pack</option>
+          <option>Bag</option>
+        </select>
+      </div>
 
-      <label for="unitsPerBulk">Base Units Per Bulk Unit</label>
-      <input id="unitsPerBulk" type="number" min="1" step="1">
+      <div class="form-row">
+        <label for="unitsPerBulk">Base Units Per Bulk Unit</label>
+        <input id="unitsPerBulk" class="number-field" type="number" min="1" step="1">
+      </div>
 
-      <label for="bulkQuantity">Bulk Units In Stock</label>
-      <input id="bulkQuantity" type="number" min="0" step="1">
+      <div class="form-row">
+        <label for="bulkQuantity">Bulk Units In Stock</label>
+        <input id="bulkQuantity" class="number-field" type="number" min="0" step="1">
+      </div>
 
-      <label for="costPrice">Cost Price Per Base Unit</label>
-      <input id="costPrice" type="number" min="0" step="0.01">
+      <div class="form-row">
+        <label for="costPrice">Cost Price Per Base Unit</label>
+        <input id="costPrice" class="number-field" type="number" min="0" step="0.01">
+      </div>
 
-      <label for="sellingPrice">Selling Price Per Base Unit</label>
-      <input id="sellingPrice" type="number" min="0.01" step="0.01">
+      <div class="form-row">
+        <label for="sellingPrice">Selling Price Per Base Unit</label>
+        <input id="sellingPrice" class="number-field" type="number" min="0.01" step="0.01">
+      </div>
 
       <button onclick="addProduct()">Add Product</button>
     </div>
