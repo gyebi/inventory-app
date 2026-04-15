@@ -1,0 +1,50 @@
+function renderHelp() {
+  renderPage(`
+    <div class="page-title">
+      <h2>❔ Help</h2>
+      <p>Use this guide when setting up products, receiving stock, and recording sales.</p>
+    </div>
+
+    <div class="list-grid">
+      <div class="card">
+        <strong>1. Login</strong><br>
+        Enter any username and password to open the app for this demo.
+      </div>
+
+      <div class="card">
+        <strong>2. Add Product</strong><br>
+        Create each product once. Enter the product name, category, base unit, bulk unit, units per bulk, cost price, and selling price.
+      </div>
+
+      <div class="card">
+        <strong>3. Receive Stock</strong><br>
+        Use this when suppliers bring goods. Choose the product, enter bulk units received and any loose base units received.
+      </div>
+
+      <div class="card">
+        <strong>4. Record Sale</strong><br>
+        Choose the product, select whether the sale is in base units or bulk units, then enter the quantity sold.
+      </div>
+
+      <div class="card">
+        <strong>5. Inventory</strong><br>
+        Stock is stored in base units. The equivalent line shows the same stock as bulk units plus remaining base units.
+      </div>
+
+      <div class="card">
+        <strong>6. Suppliers</strong><br>
+        Save supplier contact details such as name, contact person, phone, email, address, and notes.
+      </div>
+
+      <div class="card">
+        <strong>7. Dashboard</strong><br>
+        Use the dashboard for quick totals: products, items sold, profit, and low-stock count.
+      </div>
+
+      <div class="card">
+        <strong>Developer Support</strong><br>
+        To reach the developer, WhatsApp: +1 332 323 0435
+      </div>
+    </div>
+  `);
+}

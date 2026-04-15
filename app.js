@@ -8,7 +8,8 @@ const menuItems = [
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
   { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
-  { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" }
+  { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
+  { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" }
 ];
 
 function navigate(page) {
@@ -31,6 +32,7 @@ function navigate(page) {
   if (page === "suppliers") renderSuppliers();
   if (page === "sales") renderSales();
   if (page === "inventory") renderInventory();
+  if (page === "help") renderHelp();
 }
 
 function isLoggedIn() {
