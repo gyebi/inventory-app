@@ -58,13 +58,21 @@ button:hover {
   background: #eef3f8;
 }
 
+input,
+select,
+button {
+  font: inherit;
+}
+
 .login-page {
   align-items: center;
   display: flex;
+  justify-content: center;
   min-height: 90vh;
 }
 
 .login-panel {
+  box-sizing: border-box;
   background: white;
   border: 1px solid #d8dde3;
   border-radius: 8px;
@@ -77,10 +85,13 @@ button:hover {
   background: white;
   border: 1px solid #d8dde3;
   border-radius: 8px;
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   margin-bottom: 24px;
+  max-width: 980px;
   padding: 18px;
+  width: 100%;
 }
 
 .app-header h1 {
@@ -115,6 +126,7 @@ button:hover {
   min-height: 130px;
   padding: 18px;
   text-align: left;
+  width: 100%;
 }
 
 .menu-card strong {
@@ -131,7 +143,9 @@ button:hover {
 }
 
 .page-section {
+  box-sizing: border-box;
   max-width: 980px;
+  width: 100%;
 }
 
 .page-title {
@@ -190,6 +204,7 @@ button:hover {
   display: flex;
   gap: 24px;
   max-width: 820px;
+  width: 100%;
 }
 
 .sale-summary {
@@ -216,16 +231,19 @@ button:hover {
 }
 
 .form-column {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   max-width: 560px;
   gap: 12px;
+  width: 100%;
 }
 
 .form-row {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
 }
 
 .form-row label {
@@ -239,6 +257,7 @@ button:hover {
   border-radius: 8px;
   flex: 1;
   box-sizing: border-box;
+  min-width: 0;
   padding: 10px;
 }
 
@@ -253,9 +272,33 @@ button:hover {
   align-self: flex-start;
 }
 
-@media (max-width: 600px) {
+#app {
+  margin: 0 auto;
+  width: 100%;
+}
+
+#page {
+  width: 100%;
+}
+
+h1,
+h2,
+h3,
+p {
+  overflow-wrap: break-word;
+}
+
+.page-title,
+.panel,
+.card,
+.sale-summary,
+.modal-content {
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
   body {
-    padding: 14px;
+    padding: 18px;
   }
 
   .app-header {
@@ -277,8 +320,51 @@ button:hover {
   }
 
   .sale-summary {
-    box-sizing: border-box;
     min-width: 0;
+    width: 100%;
+  }
+
+  .form-column {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 14px;
+  }
+
+  .header-actions {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .header-actions button {
+    margin: 0;
+    width: 100%;
+  }
+
+  .login-page {
+    align-items: stretch;
+    min-height: auto;
+  }
+
+  .login-panel {
+    padding: 18px;
+  }
+
+  .menu-grid,
+  .list-grid,
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-card,
+  .card,
+  .panel,
+  .sale-summary,
+  .modal-content {
     width: 100%;
   }
 
@@ -293,6 +379,19 @@ button:hover {
   .form-row select,
   .form-row .number-field {
     flex: none;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .form-column button {
+    align-self: stretch;
+    margin-top: 8px;
+    width: 100%;
+  }
+
+  .page-title h2,
+  .app-header h1 {
+    line-height: 1.2;
   }
 }
 
@@ -316,8 +415,10 @@ button:hover {
 
 .modal-content {
   background: white;
+  box-sizing: border-box;
   padding: 20px;
-  width: 400px;
+  max-width: 400px;
+  width: min(400px, calc(100vw - 28px));
   border-radius: 10px;
 }
 
