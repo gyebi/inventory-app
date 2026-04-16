@@ -13,12 +13,12 @@ function renderHelp() {
 
       <div class="card">
         <strong>2. Add Product</strong><br>
-        Create each product once. Enter the product name, category, base unit, bulk unit, units per bulk, cost price, and selling price.
+        Create each product once. Enter the product name, category, base unit, bulk unit, units per bulk, plus cost and selling prices for both base units and bulk units.
       </div>
 
       <div class="card">
         <strong>3. Receive Stock</strong><br>
-        Use this when suppliers bring goods. Choose the product, enter bulk units received and any loose base units received.
+        Use this when suppliers bring goods. Record the product, quantity received, supplier, who received it, invoice details, received time, and whether it was paid or put on credit.
       </div>
 
       <div class="card">

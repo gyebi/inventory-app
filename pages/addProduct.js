@@ -24,7 +24,7 @@ function renderAddProduct(error = "") {
       </div>
 
       <div class="form-row">
-        <label for="baseUnit">Base Unit</label>
+        <label for="baseUnit">Base Unit e.g. Bottle, Sachet</label>
         <select id="baseUnit">
           <option>Bottle</option>
           <option>Sachet</option>
@@ -34,7 +34,7 @@ function renderAddProduct(error = "") {
       </div>
 
       <div class="form-row">
-        <label for="bulkUnit">Bulk Unit</label>
+        <label for="bulkUnit">Bulk Unit e.g. Crate, Carton</label>
         <select id="bulkUnit">
           <option>Crate</option>
           <option>Carton</option>
@@ -44,7 +44,7 @@ function renderAddProduct(error = "") {
       </div>
 
       <div class="form-row">
-        <label for="unitsPerBulk">Base Units Per Bulk Unit</label>
+        <label for="unitsPerBulk">How many Base Units in Bulk Unit</label>
         <input id="unitsPerBulk" class="number-field" type="number" min="1" step="1">
       </div>
 
@@ -56,6 +56,16 @@ function renderAddProduct(error = "") {
       <div class="form-row">
         <label for="sellingPrice">Selling Price Per Base Unit</label>
         <input id="sellingPrice" class="number-field" type="number" min="0.01" step="0.01">
+      </div>
+
+      <div class="form-row">
+        <label for="bulkCostPrice">Cost Price Per Bulk Unit</label>
+        <input id="bulkCostPrice" class="number-field" type="number" min="0" step="0.01">
+      </div>
+
+      <div class="form-row">
+        <label for="bulkSellingPrice">Selling Price Per Bulk Unit</label>
+        <input id="bulkSellingPrice" class="number-field" type="number" min="0.01" step="0.01">
       </div>
 
       <button onclick="addProduct()">Add Product</button>
@@ -71,6 +81,8 @@ function addProduct() {
   const unitsPerBulk = Number(document.getElementById("unitsPerBulk").value);
   const costPrice = Number(document.getElementById("costPrice").value);
   const sellingPrice = Number(document.getElementById("sellingPrice").value);
+  const bulkCostPrice = Number(document.getElementById("bulkCostPrice").value);
+  const bulkSellingPrice = Number(document.getElementById("bulkSellingPrice").value);
   const duplicateProduct = state.products.some(
     (product) => product.name.toLowerCase() === name.toLowerCase()
   );
@@ -110,8 +122,23 @@ function addProduct() {
     return;
   }
 
+  if (!Number.isFinite(bulkCostPrice) || bulkCostPrice < 0) {
+    renderAddProduct("Bulk cost price must be zero or more.");
+    return;
+  }
+
+  if (!Number.isFinite(bulkSellingPrice) || bulkSellingPrice <= 0) {
+    renderAddProduct("Bulk selling price must be greater than zero.");
+    return;
+  }
+
   if (sellingPrice < costPrice) {
     renderAddProduct("Selling price should not be less than cost price.");
+    return;
+  }
+
+  if (bulkSellingPrice < bulkCostPrice) {
+    renderAddProduct("Bulk selling price should not be less than bulk cost price.");
     return;
   }
 
@@ -123,7 +150,9 @@ function addProduct() {
     unitsPerBulk,
     quantity: 0,
     costPrice,
-    sellingPrice
+    sellingPrice,
+    bulkCostPrice,
+    bulkSellingPrice
   });
 
   saveState();

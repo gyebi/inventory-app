@@ -15,21 +15,23 @@ function renderInventory() {
       <h2>📦 Inventory</h2>
       <p>Stock is stored in base units and shown as bulk equivalents.</p>
     </div>
-    <div class="list-grid">
+    <div class="inventory-list">
   `;
 
   state.products.forEach((p) => {
     html += `
-      <div class="card">
-        <strong>${p.name}</strong><br>
-        Category: ${p.category}<br>
-        Bulk Unit: ${p.bulkUnit}<br>
-        Base Unit: ${p.baseUnit}<br>
-        Base Units Per Bulk Unit: ${p.unitsPerBulk}<br>
-        Stock: ${p.quantity} ${p.baseUnit}(s)<br>
-        Equivalent: ${formatStock(p)}<br>
-        Cost Price: ${p.costPrice}<br>
-        Selling Price: ${p.sellingPrice}
+      <div class="inventory-row">
+        <div><strong>${p.name}</strong></div>
+        <div><strong>Category:</strong> ${p.category}</div>
+        <div><strong>Bulk Unit:</strong> ${p.bulkUnit}</div>
+        <div><strong>Base Unit:</strong> ${p.baseUnit}</div>
+        <div><strong>Units Per Bulk:</strong> ${p.unitsPerBulk}</div>
+        <div><strong>Stock:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
+        <div><strong>Equivalent:</strong> ${formatStock(p)}</div>
+        <div><strong>Base Cost:</strong> ${p.costPrice}</div>
+        <div><strong>Base Selling:</strong> ${p.sellingPrice}</div>
+        <div><strong>Bulk Cost:</strong> ${p.bulkCostPrice ?? 0}</div>
+        <div><strong>Bulk Selling:</strong> ${p.bulkSellingPrice ?? 0}</div>
       </div>
     `;
   });

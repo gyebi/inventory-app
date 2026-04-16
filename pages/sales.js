@@ -91,10 +91,14 @@ function recordSale() {
 
   let actualQtySold = qty;
   let displayUnit = product.baseUnit;
+  let unitCostPrice = product.costPrice;
+  let unitSellingPrice = product.sellingPrice;
 
   if (saleUnit === "bulk") {
     actualQtySold = qty * product.unitsPerBulk;
     displayUnit = product.bulkUnit;
+    unitCostPrice = product.bulkCostPrice ?? (product.costPrice * product.unitsPerBulk);
+    unitSellingPrice = product.bulkSellingPrice ?? (product.sellingPrice * product.unitsPerBulk);
   }
 
   if (actualQtySold > product.quantity) {
@@ -102,9 +106,9 @@ function recordSale() {
     return;
   }
 
-  const profitPerUnit = product.sellingPrice - product.costPrice;
-  const totalProfit = profitPerUnit * actualQtySold;
-  const totalAmount = product.sellingPrice * actualQtySold;
+  const profitPerUnit = unitSellingPrice - unitCostPrice;
+  const totalProfit = profitPerUnit * qty;
+  const totalAmount = unitSellingPrice * qty;
 
   product.quantity -= actualQtySold;
 
@@ -113,7 +117,7 @@ function recordSale() {
     qty,
     saleUnit: displayUnit,
     actualQtySold,
-    sellingPrice: product.sellingPrice,
+    sellingPrice: unitSellingPrice,
     totalAmount,
     totalProfit,
     date: new Date().toLocaleString()
@@ -133,6 +137,7 @@ function recordSale() {
       <strong>Product:</strong> ${sale.product}<br>
       <strong>Quantity Sold:</strong> ${sale.qty} ${sale.saleUnit}(s)<br>
       <strong>Total Base Units:</strong> ${sale.actualQtySold}<br>
+      <strong>Unit Selling Price:</strong> ${sale.sellingPrice}<br>
       <hr>
       <strong>Total Amount:</strong> ${sale.totalAmount}<br>
       <strong>Profit:</strong> ${sale.totalProfit}<br>
