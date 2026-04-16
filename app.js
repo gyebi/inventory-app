@@ -89,7 +89,7 @@ function renderShell() {
     <header class="app-header">
       <div>
         <h1>Chakem Trading Enterprise</h1>
-        <p>Track products, suppliers, stock, and sales.</p>
+        <p>Keeping refreshing drinks moving.</p>
       </div>
       <div class="header-actions">
         <button onclick="navigate('home')">Home</button>
