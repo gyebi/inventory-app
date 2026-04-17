@@ -9,12 +9,18 @@ const menuItems = [
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
   { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
   { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
-  { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" }
+  { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" },
+  { page: "logout", icon: "🚪", title: "Logout", text: "Sign out of the app" }
 ];
 
 function navigate(page) {
   if (page === "login") {
     renderLogin();
+    return;
+  }
+
+  if (page === "logout") {
+    logout();
     return;
   }
 
@@ -90,10 +96,6 @@ function renderShell() {
       <div>
         <h1>Chakem Trading Enterprise</h1>
         <p>Keeping refreshing drinks moving.</p>
-      </div>
-      <div class="header-actions">
-        <button onclick="navigate('home')">Menu</button>
-        <button onclick="logout()">Logout</button>
       </div>
     </header>
 
