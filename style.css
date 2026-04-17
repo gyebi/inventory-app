@@ -144,8 +144,12 @@ button {
 }
 
 .page-section {
+  background: white;
+  border: 1px solid #d8dde3;
+  border-radius: 8px;
   box-sizing: border-box;
   max-width: 980px;
+  padding: 20px;
   width: 100%;
 }
 
@@ -404,7 +408,11 @@ p {
   .list-grid,
   .stats-grid,
   .inventory-row {
-    grid-template-rows: 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .menu-card,

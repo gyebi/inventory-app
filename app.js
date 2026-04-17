@@ -92,7 +92,7 @@ function renderShell() {
         <p>Keeping refreshing drinks moving.</p>
       </div>
       <div class="header-actions">
-        <button onclick="navigate('home')">Home</button>
+        <button onclick="navigate('home')">Menu</button>
         <button onclick="logout()">Logout</button>
       </div>
     </header>
@@ -114,7 +114,7 @@ function renderHome() {
   page.innerHTML = `
     <section class="page-section home-section">
       <div class="page-title">
-        <h2>Home</h2>
+        <h2>Menu</h2>
         <p>Choose what you want to do next.</p>
       </div>
       <div class="menu-grid">${cards}</div>
