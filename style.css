@@ -383,7 +383,7 @@ p {
   .header-actions {
     display: grid;
     gap: 8px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 2fr));
   }
 
   .header-actions button {
@@ -404,7 +404,7 @@ p {
   .list-grid,
   .stats-grid,
   .inventory-row {
-    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
   }
 
   .menu-card,
