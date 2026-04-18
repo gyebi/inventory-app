@@ -97,7 +97,7 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <section class="login-page">
       <div class="login-panel">
-        <h1>Chakem Trading Enterprise</h1>
+        <h1>CALKRIS-DARF VENTURES</h1>
         <h2>Login</h2>
 
         ${error ? `<div class="message error">${error}</div>` : ""}
@@ -156,8 +156,8 @@ function renderShell() {
   app.innerHTML = `
     <header class="app-header">
       <div>
-        <h1>Chakem Trading Enterprise</h1>
-        <p>Keeping refreshing drinks moving.</p>
+        <h1>CALKRIS-DARF VENTURES</h1>
+        <p>Stock control, sales, and receipts in one place.</p>
       </div>
     </header>
 
