@@ -68,7 +68,6 @@ const allocateBatchStock = (sellableBatches, quantityToSell) => {
   if (remaining > 0) {
     throw new Error("Not enough sellable stock available in unexpired batches.");
   }
-
   return batchAllocations;
 };
 

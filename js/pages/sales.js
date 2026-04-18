@@ -1,6 +1,5 @@
 import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
-
 function getUnitOptions(product) {
   if (!product) {
     return "";
@@ -55,7 +54,9 @@ function renderSales(error = "") {
 
         <div class="form-row">
           <label for="unitSelect">Sale Unit</label>
-          <select id="unitSelect">${getUnitOptions(selectedProduct)}</select>
+          <select id="unitSelect" onchange="updateSalePreview()">
+            ${getUnitOptions(selectedProduct)}
+          </select>
         </div>
 
         <div class="form-row">
