@@ -1,3 +1,5 @@
+const { renderPage } = window.app;
+
 function renderHelp() {
   renderPage(`
     <div class="page-title">
@@ -48,3 +50,5 @@ function renderHelp() {
     </div>
   `);
 }
+
+window.renderHelp = renderHelp;

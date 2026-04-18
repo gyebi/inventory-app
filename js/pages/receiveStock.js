@@ -1,3 +1,16 @@
+const {
+  createStockBatchId,
+  ensureStockState,
+  formatStock,
+  isBatchExpired,
+  navigate,
+  parseExpiryDate,
+  renderPage,
+  saveState,
+  state,
+  syncProductQuantities
+} = window.app;
+
 function renderReceiveStock(error = "", values = {}) {
   ensureStockState();
 
@@ -249,3 +262,7 @@ function formatExpiryDate(value) {
 
   return parsed.toLocaleDateString();
 }
+
+window.renderReceiveStock = renderReceiveStock;
+window.receiveStock = receiveStock;
+window.getCurrentDateTimeValue = getCurrentDateTimeValue;

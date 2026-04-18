@@ -1,5 +1,8 @@
 import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
+
+const { ensureStockState, renderPage, state, formatStock } = window.app;
+
 function getUnitOptions(product) {
   if (!product) {
     return "";
@@ -116,8 +119,13 @@ function recordSale() {
       }
     ]);
 
+    window.app.saveState();
     renderReceiptPage(sale);
   } catch (error) {
     renderSales(error.message || "Unable to complete the sale.");
   }
 }
+
+window.renderSales = renderSales;
+window.updateSalePreview = updateSalePreview;
+window.recordSale = recordSale;

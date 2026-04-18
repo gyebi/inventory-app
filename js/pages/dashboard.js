@@ -1,3 +1,14 @@
+const {
+  ensureStockState,
+  formatReceiptCurrency,
+  formatStock,
+  getExpiredStockQuantity,
+  openModal,
+  renderPage,
+  resetData,
+  state
+} = window.app;
+
 function renderDashboard() {
   ensureStockState();
 
@@ -160,3 +171,6 @@ function getSaleTimestamp(sale) {
 
   return sale.date || "N/A";
 }
+
+window.renderDashboard = renderDashboard;
+window.showDashboardDetails = showDashboardDetails;

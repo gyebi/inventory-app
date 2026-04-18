@@ -1,3 +1,5 @@
+const { state, renderPage, saveState, navigate } = window.app;
+
 function renderAddProduct(error = "") {
   renderPage(`
     <div class="page-title">
@@ -172,3 +174,7 @@ function formatStock(product) {
 
   return `${fullBulk} ${product.bulkUnit}(s) and ${remainder} ${product.baseUnit}(s)`;
 }
+
+window.renderAddProduct = renderAddProduct;
+window.addProduct = addProduct;
+window.formatStock = formatStock;

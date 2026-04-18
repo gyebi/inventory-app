@@ -1,3 +1,16 @@
+const {
+  ensureStockState,
+  getBatchesByProductId,
+  getExpiredBatches,
+  getExpiredStockQuantity,
+  getSellableBatches,
+  parseExpiryDate,
+  renderPage,
+  state,
+  formatReceiptCurrency,
+  formatStock
+} = window.app;
+
 function renderInventory() {
   ensureStockState();
 
@@ -55,3 +68,5 @@ function renderInventory() {
 
   renderPage(html);
 }
+
+window.renderInventory = renderInventory;

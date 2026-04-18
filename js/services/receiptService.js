@@ -1,6 +1,6 @@
-const RECEIPT_BUSINESS_NAME = "CALKRIS-DARF VENTURES";
+export const RECEIPT_BUSINESS_NAME = "CALKRIS-DARF VENTURES";
 
-function formatReceiptCurrency(value) {
+export function formatReceiptCurrency(value) {
   const amount = Number(value) || 0;
   return `Ghs ${amount.toFixed(2)}`;
 }

@@ -1,3 +1,5 @@
+const { renderPage, saveState, state } = window.app;
+
 function renderSuppliers(error = "") {
   const supplierCards = state.suppliers.length === 0
     ? `<div class="card">No suppliers saved yet.</div>`
@@ -97,3 +99,6 @@ function addSupplier() {
   saveState();
   renderSuppliers();
 }
+
+window.renderSuppliers = renderSuppliers;
+window.addSupplier = addSupplier;

@@ -1,3 +1,5 @@
+import { setState as setSharedState } from "./state.js";
+
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
 const modalBody = document.getElementById("modal-body");
@@ -23,6 +25,7 @@ const defaultState = {
 };
 
 let state = loadAppState();
+setSharedState(state);
 
 function loadAppState() {
   const savedState = localStorage.getItem(STORAGE_KEY);
@@ -48,6 +51,7 @@ function loadAppState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  setSharedState(state);
 }
 
 const menuItems = [
@@ -80,13 +84,13 @@ function navigate(page) {
   renderShell();
 
   if (page === "home") renderHome();
-  if (page === "dashboard") renderDashboard();
-  if (page === "addProduct") renderAddProduct();
-  if (page === "receiveStock") renderReceiveStock();
-  if (page === "suppliers") renderSuppliers();
-  if (page === "sales") renderSales();
-  if (page === "inventory") renderInventory();
-  if (page === "help") renderHelp();
+  if (page === "dashboard") window.renderDashboard?.();
+  if (page === "addProduct") window.renderAddProduct?.();
+  if (page === "receiveStock") window.renderReceiveStock?.();
+  if (page === "suppliers") window.renderSuppliers?.();
+  if (page === "sales") window.renderSales?.();
+  if (page === "inventory") window.renderInventory?.();
+  if (page === "help") window.renderHelp?.();
 }
 
 function isLoggedIn() {
@@ -394,6 +398,48 @@ function closeModal() {
 }
 
 ensureStockState();
+
+window.app = {
+  state,
+  navigate,
+  renderPage,
+  saveState,
+  ensureStockState,
+  formatStock: window.formatStock,
+  getBatchesByProductId,
+  getSellableBatches,
+  getExpiredBatches,
+  parseExpiryDate,
+  getExpiredStockQuantity,
+  getSellableStockQuantity,
+  syncProductQuantities,
+  createStockBatchId,
+  isBatchExpired,
+  getCurrentDateTimeValue: window.getCurrentDateTimeValue,
+  openModal,
+  closeModal,
+  resetData
+};
+
+window.navigate = navigate;
+window.login = login;
+window.closeModal = closeModal;
+window.printReceipt = printReceipt;
+window.resetData = resetData;
+
+const receiptModule = await import("./services/receiptService.js");
+window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
+
+await import("./pages/addProduct.js");
+await import("./pages/receiveStock.js");
+await import("./pages/suppliers.js");
+await import("./pages/sales.js");
+await import("./pages/inventory.js");
+await import("./pages/dashboard.js");
+await import("./pages/help.js");
+
+window.app.formatStock = window.formatStock;
+window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;
 
 if (isLoggedIn()) {
   navigate("home");
