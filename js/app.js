@@ -1,6 +1,54 @@
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
 const modalBody = document.getElementById("modal-body");
+const STORAGE_KEY = "inventory_app";
+
+const defaultUsers = [
+  { username: "admin", password: "1234", role: "admin" },
+  { username: "sales", password: "1234", role: "sales" },
+  { username: "store", password: "1234", role: "storekeeper" }
+];
+
+const defaultState = {
+  user: null,
+  users: defaultUsers,
+  products: [],
+  stock: [],
+  sales: [],
+  suppliers: [],
+  stockReceipts: [],
+  settings: {
+    lowStockThreshold: 10
+  }
+};
+
+let state = loadAppState();
+
+function loadAppState() {
+  const savedState = localStorage.getItem(STORAGE_KEY);
+
+  if (!savedState) {
+    return structuredClone(defaultState);
+  }
+
+  try {
+    const parsedState = JSON.parse(savedState);
+
+    return {
+      ...structuredClone(defaultState),
+      ...parsedState,
+      users: Array.isArray(parsedState.users) && parsedState.users.length > 0
+        ? parsedState.users
+        : structuredClone(defaultUsers)
+    };
+  } catch (error) {
+    return structuredClone(defaultState);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
 
 const menuItems = [
   { page: "addProduct", icon: "➕", title: "Add Product", text: "Create product details" },
@@ -42,7 +90,7 @@ function navigate(page) {
 }
 
 function isLoggedIn() {
-  return localStorage.getItem("inventoryLoggedIn") === "true";
+  return Boolean(state.user);
 }
 
 function renderLogin(error = "") {
@@ -81,12 +129,26 @@ function login() {
     return;
   }
 
-  localStorage.setItem("inventoryLoggedIn", "true");
+  const user = state.users.find(
+    (candidate) => candidate.username === username && candidate.password === password
+  );
+
+  if (!user) {
+    renderLogin("Invalid username or password.");
+    return;
+  }
+
+  state.user = {
+    username: user.username,
+    role: user.role
+  };
+  saveState();
   navigate("home");
 }
 
 function logout() {
-  localStorage.removeItem("inventoryLoggedIn");
+  state.user = null;
+  saveState();
   renderLogin();
 }
 
@@ -135,8 +197,185 @@ function renderPage(content) {
   }
 }
 
+function createProductIdentifier() {
+  return `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+}
+
+function createStockBatchId() {
+  return `batch_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+}
+
+function parseExpiryDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T23:59:59.999`);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isBatchExpired(expiryDate, referenceDate = new Date()) {
+  const parsedExpiry = parseExpiryDate(expiryDate);
+
+  if (!parsedExpiry) {
+    return false;
+  }
+
+  return parsedExpiry < referenceDate;
+}
+
+function getBatchesByProductId(productId) {
+  if (!Array.isArray(state.stock)) {
+    return [];
+  }
+
+  return state.stock.filter((batch) => batch.productId === productId && (batch.quantity || 0) > 0);
+}
+
+function getSellableBatches(productId) {
+  return getBatchesByProductId(productId).filter((batch) => !isBatchExpired(batch.expiryDate));
+}
+
+function getExpiredBatches(productId) {
+  return getBatchesByProductId(productId).filter((batch) => isBatchExpired(batch.expiryDate));
+}
+
+function getBatchQuantityTotal(batches) {
+  return batches.reduce((sum, batch) => sum + (Number(batch.quantity) || 0), 0);
+}
+
+function getSellableStockQuantity(productId) {
+  return getBatchQuantityTotal(getSellableBatches(productId));
+}
+
+function getExpiredStockQuantity(productId) {
+  return getBatchQuantityTotal(getExpiredBatches(productId));
+}
+
+function syncProductQuantities() {
+  let changed = false;
+
+  state.products.forEach((product) => {
+    const sellableQuantity = getSellableStockQuantity(product.id);
+
+    if (product.quantity !== sellableQuantity) {
+      product.quantity = sellableQuantity;
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
+function ensureAllProductIds() {
+  let changed = false;
+
+  state.products.forEach((product) => {
+    if (!product.id) {
+      product.id = createProductIdentifier();
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
+function persistStateIfNeeded(changed) {
+  if (changed) {
+    saveState();
+  }
+}
+
+function ensureStockState() {
+  let changed = ensureAllProductIds();
+
+  if (!Array.isArray(state.stock)) {
+    state.stock = [];
+    changed = true;
+  }
+
+  state.products.forEach((product) => {
+    const trackedQuantity = getBatchQuantityTotal(getBatchesByProductId(product.id));
+
+    if (product.quantity > trackedQuantity) {
+      state.stock.push({
+        id: createStockBatchId(),
+        productId: product.id,
+        productName: product.name,
+        quantity: product.quantity - trackedQuantity,
+        receivedAt: null,
+        expiryDate: "",
+        supplier: "",
+        invoiceDetails: "",
+        paymentStatus: "",
+        receivedBy: "",
+        isLegacy: true
+      });
+      changed = true;
+    }
+  });
+
+  if (syncProductQuantities()) {
+    changed = true;
+  }
+
+  persistStateIfNeeded(changed);
+}
+
+function allocateStockFromBatches(productId, quantityNeeded) {
+  const batches = getSellableBatches(productId).slice().sort((left, right) => {
+    const leftExpiry = parseExpiryDate(left.expiryDate);
+    const rightExpiry = parseExpiryDate(right.expiryDate);
+    const leftTime = leftExpiry ? leftExpiry.getTime() : Number.MAX_SAFE_INTEGER;
+    const rightTime = rightExpiry ? rightExpiry.getTime() : Number.MAX_SAFE_INTEGER;
+
+    if (leftTime !== rightTime) {
+      return leftTime - rightTime;
+    }
+
+    return new Date(left.receivedAt || 0).getTime() - new Date(right.receivedAt || 0).getTime();
+  });
+
+  let remaining = quantityNeeded;
+  const allocations = [];
+
+  for (const batch of batches) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const quantityTaken = Math.min(batch.quantity, remaining);
+
+    if (quantityTaken <= 0) {
+      continue;
+    }
+
+    batch.quantity -= quantityTaken;
+    remaining -= quantityTaken;
+    allocations.push({
+      batchId: batch.id,
+      quantity: quantityTaken,
+      expiryDate: batch.expiryDate || ""
+    });
+  }
+
+  if (remaining > 0) {
+    throw new Error("Not enough sellable stock available in unexpired batches.");
+  }
+
+  syncProductQuantities();
+
+  return allocations;
+}
+
 function resetData() {
   localStorage.removeItem("inventoryState");
+  localStorage.removeItem("inventory_app");
+  localStorage.removeItem("inventoryLoggedIn");
   location.reload();
 }
 
@@ -153,6 +392,8 @@ function openModal(content) {
 function closeModal() {
   modal.classList.add("hidden");
 }
+
+ensureStockState();
 
 if (isLoggedIn()) {
   navigate("home");

@@ -73,6 +73,10 @@ function renderAddProduct(error = "") {
   `);
 }
 
+function createNewProductId() {
+  return `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+}
+
 function addProduct() {
   const name = document.getElementById("name").value.trim();
   const category = document.getElementById("category").value;
@@ -143,6 +147,7 @@ function addProduct() {
   }
 
   state.products.push({
+    id: createNewProductId(),
     name,
     category,
     baseUnit,

@@ -38,6 +38,10 @@ if (!state.suppliers) {
   state.suppliers = [];
 }
 
+if (!Array.isArray(state.stock)) {
+  state.stock = [];
+}
+
 if (!state.stockReceipts) {
   state.stockReceipts = [];
 }

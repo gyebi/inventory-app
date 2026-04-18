@@ -1,6 +1,20 @@
+import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 
+function getUnitOptions(product) {
+  if (!product) {
+    return "";
+  }
+
+  return `
+    <option value="${product.baseUnit}">${product.baseUnit}</option>
+    <option value="${product.bulkUnit}">${product.bulkUnit}</option>
+  `;
+}
+
 function renderSales(error = "") {
+  ensureStockState();
+
   if (state.products.length === 0) {
     renderPage(`
       <div class="page-title">
@@ -13,8 +27,8 @@ function renderSales(error = "") {
     return;
   }
 
-  let options = state.products.map(
-    (p, i) => `<option value="${i}">${p.name}</option>`
+  const options = state.products.map(
+    (product) => `<option value="${product.id}">${product.name}</option>`
   ).join("");
   const selectedProduct = state.products[0];
 
@@ -40,11 +54,8 @@ function renderSales(error = "") {
         </div>
 
         <div class="form-row">
-          <label for="saleUnit">Sale Unit</label>
-          <select id="saleUnit" onchange="updateSalePreview()">
-            <option value="base">Base Unit</option>
-            <option value="bulk">Bulk Unit</option>
-          </select>
+          <label for="unitSelect">Sale Unit</label>
+          <select id="unitSelect">${getUnitOptions(selectedProduct)}</select>
         </div>
 
         <div class="form-row">
@@ -58,33 +69,17 @@ function renderSales(error = "") {
   `);
 }
 
-
-
-
-completeSaleBtn.addEventListener("click", () => {
-  try {
-    const sale = createSale(cartItems);
-
-    alert("Sale completed successfully");
-
-    console.log("Receipt:", sale);
-
-    cartItems = [];
-    renderCart();
-
-  } catch (err) {
-    alert(err.message);
-  }
-});
-
 function updateSalePreview() {
-  const index = Number(document.getElementById("productIndex").value);
-  const product = state.products[index];
+  const productId = document.getElementById("productIndex")?.value;
+  const product = state.products.find((item) => item.id === productId);
   const summary = document.querySelector(".sale-summary");
+  const unitSelect = document.getElementById("unitSelect");
 
-  if (!product || !summary) {
+  if (!product || !summary || !unitSelect) {
     return;
   }
+
+  unitSelect.innerHTML = getUnitOptions(product);
 
   summary.innerHTML = `
     <strong>Available Stock</strong>
@@ -94,100 +89,34 @@ function updateSalePreview() {
 }
 
 function recordSale() {
-  const index = Number(document.getElementById("productIndex").value);
-  const saleUnit = document.getElementById("saleUnit").value;
-  const qty = Number(document.getElementById("qty").value);
+  ensureStockState();
 
-  const product = state.products[index];
+  const productId = document.getElementById("productIndex")?.value;
+  const unit = document.getElementById("unitSelect")?.value;
+  const quantity = Number(document.getElementById("qty")?.value);
+  const product = state.products.find((item) => item.id === productId);
 
   if (!product) {
     renderSales("Choose a product before recording a sale.");
     return;
   }
 
-  if (!Number.isInteger(qty) || qty <= 0) {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
     renderSales("Quantity must be a whole number greater than zero.");
     return;
   }
 
-  let actualQtySold = qty;
-  let displayUnit = product.baseUnit;
-  let unitCostPrice = product.costPrice;
-  let unitSellingPrice = product.sellingPrice;
-
-  if (saleUnit === "bulk") {
-    actualQtySold = qty * product.unitsPerBulk;
-    displayUnit = product.bulkUnit;
-    unitCostPrice = product.bulkCostPrice ?? (product.costPrice * product.unitsPerBulk);
-    unitSellingPrice = product.bulkSellingPrice ?? (product.sellingPrice * product.unitsPerBulk);
-  }
-
-  if (actualQtySold > product.quantity) {
-    renderSales(`Not enough stock available. Current stock is ${formatStock(product)}.`);
-    return;
-  }
-
-  const profitPerUnit = unitSellingPrice - unitCostPrice;
-  const totalProfit = profitPerUnit * qty;
-  const totalAmount = unitSellingPrice * qty;
-
-  product.quantity -= actualQtySold;
-
-  const sale = {
-    product: product.name,
-    qty,
-    saleUnit: displayUnit,
-    actualQtySold,
-    sellingPrice: unitSellingPrice,
-    totalAmount,
-    totalProfit,
-    date: new Date().toLocaleString()
-  };
-
-  state.sales.push(sale);
-  saveState();
-
-  renderReceipt(sale);
-}
-
- function renderReceipt(sale) {
-  renderPage(`
-    <h2>🧾 Receipt</h2>
-
-    <div class="card">
-      <strong>Product:</strong> ${sale.product}<br>
-      <strong>Quantity Sold:</strong> ${sale.qty} ${sale.saleUnit}(s)<br>
-      <strong>Total Base Units:</strong> ${sale.actualQtySold}<br>
-      <strong>Unit Selling Price:</strong> ${sale.sellingPrice}<br>
-      <hr>
-      <strong>Total Amount:</strong> ${sale.totalAmount}<br>
-      <strong>Profit:</strong> ${sale.totalProfit}<br>
-      <hr>
-      <small>${sale.date}</small>
-    </div>
-
-    <button onclick="navigate('dashboard')">Back to Dashboard</button>
-    <button onclick="printReceipt()">🖨 Print</button>
-  `);
-}
-
-
-import { createSale } from "../services/salesService.js";
-import { generateReceiptText } from "../services/receiptService.js";
-
-completeSaleBtn.addEventListener("click", () => {
   try {
-    const sale = createSale(cartItems);
+    const sale = createSale([
+      {
+        productId,
+        quantity,
+        unit
+      }
+    ]);
 
-    const receiptText = generateReceiptText(sale);
-
-    document.getElementById("receiptContent").textContent = receiptText;
-    document.getElementById("receiptModal").classList.remove("hidden");
-
-    cartItems = [];
-    renderCart();
-
-  } catch (err) {
-    alert(err.message);
+    renderReceiptPage(sale);
+  } catch (error) {
+    renderSales(error.message || "Unable to complete the sale.");
   }
-});
+}

@@ -1,6 +1,8 @@
 function renderDashboard() {
-  const totalSales = state.sales.reduce((sum, sale) => sum + (sale.actualQtySold || sale.qty), 0);
-  const totalProfit = state.sales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
+  ensureStockState();
+
+  const totalSales = state.sales.reduce((sum, sale) => sum + getTotalUnitsSold(sale), 0);
+  const totalProfit = state.sales.reduce((sum, sale) => sum + getSaleProfit(sale), 0);
   const lowStockProducts = state.products.filter((product) => product.quantity < 10);
 
   renderPage(`
@@ -24,7 +26,7 @@ function renderDashboard() {
 
       <button class="card stat-card stat-button" onclick="showDashboardDetails('profit')">
         <span>💰</span>
-        <strong>${totalProfit}</strong>
+        <strong>${formatReceiptCurrency(totalProfit)}</strong>
         <small>Total Profit</small>
       </button>
 
@@ -52,8 +54,9 @@ function showDashboardDetails(type) {
             <strong>${product.name}</strong><br>
             Category: ${product.category}<br>
             Stock: ${formatStock(product)}<br>
-            Base Price: ${product.sellingPrice}<br>
-            Bulk Price: ${product.bulkSellingPrice ?? 0}
+            Expired Stock: ${getExpiredStockQuantity(product.id)} ${product.baseUnit}(s)<br>
+            Base Price: ${formatReceiptCurrency(product.sellingPrice)}<br>
+            Bulk Price: ${formatReceiptCurrency(product.bulkSellingPrice ?? 0)}
           </div>
         `).join("");
   }
@@ -64,11 +67,11 @@ function showDashboardDetails(type) {
       ? `<div class="card">No sales recorded yet.</div>`
       : state.sales.slice().reverse().map((sale) => `
           <div class="card dashboard-detail-card">
-            <strong>${sale.product}</strong><br>
-            Quantity: ${sale.qty} ${sale.saleUnit}(s)<br>
-            Base Units: ${sale.actualQtySold}<br>
-            Amount: ${sale.totalAmount}<br>
-            Time: ${sale.date}
+            <strong>${getSalePrimaryName(sale)}</strong><br>
+            Quantity: ${getSaleQuantitySummary(sale)}<br>
+            Base Units: ${getTotalUnitsSold(sale)}<br>
+            Amount: ${formatReceiptCurrency(sale.totalAmount)}<br>
+            Time: ${getSaleTimestamp(sale)}
           </div>
         `).join("");
   }
@@ -79,11 +82,11 @@ function showDashboardDetails(type) {
       ? `<div class="card">No profit entries yet.</div>`
       : state.sales.slice().reverse().map((sale) => `
           <div class="card dashboard-detail-card">
-            <strong>${sale.product}</strong><br>
-            Profit: ${sale.totalProfit}<br>
-            Amount: ${sale.totalAmount}<br>
-            Quantity: ${sale.qty} ${sale.saleUnit}(s)<br>
-            Time: ${sale.date}
+            <strong>${getSalePrimaryName(sale)}</strong><br>
+            Profit: ${formatReceiptCurrency(getSaleProfit(sale))}<br>
+            Amount: ${formatReceiptCurrency(sale.totalAmount)}<br>
+            Quantity: ${getSaleQuantitySummary(sale)}<br>
+            Time: ${getSaleTimestamp(sale)}
           </div>
         `).join("");
   }
@@ -97,6 +100,7 @@ function showDashboardDetails(type) {
           <div class="card dashboard-detail-card">
             <strong>${product.name}</strong><br>
             Stock: ${product.quantity} ${product.baseUnit}(s)<br>
+            Expired: ${getExpiredStockQuantity(product.id)} ${product.baseUnit}(s)<br>
             Equivalent: ${formatStock(product)}<br>
             Reorder Level Alert: Below 10 base units
           </div>
@@ -109,4 +113,50 @@ function showDashboardDetails(type) {
       <div class="dashboard-detail-list">${body}</div>
     </div>
   `);
+}
+
+function getSaleItems(sale) {
+  return Array.isArray(sale.items) ? sale.items : [];
+}
+
+function getTotalUnitsSold(sale) {
+  const items = getSaleItems(sale);
+
+  if (items.length > 0) {
+    return items.reduce((sum, item) => sum + (item.actualQtySold || item.quantity || 0), 0);
+  }
+
+  return sale.actualQtySold || sale.qty || 0;
+}
+
+function getSaleProfit(sale) {
+  return sale.profit ?? sale.totalProfit ?? 0;
+}
+
+function getSalePrimaryName(sale) {
+  const items = getSaleItems(sale);
+
+  if (items.length > 0) {
+    return items.map((item) => item.name).join(", ");
+  }
+
+  return sale.product || "Sale";
+}
+
+function getSaleQuantitySummary(sale) {
+  const items = getSaleItems(sale);
+
+  if (items.length > 0) {
+    return items.map((item) => `${item.quantity} ${item.unit}(s)`).join(", ");
+  }
+
+  return `${sale.qty} ${sale.saleUnit}(s)`;
+}
+
+function getSaleTimestamp(sale) {
+  if (sale.createdAt) {
+    return new Date(sale.createdAt).toLocaleString();
+  }
+
+  return sale.date || "N/A";
 }

@@ -1,4 +1,6 @@
 function renderInventory() {
+  ensureStockState();
+
   if (state.products.length === 0) {
     renderPage(`
       <div class="page-title">
@@ -19,6 +21,14 @@ function renderInventory() {
   `;
 
   state.products.forEach((p) => {
+    const productBatches = getBatchesByProductId(p.id);
+    const activeBatches = getSellableBatches(p.id);
+    const expiredBatches = getExpiredBatches(p.id);
+    const nextExpiry = activeBatches
+      .map((batch) => parseExpiryDate(batch.expiryDate))
+      .filter(Boolean)
+      .sort((left, right) => left.getTime() - right.getTime())[0];
+
     html += `
       <div class="inventory-row">
         <div><strong>${p.name}</strong></div>
@@ -26,12 +36,17 @@ function renderInventory() {
         <div><strong>Bulk Unit:</strong> ${p.bulkUnit}</div>
         <div><strong>Base Unit:</strong> ${p.baseUnit}</div>
         <div><strong>Units Per Bulk:</strong> ${p.unitsPerBulk}</div>
-        <div><strong>Stock:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
+        <div><strong>Sellable Stock:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
+        <div><strong>Expired Stock:</strong> ${getExpiredStockQuantity(p.id)} ${p.baseUnit}(s)</div>
         <div><strong>Equivalent:</strong> ${formatStock(p)}</div>
-        <div><strong>Base Cost:</strong> ${p.costPrice}</div>
-        <div><strong>Base Selling:</strong> ${p.sellingPrice}</div>
-        <div><strong>Bulk Cost:</strong> ${p.bulkCostPrice ?? 0}</div>
-        <div><strong>Bulk Selling:</strong> ${p.bulkSellingPrice ?? 0}</div>
+        <div><strong>Tracked Batches:</strong> ${productBatches.length}</div>
+        <div><strong>Active Batches:</strong> ${activeBatches.length}</div>
+        <div><strong>Expired Batches:</strong> ${expiredBatches.length}</div>
+        <div><strong>Next Expiry:</strong> ${nextExpiry ? nextExpiry.toLocaleDateString() : "N/A"}</div>
+        <div><strong>Base Cost:</strong> ${formatReceiptCurrency(p.costPrice)}</div>
+        <div><strong>Base Selling:</strong> ${formatReceiptCurrency(p.sellingPrice)}</div>
+        <div><strong>Bulk Cost:</strong> ${formatReceiptCurrency(p.bulkCostPrice ?? 0)}</div>
+        <div><strong>Bulk Selling:</strong> ${formatReceiptCurrency(p.bulkSellingPrice ?? 0)}</div>
       </div>
     `;
   });

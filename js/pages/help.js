@@ -18,17 +18,17 @@ function renderHelp() {
 
       <div class="card">
         <strong>3. Receive Stock</strong><br>
-        Use this when suppliers bring goods. Record the product, quantity received, supplier, who received it, invoice details, received time, and whether it was paid or put on credit.
+        Use this when suppliers bring goods. Record the product, quantity received, supplier, who received it, invoice details, received time, batch expiry date, and whether it was paid or put on credit.
       </div>
 
       <div class="card">
         <strong>4. Record Sale</strong><br>
-        Choose the product, select whether the sale is in base units or bulk units, then enter the quantity sold.
+        Choose the product, select whether the sale is in base units or bulk units, then enter the quantity sold. The app sells from the earliest unexpired batch first.
       </div>
 
       <div class="card">
         <strong>5. Inventory</strong><br>
-        Stock is stored in base units. The equivalent line shows the same stock as bulk units plus remaining base units.
+        Stock is stored in base units. Sellable stock comes from unexpired batches, and expired stock is tracked separately.
       </div>
 
       <div class="card">

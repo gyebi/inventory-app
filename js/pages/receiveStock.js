@@ -1,4 +1,6 @@
 function renderReceiveStock(error = "", values = {}) {
+  ensureStockState();
+
   if (state.products.length === 0) {
     renderPage(`
       <div class="page-title">
@@ -12,7 +14,7 @@ function renderReceiveStock(error = "", values = {}) {
   }
 
   const options = state.products.map(
-    (product, index) => `<option value="${index}">${product.name}</option>`
+    (product) => `<option value="${product.id}">${product.name}</option>`
   ).join("");
   const supplierOptions = state.suppliers.map(
     (supplier) => `<option value="${supplier.name}">${supplier.name}</option>`
@@ -27,6 +29,7 @@ function renderReceiveStock(error = "", values = {}) {
           <div><strong>Received By:</strong> ${receipt.receivedBy}</div>
           <div><strong>Invoice:</strong> ${receipt.invoiceDetails}</div>
           <div><strong>Time:</strong> ${formatReceiptTime(receipt.receivedAt)}</div>
+          <div><strong>Expiry:</strong> ${formatExpiryDate(receipt.expiryDate)}</div>
           <div><strong>Payment:</strong> ${receipt.paymentStatus}</div>
           <div><strong>Bulk Units:</strong> ${receipt.bulkUnitsReceived}</div>
           <div><strong>Base Units:</strong> ${receipt.baseUnitsReceived}</div>
@@ -79,6 +82,11 @@ function renderReceiveStock(error = "", values = {}) {
       </div>
 
       <div class="form-row">
+        <label for="expiryDate">Batch Expiry Date</label>
+        <input id="expiryDate" type="date" value="${values.expiryDate || ""}">
+      </div>
+
+      <div class="form-row">
         <label for="paymentStatus">Payment Status</label>
         <select id="paymentStatus">
           <option value="Paid" ${values.paymentStatus === "Paid" ? "selected" : ""}>Paid</option>
@@ -93,29 +101,33 @@ function renderReceiveStock(error = "", values = {}) {
     ${recentReceipts}
   `);
 
-  if (values.productIndex !== undefined) {
-    document.getElementById("stockProductIndex").value = String(values.productIndex);
+  if (values.productId) {
+    document.getElementById("stockProductIndex").value = values.productId;
   }
 }
 
 function receiveStock() {
-  const index = Number(document.getElementById("stockProductIndex").value);
+  ensureStockState();
+
+  const productId = document.getElementById("stockProductIndex").value;
   const bulkUnitsReceived = Number(document.getElementById("bulkUnitsReceived").value);
   const baseUnitsReceived = Number(document.getElementById("baseUnitsReceived").value);
   const supplier = document.getElementById("stockSupplier").value.trim();
   const receivedBy = document.getElementById("receivedBy").value.trim();
   const invoiceDetails = document.getElementById("invoiceDetails").value.trim();
   const receivedAt = document.getElementById("receivedAt").value;
+  const expiryDate = document.getElementById("expiryDate").value;
   const paymentStatus = document.getElementById("paymentStatus").value;
-  const product = state.products[index];
+  const product = state.products.find((item) => item.id === productId);
   const values = {
-    productIndex: index,
+    productId,
     supplier,
     bulkUnitsReceived: document.getElementById("bulkUnitsReceived").value,
     baseUnitsReceived: document.getElementById("baseUnitsReceived").value,
     receivedBy,
     invoiceDetails,
     receivedAt,
+    expiryDate,
     paymentStatus
   };
 
@@ -154,9 +166,33 @@ function receiveStock() {
     return;
   }
 
+  if (expiryDate && isBatchExpired(expiryDate)) {
+    renderReceiveStock("Batch expiry date cannot be in the past.", values);
+    return;
+  }
+
   const quantityReceived = (bulkUnitsReceived * product.unitsPerBulk) + baseUnitsReceived;
-  product.quantity += quantityReceived;
+  const batchId = createStockBatchId();
+
+  state.stock.push({
+    id: batchId,
+    productId: product.id,
+    productName: product.name,
+    quantity: quantityReceived,
+    bulkUnitsReceived,
+    baseUnitsReceived,
+    receivedBy,
+    supplier,
+    invoiceDetails,
+    receivedAt,
+    expiryDate,
+    paymentStatus
+  });
+
+  syncProductQuantities();
   state.stockReceipts.push({
+    batchId,
+    productId: product.id,
     product: product.name,
     supplier,
     bulkUnitsReceived,
@@ -165,6 +201,7 @@ function receiveStock() {
     receivedBy,
     invoiceDetails,
     receivedAt,
+    expiryDate,
     paymentStatus
   });
 
@@ -197,4 +234,18 @@ function formatReceiptTime(value) {
   }
 
   return parsed.toLocaleString();
+}
+
+function formatExpiryDate(value) {
+  if (!value) {
+    return "No expiry";
+  }
+
+  const parsed = parseExpiryDate(value);
+
+  if (!parsed) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString();
 }
