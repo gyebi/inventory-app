@@ -1,3 +1,5 @@
+import { createSale } from "../services/salesService.js";
+
 function renderSales(error = "") {
   if (state.products.length === 0) {
     renderPage(`
@@ -55,6 +57,25 @@ function renderSales(error = "") {
     </div>
   `);
 }
+
+
+
+
+completeSaleBtn.addEventListener("click", () => {
+  try {
+    const sale = createSale(cartItems);
+
+    alert("Sale completed successfully");
+
+    console.log("Receipt:", sale);
+
+    cartItems = [];
+    renderCart();
+
+  } catch (err) {
+    alert(err.message);
+  }
+});
 
 function updateSalePreview() {
   const index = Number(document.getElementById("productIndex").value);
@@ -149,3 +170,24 @@ function recordSale() {
     <button onclick="printReceipt()">🖨 Print</button>
   `);
 }
+
+
+import { createSale } from "../services/salesService.js";
+import { generateReceiptText } from "../services/receiptService.js";
+
+completeSaleBtn.addEventListener("click", () => {
+  try {
+    const sale = createSale(cartItems);
+
+    const receiptText = generateReceiptText(sale);
+
+    document.getElementById("receiptContent").textContent = receiptText;
+    document.getElementById("receiptModal").classList.remove("hidden");
+
+    cartItems = [];
+    renderCart();
+
+  } catch (err) {
+    alert(err.message);
+  }
+});
