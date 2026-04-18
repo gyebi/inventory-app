@@ -96,7 +96,7 @@ function rebuildStockFromCloudReceipts() {
     });
   });
 
-  state.stock = state.stockReceipts.map((receipt) => {
+  const receiptStock = state.stockReceipts.map((receipt) => {
     const originalQuantity = Number(receipt.quantityReceived || 0);
     const soldQuantity = soldByBatch.get(receipt.batchId) || 0;
 
@@ -115,6 +115,27 @@ function rebuildStockFromCloudReceipts() {
       paymentStatus: receipt.paymentStatus || ""
     };
   });
+
+  const productsWithReceipts = new Set(state.stockReceipts.map((receipt) => receipt.productId));
+  const syntheticStock = state.products
+    .filter((product) => !productsWithReceipts.has(product.id) && Number(product.quantity || 0) > 0)
+    .map((product) => ({
+      id: `cloud_initial_${product.id}`,
+      productId: product.id,
+      productName: product.name,
+      quantity: Number(product.quantity || 0),
+      bulkUnitsReceived: 0,
+      baseUnitsReceived: Number(product.quantity || 0),
+      receivedBy: "Cloud",
+      supplier: "",
+      invoiceDetails: "Initial cloud stock",
+      receivedAt: null,
+      expiryDate: "",
+      paymentStatus: "",
+      isCloudInitial: true
+    }));
+
+  state.stock = [...receiptStock, ...syntheticStock];
 }
 
 function replaceStockReceipts(receipts = []) {
@@ -600,7 +621,11 @@ window.app.formatStock = window.formatStock;
 window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;
 window.app.retryPendingSalesSync = retryPendingSalesSync;
 
-await startCloudProductSync();
+try {
+  await startCloudProductSync();
+} catch (error) {
+  console.error("Cloud startup sync failed:", error);
+}
 
 window.addEventListener("online", () => {
   void retryPendingSalesSync();

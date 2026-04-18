@@ -95,6 +95,11 @@ export const attemptSaleSync = async (saleId) => {
   }
 
   const endpoint = getSalesSyncEndpoint(state);
+
+  if (!endpoint) {
+    return sale;
+  }
+
   const nextRetryCount = (sale.retryCount || 0) + 1;
   const attemptTime = new Date().toISOString();
 

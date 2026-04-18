@@ -112,25 +112,42 @@ export async function submitSaleToCloudTransaction({
   stockDeductions
 }) {
   const saleRef = doc(db, "sales", sale.id);
+  const deductionsByProduct = stockDeductions.reduce((map, deduction) => {
+    map.set(
+      deduction.productId,
+      (map.get(deduction.productId) || 0) + Number(deduction.quantity || 0)
+    );
+    return map;
+  }, new Map());
 
   return runTransaction(db, async (transaction) => {
-    for (const deduction of stockDeductions) {
-      const productRef = doc(db, "products", deduction.productId);
+    const productSnapshots = [];
+
+    for (const [productId, quantity] of deductionsByProduct.entries()) {
+      const productRef = doc(db, "products", productId);
       const productSnapshot = await transaction.get(productRef);
 
       if (!productSnapshot.exists()) {
-        throw new Error(`Product not found in Firestore: ${deduction.productId}`);
+        throw new Error(`Product not found in Firestore: ${productId}`);
       }
 
       const productData = productSnapshot.data();
       const currentQuantity = Number(productData.quantity || 0);
 
-      if (currentQuantity < deduction.quantity) {
+      if (currentQuantity < quantity) {
         throw new Error(`Not enough stock for ${productData.name || "product"}.`);
       }
 
+      productSnapshots.push({
+        productRef,
+        productData,
+        quantity
+      });
+    }
+
+    for (const { productRef, productData, quantity } of productSnapshots) {
       transaction.update(productRef, {
-        quantity: currentQuantity - deduction.quantity,
+        quantity: Number(productData.quantity || 0) - quantity,
         updatedAt: serverTimestamp()
       });
     }
