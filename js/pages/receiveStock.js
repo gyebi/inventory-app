@@ -1,3 +1,5 @@
+import { receiveStockInCloudTransaction } from "../services/cloudProductService.js";
+
 const {
   createStockBatchId,
   ensureStockState,
@@ -119,7 +121,7 @@ function renderReceiveStock(error = "", values = {}) {
   }
 }
 
-function receiveStock() {
+async function receiveStock() {
   ensureStockState();
 
   const productId = document.getElementById("stockProductIndex").value;
@@ -187,6 +189,28 @@ function receiveStock() {
   const quantityReceived = (bulkUnitsReceived * product.unitsPerBulk) + baseUnitsReceived;
   const batchId = createStockBatchId();
 
+  try {
+    await receiveStockInCloudTransaction({
+      productId: product.id,
+      quantityReceived,
+      receipt: {
+        batchId,
+        product: product.name,
+        supplier,
+        bulkUnitsReceived,
+        baseUnitsReceived,
+        receivedBy,
+        invoiceDetails,
+        receivedAt,
+        expiryDate,
+        paymentStatus
+      }
+    });
+  } catch (error) {
+    renderReceiveStock(error.message || "Unable to update stock in Firestore.", values);
+    return;
+  }
+
   state.stock.push({
     id: batchId,
     productId: product.id,
@@ -217,6 +241,7 @@ function receiveStock() {
     expiryDate,
     paymentStatus
   });
+  product.quantity += quantityReceived;
 
   saveState();
 

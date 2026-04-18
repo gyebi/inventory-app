@@ -1,5 +1,17 @@
 import { setState as setSharedState } from "./state.js";
 import { hasPermission } from "./services/authService.js";
+import {
+  fetchProductsFromCloud,
+  fetchSalesFromCloud,
+  fetchStockReceiptsFromCloud
+} from "./services/cloudProductService.js";
+import {
+  listenToProducts,
+  listenToSales,
+  listenToStockReceipts
+} from "./services/productListenerService.js";
+import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
+import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
 const app = document.getElementById("app");
@@ -22,12 +34,18 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   settings: {
-    lowStockThreshold: 10
+    lowStockThreshold: 10,
+    salesSyncEndpoint: null,
+    salesSyncIntervalMs: 30000,
+    useCloudProducts: true
   }
 };
 
 let state = loadAppState();
 setSharedState(state);
+let stopProductsListener = null;
+let stopStockReceiptsListener = null;
+let stopSalesListener = null;
 
 function loadAppState() {
   const savedState = localStorage.getItem(STORAGE_KEY);
@@ -54,6 +72,115 @@ function loadAppState() {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   setSharedState(state);
+}
+
+function replaceProducts(products = []) {
+  state.products = products.map((product) => ({
+    quantity: 0,
+    ...product
+  }));
+  saveState();
+}
+
+function rebuildStockFromCloudReceipts() {
+  const soldByBatch = new Map();
+
+  state.sales.forEach((sale) => {
+    (sale.items || []).forEach((item) => {
+      (item.batchAllocations || []).forEach((allocation) => {
+        soldByBatch.set(
+          allocation.batchId,
+          (soldByBatch.get(allocation.batchId) || 0) + Number(allocation.quantity || 0)
+        );
+      });
+    });
+  });
+
+  state.stock = state.stockReceipts.map((receipt) => {
+    const originalQuantity = Number(receipt.quantityReceived || 0);
+    const soldQuantity = soldByBatch.get(receipt.batchId) || 0;
+
+    return {
+      id: receipt.batchId,
+      productId: receipt.productId,
+      productName: receipt.product,
+      quantity: Math.max(originalQuantity - soldQuantity, 0),
+      bulkUnitsReceived: receipt.bulkUnitsReceived || 0,
+      baseUnitsReceived: receipt.baseUnitsReceived || 0,
+      receivedBy: receipt.receivedBy || "",
+      supplier: receipt.supplier || "",
+      invoiceDetails: receipt.invoiceDetails || "",
+      receivedAt: receipt.receivedAt || null,
+      expiryDate: receipt.expiryDate || "",
+      paymentStatus: receipt.paymentStatus || ""
+    };
+  });
+}
+
+function replaceStockReceipts(receipts = []) {
+  state.stockReceipts = receipts;
+  rebuildStockFromCloudReceipts();
+  saveState();
+}
+
+function replaceSales(sales = []) {
+  state.sales = sales;
+  rebuildStockFromCloudReceipts();
+  saveState();
+}
+
+async function startCloudProductSync() {
+  await migrateLocalProductsToCloudOnce();
+
+  const [cloudProducts, cloudReceipts, cloudSales] = await Promise.all([
+    fetchProductsFromCloud(),
+    fetchStockReceiptsFromCloud(),
+    fetchSalesFromCloud()
+  ]);
+
+  if (cloudProducts.length > 0) {
+    replaceProducts(cloudProducts);
+  }
+
+  replaceStockReceipts(cloudReceipts);
+  replaceSales(cloudSales);
+
+  if (stopProductsListener) {
+    stopProductsListener();
+  }
+  if (stopStockReceiptsListener) {
+    stopStockReceiptsListener();
+  }
+  if (stopSalesListener) {
+    stopSalesListener();
+  }
+
+  stopProductsListener = listenToProducts(
+    (products) => {
+      replaceProducts(products);
+    },
+    (error) => {
+      console.error("Product listener failed:", error);
+    }
+  );
+
+  stopStockReceiptsListener = listenToStockReceipts(
+    (receipts) => {
+      replaceStockReceipts(receipts);
+    },
+    (error) => {
+      console.error("Stock receipt listener failed:", error);
+    }
+  );
+
+  stopSalesListener = listenToSales(
+    (sales) => {
+      replaceSales(sales);
+    },
+    (error) => {
+      console.error("Sales listener failed:", error);
+    }
+  );
 }
 
 const menuItems = [
@@ -287,6 +414,10 @@ function getExpiredStockQuantity(productId) {
 }
 
 function syncProductQuantities() {
+  if (state.settings?.useCloudProducts) {
+    return false;
+  }
+
   let changed = false;
 
   state.products.forEach((product) => {
@@ -424,6 +555,7 @@ function closeModal() {
 }
 
 ensureStockState();
+ensureSalesSyncMetadata();
 
 window.app = {
   state,
@@ -466,8 +598,22 @@ await import("./pages/help.js");
 
 window.app.formatStock = window.formatStock;
 window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;
+window.app.retryPendingSalesSync = retryPendingSalesSync;
+
+await startCloudProductSync();
+
+window.addEventListener("online", () => {
+  void retryPendingSalesSync();
+  void startCloudProductSync();
+});
+
+const salesSyncIntervalMs = Math.max(state.settings?.salesSyncIntervalMs || 30000, 5000);
+setInterval(() => {
+  void retryPendingSalesSync();
+}, salesSyncIntervalMs);
 
 if (isLoggedIn()) {
+  void retryPendingSalesSync();
   navigate("home");
 } else {
   renderLogin();

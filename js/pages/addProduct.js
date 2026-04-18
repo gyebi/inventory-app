@@ -1,3 +1,5 @@
+import { saveProductToCloud } from "../services/cloudProductService.js";
+
 const { state, renderPage, saveState, navigate } = window.app;
 
 function renderAddProduct(error = "") {
@@ -79,7 +81,7 @@ function createNewProductId() {
   return `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 }
 
-function addProduct() {
+async function addProduct() {
   const name = document.getElementById("name").value.trim();
   const category = document.getElementById("category").value;
   const baseUnit = document.getElementById("baseUnit").value.trim();
@@ -148,7 +150,7 @@ function addProduct() {
     return;
   }
 
-  state.products.push({
+  const product = {
     id: createNewProductId(),
     name,
     category,
@@ -160,9 +162,19 @@ function addProduct() {
     sellingPrice,
     bulkCostPrice,
     bulkSellingPrice
-  });
+  };
 
+  state.products.push(product);
   saveState();
+
+  try {
+    await saveProductToCloud(product);
+  } catch (error) {
+    state.products = state.products.filter((item) => item.id !== product.id);
+    saveState();
+    renderAddProduct(error.message || "Unable to save product to Firestore.");
+    return;
+  }
 
   renderPage(`<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`);
   setTimeout(() => navigate("inventory"), 1000);

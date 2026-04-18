@@ -92,7 +92,7 @@ function updateSalePreview() {
   `;
 }
 
-function recordSale() {
+async function recordSale() {
   ensureStockState();
 
   const productId = document.getElementById("productIndex")?.value;
@@ -111,7 +111,7 @@ function recordSale() {
   }
 
   try {
-    const sale = createSale([
+    const sale = await createSale([
       {
         productId,
         quantity,

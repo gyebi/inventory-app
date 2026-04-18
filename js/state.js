@@ -17,7 +17,10 @@ const defaultState = {
   stockReceipts: [],
 
   settings: {
-    lowStockThreshold: 10
+    lowStockThreshold: 10,
+    salesSyncEndpoint: null,
+    salesSyncIntervalMs: 30000,
+    useCloudProducts: true
   }
 };
 
@@ -44,4 +47,8 @@ if (!Array.isArray(state.stock)) {
 
 if (!state.stockReceipts) {
   state.stockReceipts = [];
+}
+
+if (!state.settings) {
+  state.settings = defaultState.settings;
 }

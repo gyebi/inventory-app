@@ -1,6 +1,8 @@
 import { getState, setState } from "../state.js";
+import { submitSaleToCloudTransaction } from "./cloudProductService.js";
 import { getDisplayUnit, toBaseUnit } from "../utils/unitConverter.js";
 import { getCurrentUser } from "./authService.js";
+import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 
 const createSaleId = () => {
   return `sale_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
@@ -71,6 +73,36 @@ const allocateBatchStock = (sellableBatches, quantityToSell) => {
   return batchAllocations;
 };
 
+const previewBatchAllocations = (sellableBatches, quantityToSell) => {
+  let remaining = quantityToSell;
+  const batchAllocations = [];
+
+  for (const batch of sellableBatches) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const quantityTaken = Math.min(batch.quantity, remaining);
+
+    if (quantityTaken <= 0) {
+      continue;
+    }
+
+    remaining -= quantityTaken;
+    batchAllocations.push({
+      batchId: batch.id,
+      quantity: quantityTaken,
+      expiryDate: batch.expiryDate || ""
+    });
+  }
+
+  if (remaining > 0) {
+    throw new Error("Not enough sellable stock available in unexpired batches.");
+  }
+
+  return batchAllocations;
+};
+
 const getUnitPrices = (product, saleUnitType) => {
   if (saleUnitType === "bulk") {
     return {
@@ -101,7 +133,7 @@ export const createSale = (cartItems = []) => {
   const state = getState();
   const currentUser = getCurrentUser();
   const stockBatches = Array.isArray(state.stock) ? state.stock : [];
-  const items = [];
+  const saleDrafts = [];
   let totalAmount = 0;
   let profit = 0;
 
@@ -134,14 +166,10 @@ export const createSale = (cartItems = []) => {
 
     const itemTotal = unitSellingPrice * quantity;
     const itemProfit = (unitSellingPrice - unitCostPrice) * quantity;
-    const batchAllocations = allocateBatchStock(sellableBatches, actualQtySold);
-
-    product.quantity = getSellableBatches(stockBatches, product.id).reduce(
-      (sum, batch) => sum + (batch.quantity || 0),
-      0
-    );
-
-    items.push({
+    const batchAllocations = previewBatchAllocations(sellableBatches, actualQtySold);
+    saleDrafts.push({
+      product,
+      sellableBatches,
       productId: product.id,
       name: product.name,
       quantity,
@@ -157,17 +185,19 @@ export const createSale = (cartItems = []) => {
     profit += itemProfit;
   }
 
-  const primaryItem = items[0];
-
   const sale = {
     id: createSaleId(),
-    productId: items.length === 1 ? primaryItem.productId : null,
-    product: items.length === 1 ? primaryItem.name : "Multiple Items",
-    qty: items.length === 1 ? primaryItem.quantity : items.length,
-    saleUnit: items.length === 1 ? primaryItem.unit : "items",
-    saleUnitType: items.length === 1 ? primaryItem.saleUnit : "mixed",
-    actualQtySold: items.reduce((sum, item) => sum + item.actualQtySold, 0),
-    items,
+    items: saleDrafts.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      quantity: item.quantity,
+      saleUnit: item.saleUnit,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      total: item.total,
+      actualQtySold: item.actualQtySold,
+      batchAllocations: item.batchAllocations
+    })),
     totalAmount,
     profit,
     createdAt: new Date().toISOString(),
@@ -177,13 +207,54 @@ export const createSale = (cartItems = []) => {
           role: currentUser.role
         }
       : null,
-    user: currentUser?.username || "unknown"
+    user: currentUser?.username || "unknown",
+    ...buildSaleSyncMetadata()
   };
 
-  state.sales.push(sale);
-  setState(state);
+  const stockDeductions = saleDrafts.map((item) => ({
+    productId: item.productId,
+    quantity: item.actualQtySold
+  }));
 
-  return sale;
+  const primaryItem = saleDrafts[0];
+  sale.productId = saleDrafts.length === 1 ? primaryItem.productId : null;
+  sale.product = saleDrafts.length === 1 ? primaryItem.name : "Multiple Items";
+  sale.qty = saleDrafts.length === 1 ? primaryItem.quantity : saleDrafts.length;
+  sale.saleUnit = saleDrafts.length === 1 ? primaryItem.unit : "items";
+  sale.saleUnitType = saleDrafts.length === 1 ? primaryItem.saleUnit : "mixed";
+  sale.actualQtySold = saleDrafts.reduce((sum, item) => sum + item.actualQtySold, 0);
+  sale.syncStatus = getSaleSyncStatus.synced;
+  sale.syncedAt = new Date().toISOString();
+  sale.lastSyncError = null;
+  sale.lastSyncAttemptAt = sale.syncedAt;
+
+  return submitSaleToCloudTransaction({
+    sale,
+    stockDeductions
+  }).then(() => {
+    sale.items = saleDrafts.map((item) => {
+      allocateBatchStock(item.sellableBatches, item.actualQtySold);
+
+      item.product.quantity = Math.max((item.product.quantity || 0) - item.actualQtySold, 0);
+
+      return {
+        productId: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        saleUnit: item.saleUnit,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        total: item.total,
+        actualQtySold: item.actualQtySold,
+        batchAllocations: item.batchAllocations
+      };
+    });
+
+    state.sales.push(sale);
+    setState(state);
+
+    return sale;
+  });
 };
 
 export const recordSale = ({ productId, quantity, saleUnit }) => {
