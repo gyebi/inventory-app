@@ -62,7 +62,7 @@ function renderReceiveStock(error = "", values = {}) {
     <div class="form-column panel">
       <div class="form-row">
         <label for="stockProductIndex">Product</label>
-        <select id="stockProductIndex">${options}</select>
+        <select id="stockProductIndex" onchange="updateReceiveStockPreview()">${options}</select>
       </div>
 
       <div class="form-row">
@@ -73,13 +73,15 @@ function renderReceiveStock(error = "", values = {}) {
 
       <div class="form-row">
         <label for="bulkUnitsReceived">Bulk Units Received</label>
-        <input id="bulkUnitsReceived" class="number-field" type="number" min="0" step="1" value="${values.bulkUnitsReceived || ""}">
+        <input id="bulkUnitsReceived" class="number-field" type="number" min="0" step="1" value="${values.bulkUnitsReceived || ""}" oninput="updateReceiveStockPreview()">
       </div>
 
       <div class="form-row">
         <label for="baseUnitsReceived">Base Units Received</label>
-        <input id="baseUnitsReceived" class="number-field" type="number" min="0" step="1" value="${values.baseUnitsReceived || ""}">
+        <input id="baseUnitsReceived" class="number-field" type="number" min="0" step="1" value="${values.baseUnitsReceived || ""}" oninput="updateReceiveStockPreview()">
       </div>
+
+      <div id="stockPreview" class="sync-panel"></div>
 
       <div class="form-row">
         <label for="receivedBy">Received By</label>
@@ -109,7 +111,7 @@ function renderReceiveStock(error = "", values = {}) {
         </select>
       </div>
 
-      <button onclick="receiveStock()">Receive Stock</button>
+      <button id="receiveStockButton" onclick="receiveStock()">Receive Stock</button>
     </div>
 
     <h3>Recent Stock Receipts</h3>
@@ -119,6 +121,39 @@ function renderReceiveStock(error = "", values = {}) {
   if (values.productId) {
     document.getElementById("stockProductIndex").value = values.productId;
   }
+  updateReceiveStockPreview();
+}
+
+function updateReceiveStockPreview() {
+  const productId = document.getElementById("stockProductIndex")?.value;
+  const bulkUnitsReceived = Number(document.getElementById("bulkUnitsReceived")?.value || 0);
+  const baseUnitsReceived = Number(document.getElementById("baseUnitsReceived")?.value || 0);
+  const product = state.products.find((item) => item.id === productId);
+  const preview = document.getElementById("stockPreview");
+
+  if (!product || !preview) {
+    return;
+  }
+
+  const quantityReceived = (bulkUnitsReceived * product.unitsPerBulk) + baseUnitsReceived;
+
+  preview.innerHTML = `
+    <strong>Preview</strong><br>
+    ${bulkUnitsReceived} ${product.bulkUnit}(s) + ${baseUnitsReceived} ${product.baseUnit}(s)
+    = ${quantityReceived} ${product.baseUnit}(s)<br>
+    Current stock: ${formatStock(product)}
+  `;
+}
+
+function setReceiveStockProcessing(isProcessing) {
+  const button = document.getElementById("receiveStockButton");
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = isProcessing;
+  button.textContent = isProcessing ? "Saving to Firestore..." : "Receive Stock";
 }
 
 async function receiveStock() {
@@ -190,6 +225,7 @@ async function receiveStock() {
   const batchId = createStockBatchId();
 
   try {
+    setReceiveStockProcessing(true);
     await receiveStockInCloudTransaction({
       productId: product.id,
       quantityReceived,
@@ -207,6 +243,7 @@ async function receiveStock() {
       }
     });
   } catch (error) {
+    setReceiveStockProcessing(false);
     renderReceiveStock(error.message || "Unable to update stock in Firestore.", values);
     return;
   }
@@ -290,4 +327,5 @@ function formatExpiryDate(value) {
 
 window.renderReceiveStock = renderReceiveStock;
 window.receiveStock = receiveStock;
+window.updateReceiveStockPreview = updateReceiveStockPreview;
 window.getCurrentDateTimeValue = getCurrentDateTimeValue;

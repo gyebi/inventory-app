@@ -67,10 +67,21 @@ function renderSales(error = "") {
           <input id="qty" class="number-field" type="number" min="1" step="1">
         </div>
 
-        <button onclick="recordSale()">Complete Sale</button>
+        <button id="completeSaleButton" onclick="recordSale()">Complete Sale</button>
       </div>
     </div>
   `);
+}
+
+function setSaleProcessing(isProcessing) {
+  const button = document.getElementById("completeSaleButton");
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = isProcessing;
+  button.textContent = isProcessing ? "Processing Sale..." : "Complete Sale";
 }
 
 function updateSalePreview() {
@@ -111,6 +122,7 @@ async function recordSale() {
   }
 
   try {
+    setSaleProcessing(true);
     const sale = await createSale([
       {
         productId,
@@ -122,6 +134,7 @@ async function recordSale() {
     window.app.saveState();
     renderReceiptPage(sale);
   } catch (error) {
+    setSaleProcessing(false);
     renderSales(error.message || "Unable to complete the sale.");
   }
 }

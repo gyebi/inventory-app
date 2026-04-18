@@ -58,6 +58,11 @@ button:hover {
   background: #eef3f8;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 input,
 select,
 button {
@@ -108,6 +113,45 @@ button {
   gap: 8px;
   grid-auto-flow: column;
   grid-auto-columns: minmax(110px, max-content);
+}
+
+.status-bar {
+  align-content: start;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 460px;
+}
+
+.status-pill {
+  background: #eef3f8;
+  border: 1px solid #c8d1dc;
+  border-radius: 8px;
+  color: #1f2933;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1.2;
+  padding: 6px 8px;
+}
+
+.status-pill.online {
+  background: #f3fff6;
+  border-color: #7bbf90;
+  color: #0f6530;
+}
+
+.status-pill.offline {
+  background: #fff5f7;
+  border-color: #d98a9b;
+  color: #9b1230;
+}
+
+.status-pill.warning {
+  background: #fff8e8;
+  border-color: #d6a847;
+  color: #725200;
 }
 
 .menu-grid {
@@ -281,6 +325,17 @@ button {
   color: #555;
 }
 
+.sync-panel {
+  background: #f6f7f9;
+  border: 1px solid #d8dde3;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #1f2933;
+  line-height: 1.5;
+  padding: 12px;
+  width: 100%;
+}
+
 .form-column {
   box-sizing: border-box;
   display: grid;
@@ -358,6 +413,11 @@ p {
   .header-actions {
     width: 100%;
     grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .status-bar {
+    justify-content: flex-start;
+    max-width: none;
   }
 
   .header-actions button {

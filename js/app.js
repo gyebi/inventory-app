@@ -46,6 +46,11 @@ setSharedState(state);
 let stopProductsListener = null;
 let stopStockReceiptsListener = null;
 let stopSalesListener = null;
+let cloudStatus = {
+  connected: false,
+  message: "Connecting to Firestore",
+  lastUpdatedAt: null
+};
 
 function loadAppState() {
   const savedState = localStorage.getItem(STORAGE_KEY);
@@ -74,11 +79,50 @@ function saveState() {
   setSharedState(state);
 }
 
+function formatStatusTime(value) {
+  return value ? new Date(value).toLocaleTimeString() : "Not yet";
+}
+
+function updateStatusBar() {
+  const statusBar = document.getElementById("statusBar");
+
+  if (!statusBar) {
+    return;
+  }
+
+  const online = navigator.onLine;
+  const role = state.user?.role || "guest";
+
+  statusBar.innerHTML = `
+    <span class="status-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
+    <span class="status-pill ${cloudStatus.connected ? "online" : "warning"}">${cloudStatus.message}</span>
+    <span class="status-pill">Role: ${role}</span>
+    <span class="status-pill">Last update: ${formatStatusTime(cloudStatus.lastUpdatedAt)}</span>
+  `;
+}
+
+function setCloudStatus(updates = {}) {
+  cloudStatus = {
+    ...cloudStatus,
+    ...updates
+  };
+  updateStatusBar();
+}
+
+function markCloudUpdated(message = "Firestore connected") {
+  setCloudStatus({
+    connected: true,
+    message,
+    lastUpdatedAt: new Date().toISOString()
+  });
+}
+
 function replaceProducts(products = []) {
   state.products = products.map((product) => ({
     quantity: 0,
     ...product
   }));
+  markCloudUpdated("Products synced");
   saveState();
 }
 
@@ -141,12 +185,14 @@ function rebuildStockFromCloudReceipts() {
 function replaceStockReceipts(receipts = []) {
   state.stockReceipts = receipts;
   rebuildStockFromCloudReceipts();
+  markCloudUpdated("Stock synced");
   saveState();
 }
 
 function replaceSales(sales = []) {
   state.sales = sales;
   rebuildStockFromCloudReceipts();
+  markCloudUpdated("Sales synced");
   saveState();
 }
 
@@ -181,6 +227,7 @@ async function startCloudProductSync() {
       replaceProducts(products);
     },
     (error) => {
+      setCloudStatus({ connected: false, message: "Product sync error" });
       console.error("Product listener failed:", error);
     }
   );
@@ -190,6 +237,7 @@ async function startCloudProductSync() {
       replaceStockReceipts(receipts);
     },
     (error) => {
+      setCloudStatus({ connected: false, message: "Stock sync error" });
       console.error("Stock receipt listener failed:", error);
     }
   );
@@ -199,6 +247,7 @@ async function startCloudProductSync() {
       replaceSales(sales);
     },
     (error) => {
+      setCloudStatus({ connected: false, message: "Sales sync error" });
       console.error("Sales listener failed:", error);
     }
   );
@@ -335,10 +384,12 @@ function renderShell() {
         <h1>CALKRIS-DARF VENTURES</h1>
         <p>Stock control, sales, and receipts in one place.</p>
       </div>
+      <div id="statusBar" class="status-bar"></div>
     </header>
 
     <main id="page"></main>
   `;
+  updateStatusBar();
 }
 
 function renderHome() {
@@ -624,12 +675,18 @@ window.app.retryPendingSalesSync = retryPendingSalesSync;
 try {
   await startCloudProductSync();
 } catch (error) {
+  setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
   console.error("Cloud startup sync failed:", error);
 }
 
 window.addEventListener("online", () => {
+  setCloudStatus({ connected: false, message: "Reconnecting to Firestore" });
   void retryPendingSalesSync();
   void startCloudProductSync();
+});
+
+window.addEventListener("offline", () => {
+  setCloudStatus({ connected: false, message: "Offline mode" });
 });
 
 const salesSyncIntervalMs = Math.max(state.settings?.salesSyncIntervalMs || 30000, 5000);
