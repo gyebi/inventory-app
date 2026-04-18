@@ -1,5 +1,7 @@
 import { saveProductToCloud } from "../services/cloudProductService.js";
 
+const CLOUD_SAVE_TIMEOUT_MS = 20000;
+
 const { state, renderPage, saveState, navigate } = window.app;
 
 function renderAddProduct(error = "") {
@@ -72,13 +74,24 @@ function renderAddProduct(error = "") {
         <input id="bulkSellingPrice" class="number-field" type="number" min="0.01" step="0.01">
       </div>
 
-      <button onclick="addProduct()">Add Product</button>
+      <button id="addProductButton" onclick="addProduct()">Add Product</button>
     </div>
   `);
 }
 
 function createNewProductId() {
   return `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+}
+
+function setAddProductProcessing(isProcessing) {
+  const button = document.getElementById("addProductButton");
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = isProcessing;
+  button.textContent = isProcessing ? "Saving to Firestore..." : "Add Product";
 }
 
 async function addProduct() {
@@ -164,16 +177,22 @@ async function addProduct() {
     bulkSellingPrice
   };
 
-  state.products.push(product);
-  saveState();
-
   try {
-    await saveProductToCloud(product);
+    setAddProductProcessing(true);
+    await withTimeout(
+      saveProductToCloud(product),
+      CLOUD_SAVE_TIMEOUT_MS,
+      "Firestore is taking too long to create this product. Check your internet connection, Firebase config, and Firestore rules before trying again."
+    );
   } catch (error) {
-    state.products = state.products.filter((item) => item.id !== product.id);
-    saveState();
+    setAddProductProcessing(false);
     renderAddProduct(error.message || "Unable to save product to Firestore.");
     return;
+  }
+
+  if (!state.products.some((item) => item.id === product.id)) {
+    state.products.push(product);
+    saveState();
   }
 
   renderPage(`<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`);
@@ -185,6 +204,19 @@ function formatStock(product) {
   const remainder = product.quantity % product.unitsPerBulk;
 
   return `${fullBulk} ${product.bulkUnit}(s) and ${remainder} ${product.baseUnit}(s)`;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeout
+  ]);
 }
 
 window.renderAddProduct = renderAddProduct;

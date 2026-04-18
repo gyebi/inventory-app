@@ -1,5 +1,7 @@
 import { receiveStockInCloudTransaction } from "../services/cloudProductService.js";
 
+const CLOUD_SAVE_TIMEOUT_MS = 20000;
+
 const {
   createStockBatchId,
   ensureStockState,
@@ -131,16 +133,24 @@ function updateReceiveStockPreview() {
   const product = state.products.find((item) => item.id === productId);
   const preview = document.getElementById("stockPreview");
 
-  if (!product || !preview) {
+  if (!preview) {
     return;
   }
 
-  const quantityReceived = (bulkUnitsReceived * product.unitsPerBulk) + baseUnitsReceived;
+  if (!product) {
+    preview.textContent = "Choose a product to preview the stock quantity.";
+    return;
+  }
+
+  const unitsPerBulk = getUnitsPerBulk(product);
+  const bulkUnit = product.bulkUnit || "bulk unit";
+  const baseUnit = product.baseUnit || "base unit";
+  const quantityReceived = (bulkUnitsReceived * unitsPerBulk) + baseUnitsReceived;
 
   preview.innerHTML = `
     <strong>Preview</strong><br>
-    ${bulkUnitsReceived} ${product.bulkUnit}(s) + ${baseUnitsReceived} ${product.baseUnit}(s)
-    = ${quantityReceived} ${product.baseUnit}(s)<br>
+    ${bulkUnitsReceived} ${bulkUnit}(s) x ${unitsPerBulk} + ${baseUnitsReceived} ${baseUnit}(s)
+    = ${quantityReceived} ${baseUnit}(s)<br>
     Current stock: ${formatStock(product)}
   `;
 }
@@ -221,27 +231,32 @@ async function receiveStock() {
     return;
   }
 
-  const quantityReceived = (bulkUnitsReceived * product.unitsPerBulk) + baseUnitsReceived;
+  const unitsPerBulk = getUnitsPerBulk(product);
+  const quantityReceived = (bulkUnitsReceived * unitsPerBulk) + baseUnitsReceived;
   const batchId = createStockBatchId();
 
   try {
     setReceiveStockProcessing(true);
-    await receiveStockInCloudTransaction({
-      productId: product.id,
-      quantityReceived,
-      receipt: {
-        batchId,
-        product: product.name,
-        supplier,
-        bulkUnitsReceived,
-        baseUnitsReceived,
-        receivedBy,
-        invoiceDetails,
-        receivedAt,
-        expiryDate,
-        paymentStatus
-      }
-    });
+    await withTimeout(
+      receiveStockInCloudTransaction({
+        productId: product.id,
+        quantityReceived,
+        receipt: {
+          batchId,
+          product: product.name,
+          supplier,
+          bulkUnitsReceived,
+          baseUnitsReceived,
+          receivedBy,
+          invoiceDetails,
+          receivedAt,
+          expiryDate,
+          paymentStatus
+        }
+      }),
+      CLOUD_SAVE_TIMEOUT_MS,
+      "Firestore is taking too long to save this stock. Check your internet connection, Firebase config, and Firestore rules before trying again."
+    );
   } catch (error) {
     setReceiveStockProcessing(false);
     renderReceiveStock(error.message || "Unable to update stock in Firestore.", values);
@@ -295,6 +310,24 @@ function getCurrentDateTimeValue() {
   const now = new Date();
   const localTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
   return localTime.toISOString().slice(0, 16);
+}
+
+function getUnitsPerBulk(product) {
+  const unitsPerBulk = Number(product.unitsPerBulk);
+  return Number.isFinite(unitsPerBulk) && unitsPerBulk > 0 ? unitsPerBulk : 1;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeout
+  ]);
 }
 
 function formatReceiptTime(value) {

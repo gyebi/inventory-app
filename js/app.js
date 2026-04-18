@@ -672,11 +672,13 @@ window.app.formatStock = window.formatStock;
 window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;
 window.app.retryPendingSalesSync = retryPendingSalesSync;
 
-try {
-  await startCloudProductSync();
-} catch (error) {
-  setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
-  console.error("Cloud startup sync failed:", error);
+async function startCloudProductSyncInBackground() {
+  try {
+    await startCloudProductSync();
+  } catch (error) {
+    setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
+    console.error("Cloud startup sync failed:", error);
+  }
 }
 
 window.addEventListener("online", () => {
@@ -700,3 +702,5 @@ if (isLoggedIn()) {
 } else {
   renderLogin();
 }
+
+void startCloudProductSyncInBackground();
