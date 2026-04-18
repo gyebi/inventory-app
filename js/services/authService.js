@@ -2,13 +2,10 @@ import { getState, setState } from "../state.js";
 
 const rolePermissions = {
   admin: ["all"],
-  sales: ["view_inventory", "record_sales", "view_dashboard", "view_help"],
+  sales: ["create_sale", "view_dashboard"],
   storekeeper: [
     "add_product",
-    "receive_stock",
-    "manage_suppliers",
-    "view_inventory",
-    "view_help"
+    "manage_stock"
   ]
 };
 

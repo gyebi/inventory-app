@@ -1,4 +1,6 @@
 import { setState as setSharedState } from "./state.js";
+import { hasPermission } from "./services/authService.js";
+import { getPagePermission } from "./utils/pagePermissions.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -65,6 +67,16 @@ const menuItems = [
   { page: "logout", icon: "🚪", title: "Logout", text: "Sign out of the app" }
 ];
 
+function canAccessPage(page) {
+  const requiredPermission = getPagePermission(page);
+
+  if (!requiredPermission) {
+    return true;
+  }
+
+  return hasPermission(requiredPermission);
+}
+
 function navigate(page) {
   if (page === "login") {
     renderLogin();
@@ -78,6 +90,18 @@ function navigate(page) {
 
   if (!isLoggedIn() && page !== "login") {
     renderLogin();
+    return;
+  }
+
+  if (!canAccessPage(page)) {
+    renderShell();
+    renderPage(`
+      <div class="page-title">
+        <h2>Access Denied</h2>
+        <p>You do not have permission to open this page.</p>
+      </div>
+      <button onclick="navigate('home')">Back to Menu</button>
+    `);
     return;
   }
 
@@ -171,7 +195,9 @@ function renderShell() {
 
 function renderHome() {
   const page = document.getElementById("page");
-  const cards = menuItems.map((item) => `
+  const cards = menuItems
+    .filter((item) => canAccessPage(item.page))
+    .map((item) => `
     <button class="menu-card" onclick="navigate('${item.page}')">
       <span class="menu-icon">${item.icon}</span>
       <strong>${item.title}</strong>
