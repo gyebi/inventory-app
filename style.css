@@ -172,6 +172,12 @@ button {
   color: #725200;
 }
 
+.status-button {
+  font-size: 13px;
+  margin: 0;
+  padding: 6px 10px;
+}
+
 .menu-grid {
   display: grid;
   gap: 16px;

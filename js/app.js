@@ -103,6 +103,7 @@ function updateStatusBar() {
     <span class="status-pill">User: ${name}</span>
     <span class="status-pill">Role: ${role}</span>
     <span class="status-pill">Last update: ${formatStatusTime(cloudStatus.lastUpdatedAt)}</span>
+    <button class="status-button" onclick="navigate('home')">Menu</button>
   `;
 }
 

@@ -27,7 +27,7 @@ function renderInventory() {
   let html = `
     <div class="page-title">
       <h2>📦 Inventory</h2>
-      <p>Stock is stored in base units and shown as bulk equivalents.</p>
+      <p>Use the physical stock breakdown for counting and reconciliation.</p>
     </div>
     <div class="inventory-list">
   `;
@@ -36,6 +36,7 @@ function renderInventory() {
     const productBatches = getBatchesByProductId(p.id);
     const activeBatches = getSellableBatches(p.id);
     const expiredBatches = getExpiredBatches(p.id);
+    const physicalStock = getPhysicalStock(p);
     const nextExpiry = activeBatches
       .map((batch) => parseExpiryDate(batch.expiryDate))
       .filter(Boolean)
@@ -45,12 +46,12 @@ function renderInventory() {
       <div class="inventory-row">
         <div><strong>${p.name}</strong></div>
         <div><strong>Category:</strong> ${p.category}</div>
-        <div><strong>Bulk Unit:</strong> ${p.bulkUnit}</div>
-        <div><strong>Base Unit:</strong> ${p.baseUnit}</div>
-        <div><strong>Units Per Bulk:</strong> ${p.unitsPerBulk}</div>
-        <div><strong>Sellable Stock:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
+        <div><strong>Physical Stock:</strong> ${formatProductStock(p)}</div>
+        <div><strong>Bulk Units:</strong> ${physicalStock.fullBulk} ${p.bulkUnit}(s)</div>
+        <div><strong>Loose Units:</strong> ${physicalStock.remainder} ${p.baseUnit}(s)</div>
+        <div><strong>Total Base Units:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
+        <div><strong>Conversion:</strong> 1 ${p.bulkUnit} = ${physicalStock.unitsPerBulk} ${p.baseUnit}(s)</div>
         <div><strong>Expired Stock:</strong> ${getExpiredStockQuantity(p.id)} ${p.baseUnit}(s)</div>
-        <div><strong>Equivalent:</strong> ${formatProductStock(p)}</div>
         <div><strong>Tracked Batches:</strong> ${productBatches.length}</div>
         <div><strong>Active Batches:</strong> ${activeBatches.length}</div>
         <div><strong>Expired Batches:</strong> ${expiredBatches.length}</div>
@@ -76,12 +77,20 @@ function getUnitsPerBulk(product) {
 }
 
 function formatProductStock(product) {
-  const unitsPerBulk = getUnitsPerBulk(product);
-  const quantity = Number(product.quantity || 0);
-  const fullBulk = Math.floor(quantity / unitsPerBulk);
-  const remainder = quantity % unitsPerBulk;
+  const physicalStock = getPhysicalStock(product);
   const bulkUnit = product.bulkUnit || "bulk unit";
   const baseUnit = product.baseUnit || "base unit";
 
-  return `${fullBulk} ${bulkUnit}(s) and ${remainder} ${baseUnit}(s)`;
+  return `${physicalStock.fullBulk} ${bulkUnit}(s) and ${physicalStock.remainder} ${baseUnit}(s)`;
+}
+
+function getPhysicalStock(product) {
+  const unitsPerBulk = getUnitsPerBulk(product);
+  const quantity = Number(product.quantity || 0);
+
+  return {
+    unitsPerBulk,
+    fullBulk: Math.floor(quantity / unitsPerBulk),
+    remainder: quantity % unitsPerBulk
+  };
 }
