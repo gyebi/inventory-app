@@ -169,7 +169,7 @@ function setReceiveStockProcessing(isProcessing) {
     : "Receive Stock";
 }
 
-function renderStockSaved(product, quantityReceived) {
+function renderStockSaved(product, quantityReceived, receiptId) {
   renderPage(`
     <div class="page-title">
       <h2>Stock Saved</h2>
@@ -178,6 +178,7 @@ function renderStockSaved(product, quantityReceived) {
 
     <div class="message success">
       ${quantityReceived} ${product.baseUnit || "base unit"}(s) added to ${product.name}. Current stock is ${formatStock(product)}.
+      ${receiptId ? `<br>Receipt ID: ${receiptId}` : ""}
     </div>
 
     <div class="form-column panel">
@@ -256,10 +257,11 @@ async function receiveStock() {
   const unitsPerBulk = getUnitsPerBulk(product);
   const quantityReceived = (bulkUnitsReceived * unitsPerBulk) + baseUnitsReceived;
   const batchId = createStockBatchId();
+  let cloudResult;
 
   try {
     setReceiveStockProcessing(true);
-    await withTimeout(
+    cloudResult = await withTimeout(
       receiveStockInCloudTransaction({
         productId: product.id,
         quantityReceived,
@@ -280,9 +282,10 @@ async function receiveStock() {
       "Stock was not saved because Firestore did not respond. Check your internet connection and confirm Firestore rules allow updates to products and creates in stockReceipts."
     );
   } catch (error) {
-    setReceiveStockProcessing(false);
     renderReceiveStock(error.message || "Unable to update stock in Firestore.", values);
     return;
+  } finally {
+    setReceiveStockProcessing(false);
   }
 
   state.stock.push({
@@ -302,6 +305,7 @@ async function receiveStock() {
 
   syncProductQuantities();
   state.stockReceipts.push({
+    id: cloudResult?.receiptId,
     batchId,
     productId: product.id,
     product: product.name,
@@ -319,7 +323,7 @@ async function receiveStock() {
 
   saveState();
 
-  renderStockSaved(product, quantityReceived);
+  renderStockSaved(product, quantityReceived, cloudResult?.receiptId);
 }
 
 function getCurrentDateTimeValue() {
