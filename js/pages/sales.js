@@ -81,7 +81,9 @@ function setSaleProcessing(isProcessing) {
   }
 
   button.disabled = isProcessing;
-  button.textContent = isProcessing ? "Processing Sale..." : "Complete Sale";
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Processing sale...`
+    : "Complete Sale";
 }
 
 function updateSalePreview() {

@@ -1,6 +1,6 @@
 import { receiveStockInCloudTransaction } from "../services/cloudProductService.js";
 
-const CLOUD_SAVE_TIMEOUT_MS = 20000;
+const CLOUD_SAVE_TIMEOUT_MS = 12000;
 
 const {
   createStockBatchId,
@@ -164,7 +164,28 @@ function setReceiveStockProcessing(isProcessing) {
   }
 
   button.disabled = isProcessing;
-  button.textContent = isProcessing ? "Saving to Firestore..." : "Receive Stock";
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Saving stock...`
+    : "Receive Stock";
+}
+
+function renderStockSaved(product, quantityReceived) {
+  renderPage(`
+    <div class="page-title">
+      <h2>Stock Saved</h2>
+      <p>Firebase confirmed the stock record.</p>
+    </div>
+
+    <div class="message success">
+      ${quantityReceived} ${product.baseUnit || "base unit"}(s) added to ${product.name}. Current stock is ${formatStock(product)}.
+    </div>
+
+    <div class="form-column panel">
+      <button onclick="renderReceiveStock()">Receive More Stock</button>
+      <button onclick="navigate('inventory')">View Inventory</button>
+      <button onclick="navigate('home')">Main Menu</button>
+    </div>
+  `);
 }
 
 async function receiveStock() {
@@ -256,7 +277,7 @@ async function receiveStock() {
         }
       }),
       CLOUD_SAVE_TIMEOUT_MS,
-      "Firestore is taking too long to save this stock. Check your internet connection, Firebase config, and Firestore rules before trying again."
+      "Stock was not saved because Firestore did not respond. Check your internet connection and confirm Firestore rules allow updates to products and creates in stockReceipts."
     );
   } catch (error) {
     setReceiveStockProcessing(false);
@@ -298,13 +319,7 @@ async function receiveStock() {
 
   saveState();
 
-  renderPage(`
-    <div class="message success">
-      Stock received and logged. Current stock is ${formatStock(product)}.
-    </div>
-  `);
-
-  setTimeout(() => navigate("inventory"), 1000);
+  renderStockSaved(product, quantityReceived);
 }
 
 function getCurrentDateTimeValue() {

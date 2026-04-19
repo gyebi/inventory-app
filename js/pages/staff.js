@@ -85,7 +85,9 @@ function setStaffProcessing(isProcessing) {
   }
 
   button.disabled = isProcessing;
-  button.textContent = isProcessing ? "Saving to Firestore..." : "Add Staff";
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Saving staff...`
+    : "Add Staff";
 }
 
 async function addStaffUser() {

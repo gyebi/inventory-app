@@ -91,7 +91,9 @@ function setAddProductProcessing(isProcessing) {
   }
 
   button.disabled = isProcessing;
-  button.textContent = isProcessing ? "Saving to Firestore..." : "Add Product";
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Saving product...`
+    : "Add Product";
 }
 
 function renderProductSaved(product) {

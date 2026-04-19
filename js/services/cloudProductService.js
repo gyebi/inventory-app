@@ -3,9 +3,11 @@ import {
   collection,
   doc,
   getDocs,
+  increment,
   runTransaction,
   serverTimestamp,
-  setDoc
+  setDoc,
+  writeBatch
 } from "firebase/firestore";
 
 const productsCollection = collection(db, "products");
@@ -75,36 +77,29 @@ export async function receiveStockInCloudTransaction({
 }) {
   const productRef = doc(db, "products", productId);
   const receiptRef = doc(stockReceiptsCollection);
+  const receivedQuantity = Number(quantityReceived || 0);
+  const batch = writeBatch(db);
 
-  return runTransaction(db, async (transaction) => {
-    const productSnapshot = await transaction.get(productRef);
-
-    if (!productSnapshot.exists()) {
-      throw new Error("Product not found in Firestore.");
-    }
-
-    const productData = productSnapshot.data();
-    const nextQuantity = Number(productData.quantity || 0) + Number(quantityReceived || 0);
-
-    transaction.update(productRef, {
-      quantity: nextQuantity,
-      updatedAt: serverTimestamp()
-    });
-
-    transaction.set(receiptRef, {
-      ...receipt,
-      id: receiptRef.id,
-      productId,
-      quantityReceived: Number(quantityReceived || 0),
-      createdAt: serverTimestamp()
-    });
-
-    return {
-      id: productId,
-      ...productData,
-      quantity: nextQuantity
-    };
+  batch.update(productRef, {
+    quantity: increment(receivedQuantity),
+    updatedAt: serverTimestamp()
   });
+
+  batch.set(receiptRef, {
+    ...receipt,
+    id: receiptRef.id,
+    productId,
+    quantityReceived: receivedQuantity,
+    createdAt: serverTimestamp()
+  });
+
+  await batch.commit();
+
+  return {
+    id: productId,
+    quantityReceived: receivedQuantity,
+    receiptId: receiptRef.id
+  };
 }
 
 export async function submitSaleToCloudTransaction({
