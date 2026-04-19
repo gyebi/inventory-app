@@ -37,6 +37,7 @@ function renderReceiveStock(error = "", values = {}) {
     (supplier) => `<option value="${supplier.name}">${supplier.name}</option>`
   ).join("");
   const defaultReceivedAt = values.receivedAt || getCurrentDateTimeValue();
+  const defaultReceivedBy = values.receivedBy || state.user?.fullName || state.user?.username || "";
   const recentReceipts = state.stockReceipts.length === 0
     ? `<div class="card">No stock receipts saved yet.</div>`
     : `<div class="inventory-list">${state.stockReceipts.slice().reverse().slice(0, 8).map((receipt) => `
@@ -87,7 +88,7 @@ function renderReceiveStock(error = "", values = {}) {
 
       <div class="form-row">
         <label for="receivedBy">Received By</label>
-        <input id="receivedBy" value="${values.receivedBy || ""}">
+        <input id="receivedBy" value="${defaultReceivedBy}">
       </div>
 
       <div class="form-row">

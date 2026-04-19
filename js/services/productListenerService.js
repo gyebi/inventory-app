@@ -28,3 +28,7 @@ export function listenToStockReceipts(onChange, onError) {
 export function listenToSales(onChange, onError) {
   return listenToCollection("sales", onChange, onError);
 }
+
+export function listenToUsers(onChange, onError) {
+  return listenToCollection("users", onChange, onError);
+}

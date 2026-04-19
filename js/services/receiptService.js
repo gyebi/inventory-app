@@ -20,7 +20,7 @@ function formatReceiptDateTime(value) {
 }
 
 function getReceiptCashierName(sale) {
-  return sale.createdBy?.username || sale.user || "Unknown";
+  return sale.createdBy?.fullName || sale.createdBy?.username || sale.user || "Unknown";
 }
 
 function formatReceiptItemLine(item) {

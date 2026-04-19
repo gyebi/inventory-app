@@ -6,7 +6,8 @@ const rolePermissions = {
   storekeeper: [
     "add_product",
     "manage_stock"
-  ]
+  ],
+  manager: ["view_dashboard", "view_reports", "manage_stock"]
 };
 
 export const login = (username, password) => {
@@ -20,7 +21,13 @@ export const login = (username, password) => {
     throw new Error("Invalid credentials");
   }
 
+  if (user.active === false) {
+    throw new Error("This user account is inactive");
+  }
+
   state.user = {
+    id: user.id || user.username,
+    fullName: user.fullName || user.username,
     username: user.username,
     role: user.role
   };

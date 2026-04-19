@@ -5,10 +5,12 @@ import {
   fetchSalesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
+import { fetchUsersFromCloud } from "./services/cloudUserService.js";
 import {
   listenToProducts,
   listenToSales,
-  listenToStockReceipts
+  listenToStockReceipts,
+  listenToUsers
 } from "./services/productListenerService.js";
 import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
@@ -20,9 +22,9 @@ const modalBody = document.getElementById("modal-body");
 const STORAGE_KEY = "inventory_app";
 
 const defaultUsers = [
-  { username: "admin", password: "1234", role: "admin" },
-  { username: "sales", password: "1234", role: "sales" },
-  { username: "store", password: "1234", role: "storekeeper" }
+  { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
+  { id: "user_sales", fullName: "Sales Staff", username: "sales", password: "1234", role: "sales", active: true },
+  { id: "user_store", fullName: "Storekeeper", username: "store", password: "1234", role: "storekeeper", active: true }
 ];
 
 const defaultState = {
@@ -46,6 +48,7 @@ setSharedState(state);
 let stopProductsListener = null;
 let stopStockReceiptsListener = null;
 let stopSalesListener = null;
+let stopUsersListener = null;
 let cloudStatus = {
   connected: false,
   message: "Connecting to Firestore",
@@ -92,10 +95,12 @@ function updateStatusBar() {
 
   const online = navigator.onLine;
   const role = state.user?.role || "guest";
+  const name = state.user?.fullName || state.user?.username || "Guest";
 
   statusBar.innerHTML = `
     <span class="status-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
     <span class="status-pill ${cloudStatus.connected ? "online" : "warning"}">${cloudStatus.message}</span>
+    <span class="status-pill">User: ${name}</span>
     <span class="status-pill">Role: ${role}</span>
     <span class="status-pill">Last update: ${formatStatusTime(cloudStatus.lastUpdatedAt)}</span>
   `;
@@ -123,6 +128,47 @@ function replaceProducts(products = []) {
     ...product
   }));
   markCloudUpdated("Products synced");
+  saveState();
+}
+
+function normalizeUser(user) {
+  return {
+    id: user.id || `user_${user.username}`,
+    fullName: user.fullName || user.name || user.username,
+    username: user.username,
+    password: user.password,
+    role: user.role || "sales",
+    active: user.active !== false,
+    createdAt: user.createdAt || null,
+    createdBy: user.createdBy || null
+  };
+}
+
+function replaceUsers(users = []) {
+  const normalizedUsers = users
+    .filter((user) => user.username && user.password)
+    .map(normalizeUser);
+
+  if (normalizedUsers.length === 0) {
+    return;
+  }
+
+  state.users = normalizedUsers;
+
+  if (state.user) {
+    const refreshedUser = state.users.find((user) => user.id === state.user.id || user.username === state.user.username);
+
+    if (refreshedUser) {
+      state.user = {
+        id: refreshedUser.id,
+        fullName: refreshedUser.fullName,
+        username: refreshedUser.username,
+        role: refreshedUser.role
+      };
+    }
+  }
+
+  markCloudUpdated("Users synced");
   saveState();
 }
 
@@ -199,10 +245,11 @@ function replaceSales(sales = []) {
 async function startCloudProductSync() {
   await migrateLocalProductsToCloudOnce();
 
-  const [cloudProducts, cloudReceipts, cloudSales] = await Promise.all([
+  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers] = await Promise.all([
     fetchProductsFromCloud(),
     fetchStockReceiptsFromCloud(),
-    fetchSalesFromCloud()
+    fetchSalesFromCloud(),
+    fetchUsersFromCloud()
   ]);
 
   if (cloudProducts.length > 0) {
@@ -211,6 +258,7 @@ async function startCloudProductSync() {
 
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
+  replaceUsers(cloudUsers);
 
   if (stopProductsListener) {
     stopProductsListener();
@@ -220,6 +268,9 @@ async function startCloudProductSync() {
   }
   if (stopSalesListener) {
     stopSalesListener();
+  }
+  if (stopUsersListener) {
+    stopUsersListener();
   }
 
   stopProductsListener = listenToProducts(
@@ -251,6 +302,16 @@ async function startCloudProductSync() {
       console.error("Sales listener failed:", error);
     }
   );
+
+  stopUsersListener = listenToUsers(
+    (users) => {
+      replaceUsers(users);
+    },
+    (error) => {
+      setCloudStatus({ connected: false, message: "User sync error" });
+      console.error("User listener failed:", error);
+    }
+  );
 }
 
 const menuItems = [
@@ -259,6 +320,7 @@ const menuItems = [
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
   { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
+  { page: "staff", icon: "👤", title: "Staff", text: "Add staff and assign roles" },
   { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
   { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" },
   { page: "logout", icon: "🚪", title: "Logout", text: "Sign out of the app" }
@@ -311,6 +373,7 @@ function navigate(page) {
   if (page === "suppliers") window.renderSuppliers?.();
   if (page === "sales") window.renderSales?.();
   if (page === "inventory") window.renderInventory?.();
+  if (page === "staff") window.renderStaff?.();
   if (page === "help") window.renderHelp?.();
 }
 
@@ -363,7 +426,14 @@ function login() {
     return;
   }
 
+  if (user.active === false) {
+    renderLogin("This user account is inactive.");
+    return;
+  }
+
   state.user = {
+    id: user.id || user.username,
+    fullName: user.fullName || user.username,
     username: user.username,
     role: user.role
   };
@@ -666,6 +736,7 @@ await import("./pages/suppliers.js");
 await import("./pages/sales.js");
 await import("./pages/inventory.js");
 await import("./pages/dashboard.js");
+await import("./pages/staff.js");
 await import("./pages/help.js");
 
 window.app.formatStock = window.formatStock;

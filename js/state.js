@@ -1,9 +1,9 @@
 import { loadState, saveState } from "./storage/localStorageService.js";
 
 const defaultUsers = [
-  { username: "admin", password: "1234", role: "admin" },
-  { username: "sales", password: "1234", role: "sales" },
-  { username: "store", password: "1234", role: "storekeeper" }
+  { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
+  { id: "user_sales", fullName: "Sales Staff", username: "sales", password: "1234", role: "sales", active: true },
+  { id: "user_store", fullName: "Storekeeper", username: "store", password: "1234", role: "storekeeper", active: true }
 ];
 
 const defaultState = {

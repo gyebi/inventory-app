@@ -203,11 +203,13 @@ export const createSale = (cartItems = []) => {
     createdAt: new Date().toISOString(),
     createdBy: currentUser
       ? {
+          id: currentUser.id || currentUser.username,
+          fullName: currentUser.fullName || currentUser.username,
           username: currentUser.username,
           role: currentUser.role
         }
       : null,
-    user: currentUser?.username || "unknown",
+    user: currentUser?.fullName || currentUser?.username || "unknown",
     ...buildSaleSyncMetadata()
   };
 

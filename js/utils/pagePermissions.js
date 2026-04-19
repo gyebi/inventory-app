@@ -10,7 +10,8 @@ export const pagePermissions = {
   logout: null,
   stock: "manage_stock",
   products: "add_product",
-  reports: "view_reports"
+  reports: "view_reports",
+  staff: "manage_users"
 };
 
 export const getPagePermission = (page) => {

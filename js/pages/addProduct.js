@@ -94,6 +94,22 @@ function setAddProductProcessing(isProcessing) {
   button.textContent = isProcessing ? "Saving to Firestore..." : "Add Product";
 }
 
+function renderProductSaved(product) {
+  renderPage(`
+    <div class="page-title">
+      <h2>Product Saved</h2>
+      <p>${product.name} is now available for stock receiving and sales setup.</p>
+    </div>
+
+    <div class="message success">Product record saved successfully.</div>
+
+    <div class="form-column panel">
+      <button onclick="renderAddProduct()">Add Another Product</button>
+      <button onclick="navigate('home')">Main Menu</button>
+    </div>
+  `);
+}
+
 async function addProduct() {
   const name = document.getElementById("name").value.trim();
   const category = document.getElementById("category").value;
@@ -195,8 +211,7 @@ async function addProduct() {
     saveState();
   }
 
-  renderPage(`<div class="message success">Product added. Use Receive Stock to add supplier deliveries.</div>`);
-  setTimeout(() => navigate("inventory"), 1000);
+  renderProductSaved(product);
 }
 
 function formatStock(product) {
