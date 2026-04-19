@@ -5,7 +5,6 @@ const CLOUD_SAVE_TIMEOUT_MS = 12000;
 const {
   createStockBatchId,
   ensureStockState,
-  formatStock,
   isBatchExpired,
   navigate,
   parseExpiryDate,
@@ -38,21 +37,6 @@ function renderReceiveStock(error = "", values = {}) {
   ).join("");
   const defaultReceivedAt = values.receivedAt || getCurrentDateTimeValue();
   const defaultReceivedBy = values.receivedBy || state.user?.fullName || state.user?.username || "";
-  const recentReceipts = state.stockReceipts.length === 0
-    ? `<div class="card">No stock receipts saved yet.</div>`
-    : `<div class="inventory-list">${state.stockReceipts.slice().reverse().slice(0, 8).map((receipt) => `
-        <div class="inventory-row">
-          <div><strong>Product:</strong> ${receipt.product}</div>
-          <div><strong>Supplier:</strong> ${receipt.supplier || "N/A"}</div>
-          <div><strong>Received By:</strong> ${receipt.receivedBy}</div>
-          <div><strong>Invoice:</strong> ${receipt.invoiceDetails}</div>
-          <div><strong>Time:</strong> ${formatReceiptTime(receipt.receivedAt)}</div>
-          <div><strong>Expiry:</strong> ${formatExpiryDate(receipt.expiryDate)}</div>
-          <div><strong>Payment:</strong> ${receipt.paymentStatus}</div>
-          <div><strong>Bulk Units:</strong> ${receipt.bulkUnitsReceived}</div>
-          <div><strong>Base Units:</strong> ${receipt.baseUnitsReceived}</div>
-        </div>
-      `).join("")}</div>`;
 
   renderPage(`
     <div class="page-title">
@@ -116,9 +100,6 @@ function renderReceiveStock(error = "", values = {}) {
 
       <button id="receiveStockButton" onclick="receiveStock()">Receive Stock</button>
     </div>
-
-    <h3>Recent Stock Receipts</h3>
-    ${recentReceipts}
   `);
 
   if (values.productId) {
@@ -152,7 +133,7 @@ function updateReceiveStockPreview() {
     <strong>Preview</strong><br>
     ${bulkUnitsReceived} ${bulkUnit}(s) x ${unitsPerBulk} + ${baseUnitsReceived} ${baseUnit}(s)
     = ${quantityReceived} ${baseUnit}(s)<br>
-    Current stock: ${formatStock(product)}
+    Current stock: ${formatProductStock(product)}
   `;
 }
 
@@ -169,7 +150,7 @@ function setReceiveStockProcessing(isProcessing) {
     : "Receive Stock";
 }
 
-function renderStockSaved(product, quantityReceived, receiptId) {
+function renderStockSaved(product, receipt, quantityReceived, receiptId) {
   renderPage(`
     <div class="page-title">
       <h2>Stock Saved</h2>
@@ -177,8 +158,22 @@ function renderStockSaved(product, quantityReceived, receiptId) {
     </div>
 
     <div class="message success">
-      ${quantityReceived} ${product.baseUnit || "base unit"}(s) added to ${product.name}. Current stock is ${formatStock(product)}.
+      ${quantityReceived} ${product.baseUnit || "base unit"}(s) added to ${product.name}. Current stock is ${formatProductStock(product)}.
       ${receiptId ? `<br>Receipt ID: ${receiptId}` : ""}
+    </div>
+
+    <div class="inventory-row">
+      <div><strong>Product:</strong> ${product.name}</div>
+      <div><strong>Supplier:</strong> ${receipt.supplier || "N/A"}</div>
+      <div><strong>Received By:</strong> ${receipt.receivedBy}</div>
+      <div><strong>Invoice:</strong> ${receipt.invoiceDetails}</div>
+      <div><strong>Time:</strong> ${formatReceiptTime(receipt.receivedAt)}</div>
+      <div><strong>Expiry:</strong> ${formatExpiryDate(receipt.expiryDate)}</div>
+      <div><strong>Payment:</strong> ${receipt.paymentStatus}</div>
+      <div><strong>Bulk Units:</strong> ${receipt.bulkUnitsReceived}</div>
+      <div><strong>Base Units:</strong> ${receipt.baseUnitsReceived}</div>
+      <div><strong>Total Received:</strong> ${quantityReceived} ${product.baseUnit || "base unit"}(s)</div>
+      <div><strong>Current Stock:</strong> ${formatProductStock(product)}</div>
     </div>
 
     <div class="form-column panel">
@@ -187,6 +182,41 @@ function renderStockSaved(product, quantityReceived, receiptId) {
       <button onclick="navigate('home')">Main Menu</button>
     </div>
   `);
+}
+
+function applyReceivedStockLocally({
+  product,
+  productId,
+  batchId,
+  receipt,
+  quantityReceived,
+  receiptId
+}) {
+  state.stock.push({
+    id: batchId,
+    productId,
+    productName: product.name,
+    quantity: quantityReceived,
+    bulkUnitsReceived: receipt.bulkUnitsReceived,
+    baseUnitsReceived: receipt.baseUnitsReceived,
+    receivedBy: receipt.receivedBy,
+    supplier: receipt.supplier,
+    invoiceDetails: receipt.invoiceDetails,
+    receivedAt: receipt.receivedAt,
+    expiryDate: receipt.expiryDate,
+    paymentStatus: receipt.paymentStatus
+  });
+
+  syncProductQuantities();
+  state.stockReceipts.push({
+    id: receiptId,
+    productId,
+    ...receipt,
+    quantityReceived
+  });
+  product.quantity += quantityReceived;
+
+  saveState();
 }
 
 async function receiveStock() {
@@ -257,6 +287,18 @@ async function receiveStock() {
   const unitsPerBulk = getUnitsPerBulk(product);
   const quantityReceived = (bulkUnitsReceived * unitsPerBulk) + baseUnitsReceived;
   const batchId = createStockBatchId();
+  const receipt = {
+    batchId,
+    product: product.name,
+    supplier,
+    bulkUnitsReceived,
+    baseUnitsReceived,
+    receivedBy,
+    invoiceDetails,
+    receivedAt,
+    expiryDate,
+    paymentStatus
+  };
   let cloudResult;
 
   try {
@@ -265,18 +307,7 @@ async function receiveStock() {
       receiveStockInCloudTransaction({
         productId: product.id,
         quantityReceived,
-        receipt: {
-          batchId,
-          product: product.name,
-          supplier,
-          bulkUnitsReceived,
-          baseUnitsReceived,
-          receivedBy,
-          invoiceDetails,
-          receivedAt,
-          expiryDate,
-          paymentStatus
-        }
+        receipt
       }),
       CLOUD_SAVE_TIMEOUT_MS,
       "Stock was not saved because Firestore did not respond. Check your internet connection and confirm Firestore rules allow updates to products and creates in stockReceipts."
@@ -288,42 +319,16 @@ async function receiveStock() {
     setReceiveStockProcessing(false);
   }
 
-  state.stock.push({
-    id: batchId,
+  applyReceivedStockLocally({
+    product,
     productId: product.id,
-    productName: product.name,
-    quantity: quantityReceived,
-    bulkUnitsReceived,
-    baseUnitsReceived,
-    receivedBy,
-    supplier,
-    invoiceDetails,
-    receivedAt,
-    expiryDate,
-    paymentStatus
-  });
-
-  syncProductQuantities();
-  state.stockReceipts.push({
-    id: cloudResult?.receiptId,
     batchId,
-    productId: product.id,
-    product: product.name,
-    supplier,
-    bulkUnitsReceived,
-    baseUnitsReceived,
+    receipt,
     quantityReceived,
-    receivedBy,
-    invoiceDetails,
-    receivedAt,
-    expiryDate,
-    paymentStatus
+    receiptId: cloudResult?.receiptId
   });
-  product.quantity += quantityReceived;
 
-  saveState();
-
-  renderStockSaved(product, quantityReceived, cloudResult?.receiptId);
+  renderStockSaved(product, receipt, quantityReceived, cloudResult?.receiptId);
 }
 
 function getCurrentDateTimeValue() {
@@ -335,6 +340,17 @@ function getCurrentDateTimeValue() {
 function getUnitsPerBulk(product) {
   const unitsPerBulk = Number(product.unitsPerBulk);
   return Number.isFinite(unitsPerBulk) && unitsPerBulk > 0 ? unitsPerBulk : 1;
+}
+
+function formatProductStock(product) {
+  const unitsPerBulk = getUnitsPerBulk(product);
+  const quantity = Number(product.quantity || 0);
+  const fullBulk = Math.floor(quantity / unitsPerBulk);
+  const remainder = quantity % unitsPerBulk;
+  const bulkUnit = product.bulkUnit || "bulk unit";
+  const baseUnit = product.baseUnit || "base unit";
+
+  return `${fullBulk} ${bulkUnit}(s) and ${remainder} ${baseUnit}(s)`;
 }
 
 function withTimeout(promise, timeoutMs, message) {
