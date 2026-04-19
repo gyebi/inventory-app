@@ -7,8 +7,7 @@ const {
   parseExpiryDate,
   renderPage,
   state,
-  formatReceiptCurrency,
-  formatStock
+  formatReceiptCurrency
 } = window.app;
 
 function renderInventory() {
@@ -51,7 +50,7 @@ function renderInventory() {
         <div><strong>Units Per Bulk:</strong> ${p.unitsPerBulk}</div>
         <div><strong>Sellable Stock:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
         <div><strong>Expired Stock:</strong> ${getExpiredStockQuantity(p.id)} ${p.baseUnit}(s)</div>
-        <div><strong>Equivalent:</strong> ${formatStock(p)}</div>
+        <div><strong>Equivalent:</strong> ${formatProductStock(p)}</div>
         <div><strong>Tracked Batches:</strong> ${productBatches.length}</div>
         <div><strong>Active Batches:</strong> ${activeBatches.length}</div>
         <div><strong>Expired Batches:</strong> ${expiredBatches.length}</div>
@@ -70,3 +69,19 @@ function renderInventory() {
 }
 
 window.renderInventory = renderInventory;
+
+function getUnitsPerBulk(product) {
+  const unitsPerBulk = Number(product.unitsPerBulk);
+  return Number.isFinite(unitsPerBulk) && unitsPerBulk > 0 ? unitsPerBulk : 1;
+}
+
+function formatProductStock(product) {
+  const unitsPerBulk = getUnitsPerBulk(product);
+  const quantity = Number(product.quantity || 0);
+  const fullBulk = Math.floor(quantity / unitsPerBulk);
+  const remainder = quantity % unitsPerBulk;
+  const bulkUnit = product.bulkUnit || "bulk unit";
+  const baseUnit = product.baseUnit || "base unit";
+
+  return `${fullBulk} ${bulkUnit}(s) and ${remainder} ${baseUnit}(s)`;
+}
