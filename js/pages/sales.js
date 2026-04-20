@@ -2,20 +2,44 @@ import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 
 const { ensureStockState, renderPage, state } = window.app;
+let saleCart = [];
 
 function formatSaleStock(product) {
   return window.app.formatStock(product);
 }
 
-function getUnitOptions(product) {
-  if (!product) {
-    return "";
+function getCartTotal() {
+  return saleCart.reduce((sum, item) => {
+    const product = state.products.find((candidate) => candidate.id === item.productId);
+    const unitPrice = Number(product?.bulkSellingPrice ?? ((product?.sellingPrice || 0) * (product?.unitsPerBulk || 1)));
+
+    return sum + (unitPrice * item.quantity);
+  }, 0);
+}
+
+function renderCartItems() {
+  if (saleCart.length === 0) {
+    return `<div class="sale-cart-empty">No products added yet.</div>`;
   }
 
-  return `
-    <option value="${product.baseUnit}">${product.baseUnit}</option>
-    <option value="${product.bulkUnit}">${product.bulkUnit}</option>
-  `;
+  return saleCart.map((item, index) => {
+    const product = state.products.find((candidate) => candidate.id === item.productId);
+    const unitPrice = Number(product?.bulkSellingPrice ?? ((product?.sellingPrice || 0) * (product?.unitsPerBulk || 1)));
+    const itemTotal = unitPrice * item.quantity;
+
+    return `
+      <div class="sale-cart-row">
+        <div>
+          <strong>${product?.name || "Unknown product"}</strong>
+          <small>${item.quantity} ${product?.bulkUnit || "bulk unit"}(s)</small>
+        </div>
+        <div>
+          <span>${window.app.formatReceiptCurrency(itemTotal)}</span>
+          <button type="button" onclick="removeSaleCartItem(${index})">Remove</button>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderSales(error = "") {
@@ -50,7 +74,7 @@ function renderSales(error = "") {
       <div class="sale-summary">
         <strong>Available Stock</strong>
         <span>${formatSaleStock(selectedProduct)}</span>
-        <small>${selectedProduct.quantity} ${selectedProduct.baseUnit}(s) in stock</small>
+        <small>Sold in ${selectedProduct.bulkUnit}(s)</small>
       </div>
 
       <div class="form-column">
@@ -60,17 +84,21 @@ function renderSales(error = "") {
         </div>
 
         <div class="form-row">
-          <label for="unitSelect">Sale Unit</label>
-          <select id="unitSelect" onchange="updateSalePreview()">
-            ${getUnitOptions(selectedProduct)}
-          </select>
-        </div>
-
-        <div class="form-row">
-          <label for="qty">Quantity</label>
+          <label for="qty">Quantity (${selectedProduct.bulkUnit})</label>
           <input id="qty" class="number-field" type="number" min="1" step="1">
         </div>
 
+        <button type="button" onclick="addSaleCartItem()">Add Product</button>
+      </div>
+
+      <div class="sale-cart">
+        <div class="sale-cart-header">
+          <strong>Sale Items</strong>
+          <span>${window.app.formatReceiptCurrency(getCartTotal())}</span>
+        </div>
+        <div class="sale-cart-list">
+          ${renderCartItems()}
+        </div>
         <button id="completeSaleButton" onclick="recordSale()">Complete Sale</button>
       </div>
     </div>
@@ -94,31 +122,30 @@ function updateSalePreview() {
   const productId = document.getElementById("productIndex")?.value;
   const product = state.products.find((item) => item.id === productId);
   const summary = document.querySelector(".sale-summary");
-  const unitSelect = document.getElementById("unitSelect");
+  const quantityLabel = document.querySelector("label[for='qty']");
 
-  if (!product || !summary || !unitSelect) {
+  if (!product || !summary || !quantityLabel) {
     return;
   }
 
-  unitSelect.innerHTML = getUnitOptions(product);
+  quantityLabel.textContent = `Quantity (${product.bulkUnit})`;
 
   summary.innerHTML = `
     <strong>Available Stock</strong>
     <span>${formatSaleStock(product)}</span>
-    <small>${product.quantity} ${product.baseUnit}(s) in stock</small>
+    <small>Sold in ${product.bulkUnit}(s)</small>
   `;
 }
 
-async function recordSale() {
+function addSaleCartItem() {
   ensureStockState();
 
   const productId = document.getElementById("productIndex")?.value;
-  const unit = document.getElementById("unitSelect")?.value;
   const quantity = Number(document.getElementById("qty")?.value);
   const product = state.products.find((item) => item.id === productId);
 
   if (!product) {
-    renderSales("Choose a product before recording a sale.");
+    renderSales("Choose a product before adding it to the sale.");
     return;
   }
 
@@ -127,17 +154,49 @@ async function recordSale() {
     return;
   }
 
+  const requestedBaseQuantity = quantity * Number(product.unitsPerBulk || 1);
+  const existingCartItem = saleCart.find((item) => item.productId === productId);
+  const existingBaseQuantity = existingCartItem
+    ? existingCartItem.quantity * Number(product.unitsPerBulk || 1)
+    : 0;
+
+  if (requestedBaseQuantity + existingBaseQuantity > Number(product.quantity || 0)) {
+    renderSales(`Not enough stock available for ${product.name}.`);
+    return;
+  }
+
+  if (existingCartItem) {
+    existingCartItem.quantity += quantity;
+  } else {
+    saleCart.push({
+      productId,
+      quantity,
+      unit: product.bulkUnit
+    });
+  }
+
+  renderSales();
+}
+
+function removeSaleCartItem(index) {
+  saleCart.splice(index, 1);
+  renderSales();
+}
+
+async function recordSale() {
+  ensureStockState();
+
+  if (saleCart.length === 0) {
+    renderSales("Add at least one product before completing the sale.");
+    return;
+  }
+
   try {
     setSaleProcessing(true);
-    const sale = await createSale([
-      {
-        productId,
-        quantity,
-        unit
-      }
-    ]);
+    const sale = await createSale(saleCart);
 
     window.app.saveState();
+    saleCart = [];
     renderReceiptPage(sale);
   } catch (error) {
     setSaleProcessing(false);
@@ -147,4 +206,6 @@ async function recordSale() {
 
 window.renderSales = renderSales;
 window.updateSalePreview = updateSalePreview;
+window.addSaleCartItem = addSaleCartItem;
+window.removeSaleCartItem = removeSaleCartItem;
 window.recordSale = recordSale;

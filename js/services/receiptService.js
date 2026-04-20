@@ -95,11 +95,11 @@ function buildReceiptMarkup(sale) {
       <strong>Total:</strong> ${formatReceiptCurrency(sale.totalAmount)}
     </div>
 
-    <button onclick="navigate('dashboard')">Back to Dashboard</button>
+    <button onclick="navigate('sales')">Back to Sale</button>
     <button onclick="printReceipt()">🖨 Print</button>
   `;
 }
 
 export function renderReceiptPage(sale) {
-  renderPage(buildReceiptMarkup(sale));
+  window.app.renderPage(buildReceiptMarkup(sale));
 }

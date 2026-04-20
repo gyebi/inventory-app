@@ -339,9 +339,9 @@ button {
 .sale-panel {
   align-items: start;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 260px);
-  max-width: 820px;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 640px;
   width: 100%;
 }
 
@@ -349,8 +349,10 @@ button {
   background: var(--brand-surface);
   border: 1px solid var(--brand-line);
   border-radius: 8px;
+  box-sizing: border-box;
   min-width: 210px;
   padding: 16px;
+  width: 100%;
 }
 
 .sale-summary strong,
@@ -366,6 +368,57 @@ button {
 
 .sale-summary small {
   color: var(--brand-muted);
+}
+
+.sale-cart {
+  border-top: 1px solid var(--brand-line);
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.sale-cart-header,
+.sale-cart-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sale-cart-header span,
+.sale-cart-row span {
+  font-weight: bold;
+}
+
+.sale-cart-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sale-cart-row {
+  background: var(--brand-green-soft);
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.sale-cart-row small {
+  color: var(--brand-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.sale-cart-row button {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+}
+
+.sale-cart-empty {
+  border: 1px dashed var(--brand-line);
+  border-radius: 8px;
+  color: var(--brand-muted);
+  padding: 14px;
 }
 
 .sync-panel {

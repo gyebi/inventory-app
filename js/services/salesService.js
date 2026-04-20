@@ -5,7 +5,7 @@ import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 
 const createSaleId = () => {
-  return `sale_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  return `CDV-${Date.now()}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
 };
 
 const parseExpiryDate = (value) => {
