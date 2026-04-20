@@ -1,7 +1,11 @@
 import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 
-const { ensureStockState, renderPage, state, formatStock } = window.app;
+const { ensureStockState, renderPage, state } = window.app;
+
+function formatSaleStock(product) {
+  return window.app.formatStock(product);
+}
 
 function getUnitOptions(product) {
   if (!product) {
@@ -45,7 +49,7 @@ function renderSales(error = "") {
     <div class="sale-panel">
       <div class="sale-summary">
         <strong>Available Stock</strong>
-        <span>${formatStock(selectedProduct)}</span>
+        <span>${formatSaleStock(selectedProduct)}</span>
         <small>${selectedProduct.quantity} ${selectedProduct.baseUnit}(s) in stock</small>
       </div>
 
@@ -100,7 +104,7 @@ function updateSalePreview() {
 
   summary.innerHTML = `
     <strong>Available Stock</strong>
-    <span>${formatStock(product)}</span>
+    <span>${formatSaleStock(product)}</span>
     <small>${product.quantity} ${product.baseUnit}(s) in stock</small>
   `;
 }

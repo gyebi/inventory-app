@@ -20,6 +20,8 @@ const app = document.getElementById("app");
 const modal = document.getElementById("modal");
 const modalBody = document.getElementById("modal-body");
 const STORAGE_KEY = "inventory_app";
+const SPLASH_MINIMUM_MS = 5000;
+const INITIAL_SYNC_WAIT_MS = 10000;
 
 const defaultUsers = [
   { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
@@ -99,7 +101,6 @@ function updateStatusBar() {
 
   statusBar.innerHTML = `
     <span class="status-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
-    <span class="status-pill ${cloudStatus.connected ? "online" : "warning"}">${cloudStatus.message}</span>
     <span class="status-pill">User: ${name}</span>
     <span class="status-pill">Role: ${role}</span>
     <span class="status-pill">Last update: ${formatStatusTime(cloudStatus.lastUpdatedAt)}</span>
@@ -376,6 +377,33 @@ function navigate(page) {
   if (page === "inventory") window.renderInventory?.();
   if (page === "staff") window.renderStaff?.();
   if (page === "help") window.renderHelp?.();
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function renderSplash() {
+  app.innerHTML = `
+    <section class="splash-page">
+      <div>
+        <img class="splash-logo" src="/logo.png" alt="Calkris-Darf Ventures">
+        <div class="splash-loader" aria-hidden="true"><span></span></div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCurrentEntryPage() {
+  if (isLoggedIn()) {
+    void retryPendingSalesSync();
+    navigate("home");
+    return;
+  }
+
+  renderLogin();
 }
 
 function isLoggedIn() {
@@ -728,6 +756,8 @@ window.closeModal = closeModal;
 window.printReceipt = printReceipt;
 window.resetData = resetData;
 
+renderSplash();
+
 const receiptModule = await import("./services/receiptService.js");
 window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
 
@@ -753,6 +783,23 @@ async function startCloudProductSyncInBackground() {
   }
 }
 
+async function bootApp() {
+  const syncPromise = startCloudProductSyncInBackground();
+  const initialSyncWindow = Promise.race([
+    syncPromise,
+    wait(INITIAL_SYNC_WAIT_MS).then(() => {
+      setCloudStatus({ connected: false, message: "Ready" });
+    })
+  ]);
+
+  await Promise.all([
+    wait(SPLASH_MINIMUM_MS),
+    initialSyncWindow
+  ]);
+
+  renderCurrentEntryPage();
+}
+
 window.addEventListener("online", () => {
   setCloudStatus({ connected: false, message: "Reconnecting to Firestore" });
   void retryPendingSalesSync();
@@ -768,11 +815,4 @@ setInterval(() => {
   void retryPendingSalesSync();
 }, salesSyncIntervalMs);
 
-if (isLoggedIn()) {
-  void retryPendingSalesSync();
-  navigate("home");
-} else {
-  renderLogin();
-}
-
-void startCloudProductSyncInBackground();
+void bootApp();
