@@ -5,14 +5,17 @@ import {
   fetchSalesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
+import { fetchSuppliersFromCloud } from "./services/cloudSupplierService.js";
 import { fetchUsersFromCloud } from "./services/cloudUserService.js";
 import {
   listenToProducts,
   listenToSales,
   listenToStockReceipts,
+  listenToSuppliers,
   listenToUsers
 } from "./services/productListenerService.js";
 import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
+import { migrateLocalSuppliersToCloudOnce } from "./services/supplierMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
@@ -51,6 +54,7 @@ let stopProductsListener = null;
 let stopStockReceiptsListener = null;
 let stopSalesListener = null;
 let stopUsersListener = null;
+let stopSuppliersListener = null;
 let cloudStatus = {
   connected: false,
   message: "Connecting to Firestore",
@@ -244,14 +248,38 @@ function replaceSales(sales = []) {
   saveState();
 }
 
+function normalizeSupplier(supplier) {
+  return {
+    id: supplier.id,
+    name: supplier.name || "",
+    contactPerson: supplier.contactPerson || "",
+    phone: supplier.phone || "",
+    email: supplier.email || "",
+    address: supplier.address || "",
+    notes: supplier.notes || "",
+    createdAt: supplier.createdAt || null,
+    createdBy: supplier.createdBy || null
+  };
+}
+
+function replaceSuppliers(suppliers = []) {
+  state.suppliers = suppliers
+    .filter((supplier) => supplier.name)
+    .map(normalizeSupplier);
+  markCloudUpdated("Suppliers synced");
+  saveState();
+}
+
 async function startCloudProductSync() {
   await migrateLocalProductsToCloudOnce();
+  await migrateLocalSuppliersToCloudOnce();
 
-  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers] = await Promise.all([
+  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers] = await Promise.all([
     fetchProductsFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
-    fetchUsersFromCloud()
+    fetchUsersFromCloud(),
+    fetchSuppliersFromCloud()
   ]);
 
   if (cloudProducts.length > 0) {
@@ -261,6 +289,7 @@ async function startCloudProductSync() {
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
   replaceUsers(cloudUsers);
+  replaceSuppliers(cloudSuppliers);
 
   if (stopProductsListener) {
     stopProductsListener();
@@ -273,6 +302,9 @@ async function startCloudProductSync() {
   }
   if (stopUsersListener) {
     stopUsersListener();
+  }
+  if (stopSuppliersListener) {
+    stopSuppliersListener();
   }
 
   stopProductsListener = listenToProducts(
@@ -312,6 +344,16 @@ async function startCloudProductSync() {
     (error) => {
       setCloudStatus({ connected: false, message: "User sync error" });
       console.error("User listener failed:", error);
+    }
+  );
+
+  stopSuppliersListener = listenToSuppliers(
+    (suppliers) => {
+      replaceSuppliers(suppliers);
+    },
+    (error) => {
+      setCloudStatus({ connected: false, message: "Supplier sync error" });
+      console.error("Supplier listener failed:", error);
     }
   );
 }

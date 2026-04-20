@@ -32,3 +32,7 @@ export function listenToSales(onChange, onError) {
 export function listenToUsers(onChange, onError) {
   return listenToCollection("users", onChange, onError);
 }
+
+export function listenToSuppliers(onChange, onError) {
+  return listenToCollection("suppliers", onChange, onError);
+}

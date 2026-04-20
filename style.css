@@ -192,9 +192,17 @@ button {
 }
 
 .status-button {
+  background: var(--brand-danger);
+  border-color: var(--brand-danger);
+  color: #ffffff;
   font-size: 13px;
   margin: 0;
   padding: 6px 10px;
+}
+
+.status-button:hover {
+  background: #8f001a;
+  border-color: #8f001a;
 }
 
 .menu-grid {
