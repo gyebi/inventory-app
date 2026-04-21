@@ -1,4 +1,3 @@
-import { saveUserToCloud } from "../services/cloudUserService.js";
 import { createStaffUserAccount } from "../services/staffAccountService.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
@@ -77,7 +76,7 @@ function renderStaff(error = "", values = {}, success = "") {
     </div>
 
     <div class="card">
-      Staff profiles are saved to Firestore here. Secure Firebase Auth account creation should happen in your backend createStaffUser function.
+      Staff accounts must be created through the secure backend so Firebase Auth and Firestore stay in sync.
     </div>
 
     <h3>Staff Users</h3>
@@ -138,12 +137,18 @@ async function addStaffUser() {
     return;
   }
 
-  if (state.users.some((user) => (user.email || "").toLowerCase() === email)) {
+  const existingEmailUser = state.users.find((user) => (user.email || "").toLowerCase() === email);
+
+  if (existingEmailUser && existingEmailUser.pendingAuthCreation !== true) {
     renderStaff("A staff user with this email already exists.", values);
     return;
   }
 
-  if (username && state.users.some((user) => (user.username || "").toLowerCase() === username.toLowerCase())) {
+  const existingUsernameUser = username
+    ? state.users.find((user) => (user.username || "").toLowerCase() === username.toLowerCase())
+    : null;
+
+  if (existingUsernameUser && existingUsernameUser.pendingAuthCreation !== true) {
     renderStaff("A staff user with this username already exists.", values);
     return;
   }
@@ -171,49 +176,22 @@ async function addStaffUser() {
   try {
     setStaffProcessing(true);
     const backendResult = await tryCreateStaffUserWithBackend(staffUser, tempPassword);
+    const createdUser = normalizeCreatedStaffUser(staffUser, backendResult);
 
-    if (backendResult?.user) {
-      const createdUser = {
-        ...staffUser,
-        id: backendResult.user.uid || backendResult.user.id || staffUser.id,
-        uid: backendResult.user.uid || null,
-        active: backendResult.user.active !== false,
-        pendingAuthCreation: false,
-        createdAt: backendResult.user.createdAt || staffUser.createdAt
-      };
-
-      state.users.push(createdUser);
-      saveState();
-      renderStaff(
-        "",
-        {},
-        tempPassword
-          ? "Staff account created through the secure backend. The user can sign in with their email and temporary password."
-          : "Staff account created through the secure backend and profile saved successfully."
-      );
-      return;
-    }
-
-    await withTimeout(
-      saveUserToCloud({
-        ...staffUser,
-        pendingAuthCreation: true
-      }),
-      CLOUD_SAVE_TIMEOUT_MS,
-      "Firestore is taking too long to create this staff user. Check your internet connection, Firebase config, and Firestore rules before trying again."
+    upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser);
+    saveState();
+    renderStaff(
+      "",
+      {},
+      tempPassword
+        ? "Staff account created through the secure backend. The user can sign in with their email and temporary password."
+        : "Staff account created through the secure backend and profile saved successfully."
     );
   } catch (error) {
     setStaffProcessing(false);
-    renderStaff(error.message || "Unable to save staff user to Firestore.", values);
+    renderStaff(error.message || "Unable to create the staff account securely.", values);
     return;
   }
-
-  state.users.push({
-    ...staffUser,
-    pendingAuthCreation: true
-  });
-  saveState();
-  renderStaff("", {}, "Staff profile saved to Firestore. Backend account creation is not available yet, so this user cannot sign in until createStaffUser is deployed.");
 }
 
 function formatRole(role) {
@@ -234,25 +212,51 @@ function withTimeout(promise, timeoutMs, message) {
 }
 
 async function tryCreateStaffUserWithBackend(staffUser, tempPassword = "") {
-  try {
-    return await withTimeout(
-      createStaffUserAccount({
-        staff: {
-          fullName: staffUser.fullName,
-          email: staffUser.email,
-          username: staffUser.username,
-          role: staffUser.role,
-          active: staffUser.active,
-          temporaryPassword: tempPassword || undefined
-        }
-      }),
-      CLOUD_SAVE_TIMEOUT_MS,
-      "The secure staff account creation function is taking too long to respond."
-    );
-  } catch (error) {
-    console.warn("Secure staff account creation unavailable, falling back to profile-only save.", error);
-    return null;
+  const result = await withTimeout(
+    createStaffUserAccount({
+      staff: {
+        fullName: staffUser.fullName,
+        email: staffUser.email,
+        username: staffUser.username,
+        role: staffUser.role,
+        active: staffUser.active,
+        temporaryPassword: tempPassword || undefined
+      }
+    }),
+    CLOUD_SAVE_TIMEOUT_MS,
+    "The secure staff account creation function is taking too long to respond."
+  );
+
+  if (!result?.ok || !result?.user?.uid) {
+    throw new Error("Secure staff account creation did not complete successfully.");
   }
+
+  return result;
+}
+
+function normalizeCreatedStaffUser(staffUser, backendResult) {
+  return {
+    ...staffUser,
+    id: backendResult.user.uid || backendResult.user.id || staffUser.id,
+    uid: backendResult.user.uid,
+    active: backendResult.user.active !== false,
+    pendingAuthCreation: false,
+    createdAt: backendResult.user.createdAt || staffUser.createdAt
+  };
+}
+
+function upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser) {
+  const existingId = existingEmailUser?.id || existingUsernameUser?.id;
+  const existingIndex = existingId
+    ? state.users.findIndex((user) => user.id === existingId)
+    : -1;
+
+  if (existingIndex >= 0) {
+    state.users.splice(existingIndex, 1, createdUser);
+    return;
+  }
+
+  state.users.push(createdUser);
 }
 
 window.renderStaff = renderStaff;

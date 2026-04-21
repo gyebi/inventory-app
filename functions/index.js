@@ -69,6 +69,24 @@ async function ensureUniqueUsernameWithinUsers(username, existingUid = null) {
   }
 }
 
+async function findPendingUserByEmail(email) {
+  const snapshot = await db
+    .collection("users")
+    .where("email", "==", email)
+    .limit(5)
+    .get();
+
+  return snapshot.docs.find((doc) => doc.data()?.pendingAuthCreation === true) || null;
+}
+
+async function deletePendingUserDoc(snapshot) {
+  if (!snapshot?.exists) {
+    return;
+  }
+
+  await snapshot.ref.delete();
+}
+
 exports.createStaffUser = onCall(async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "You must be signed in to create staff users.");
@@ -84,11 +102,12 @@ exports.createStaffUser = onCall(async (request) => {
   const fullName = ensureString(payload.fullName, "fullName");
   const email = normalizeEmail(ensureString(payload.email, "email"));
   const username = normalizeUsername(payload.username);
+  const pendingUserSnapshot = await findPendingUserByEmail(email);
   const role = ensureRole(payload.role);
   const active = payload.active !== false;
   const temporaryPassword = String(payload.temporaryPassword || "").trim();
 
-  await ensureUniqueUsernameWithinUsers(username);
+  await ensureUniqueUsernameWithinUsers(username, pendingUserSnapshot?.id || null);
 
   let existingUser = null;
 
@@ -133,6 +152,7 @@ exports.createStaffUser = onCall(async (request) => {
   };
 
   await db.collection("users").doc(userRecord.uid).set(userDoc, { merge: true });
+  await deletePendingUserDoc(pendingUserSnapshot);
 
   return {
     ok: true,
