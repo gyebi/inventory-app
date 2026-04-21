@@ -1,5 +1,10 @@
 import { setState as setSharedState } from "./state.js";
-import { hasPermission } from "./services/authService.js";
+import {
+  hasPermission,
+  loginWithEmail,
+  logoutUser,
+  observeAuthState
+} from "./services/authService.js";
 import {
   fetchProductsFromCloud,
   fetchSalesFromCloud,
@@ -17,6 +22,7 @@ import {
 import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
 import { migrateLocalSuppliersToCloudOnce } from "./services/supplierMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
+import { getUserProfile } from "./services/userProfileService.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
 const app = document.getElementById("app");
@@ -25,6 +31,7 @@ const modalBody = document.getElementById("modal-body");
 const STORAGE_KEY = "inventory_app";
 const SPLASH_MINIMUM_MS = 5000;
 const INITIAL_SYNC_WAIT_MS = 10000;
+const ENABLE_LEGACY_AUTH_FALLBACK = true;
 
 const defaultUsers = [
   { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
@@ -101,7 +108,7 @@ function updateStatusBar() {
 
   const online = navigator.onLine;
   const role = state.user?.role || "guest";
-  const name = state.user?.fullName || state.user?.username || "Guest";
+  const name = state.user?.fullName || state.user?.username || state.user?.email || "Guest";
 
   statusBar.innerHTML = `
     <span class="status-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
@@ -139,12 +146,13 @@ function replaceProducts(products = []) {
 
 function normalizeUser(user) {
   return {
-    id: user.id || `user_${user.username}`,
-    fullName: user.fullName || user.name || user.username,
-    username: user.username,
-    password: user.password,
+    id: user.id || user.uid || `user_${user.username || user.email || Date.now()}`,
+    uid: user.uid || user.id || null,
+    fullName: user.fullName || user.displayName || user.name || user.username || user.email,
+    username: user.username || "",
+    email: user.email || "",
     role: user.role || "sales",
-    active: user.active !== false,
+    active: user.active !== false && user.isActive !== false,
     createdAt: user.createdAt || null,
     createdBy: user.createdBy || null
   };
@@ -152,7 +160,7 @@ function normalizeUser(user) {
 
 function replaceUsers(users = []) {
   const normalizedUsers = users
-    .filter((user) => user.username && user.password)
+    .filter((user) => user.email || user.username || user.fullName || user.displayName)
     .map(normalizeUser);
 
   if (normalizedUsers.length === 0) {
@@ -167,9 +175,12 @@ function replaceUsers(users = []) {
     if (refreshedUser) {
       state.user = {
         id: refreshedUser.id,
+        uid: refreshedUser.uid || refreshedUser.id,
         fullName: refreshedUser.fullName,
         username: refreshedUser.username,
-        role: refreshedUser.role
+        email: refreshedUser.email || "",
+        role: refreshedUser.role,
+        active: refreshedUser.active !== false
       };
     }
   }
@@ -387,7 +398,7 @@ function navigate(page) {
   }
 
   if (page === "logout") {
-    logout();
+    void logout();
     return;
   }
 
@@ -463,13 +474,13 @@ function renderLogin(error = "") {
 
         <div class="form-column">
           <div class="form-row">
-            <label for="username">Username</label>
-            <input id="username">
+            <label for="identifier">Email or Username</label>
+            <input id="identifier" autocomplete="username">
           </div>
 
           <div class="form-row">
             <label for="password">Password</label>
-            <input id="password" type="password">
+            <input id="password" type="password" autocomplete="current-password">
           </div>
 
           <button onclick="login()">Login</button>
@@ -479,43 +490,143 @@ function renderLogin(error = "") {
   `;
 }
 
-function login() {
-  const username = document.getElementById("username").value.trim();
+async function login() {
+  const identifier = document.getElementById("identifier").value.trim();
   const password = document.getElementById("password").value.trim();
 
-  if (!username || !password) {
-    renderLogin("Enter username and password.");
+  if (!identifier || !password) {
+    renderLogin("Enter your email or username and password.");
     return;
   }
 
-  const user = state.users.find(
-    (candidate) => candidate.username === username && candidate.password === password
-  );
+  try {
+    const user = await authenticateUser(identifier, password);
 
-  if (!user) {
-    renderLogin("Invalid username or password.");
-    return;
+    if (!user) {
+      renderLogin("Invalid email, username, or password.");
+      return;
+    }
+
+    state.user = user.user;
+    state.sessionUser = user.profile || null;
+    saveState();
+    navigate("home");
+  } catch (error) {
+    console.error("Login failed:", error);
+    renderLogin(error.message || "Login failed.");
   }
-
-  if (user.active === false) {
-    renderLogin("This user account is inactive.");
-    return;
-  }
-
-  state.user = {
-    id: user.id || user.username,
-    fullName: user.fullName || user.username,
-    username: user.username,
-    role: user.role
-  };
-  saveState();
-  navigate("home");
 }
 
-function logout() {
+async function authenticateUser(identifier, password) {
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  const looksLikeEmail = normalizedIdentifier.includes("@");
+
+  if (looksLikeEmail) {
+    try {
+      const authUser = await loginWithEmail(normalizedIdentifier, password);
+      const profile = await getUserProfile(authUser.uid);
+
+      if (profile.active === false || profile.isActive === false) {
+        await logoutUser();
+        throw new Error("This user account is inactive.");
+      }
+
+      return {
+        user: buildSessionUser(profile),
+        profile
+      };
+    } catch (error) {
+      if (!ENABLE_LEGACY_AUTH_FALLBACK) {
+        throw error;
+      }
+    }
+  }
+
+  if (!ENABLE_LEGACY_AUTH_FALLBACK) {
+    return null;
+  }
+
+  return authenticateLegacyUser(normalizedIdentifier, password);
+}
+
+function authenticateLegacyUser(identifier, password) {
+  const legacyUser = state.users.find((candidate) => {
+    const username = (candidate.username || "").toLowerCase();
+    const email = (candidate.email || "").toLowerCase();
+
+    return (
+      (username === identifier || email === identifier) &&
+      candidate.password === password
+    );
+  });
+
+  if (!legacyUser) {
+    return null;
+  }
+
+  if (legacyUser.active === false) {
+    throw new Error("This user account is inactive.");
+  }
+
+  return {
+    user: {
+      id: legacyUser.id || legacyUser.username,
+      uid: legacyUser.uid || null,
+      fullName: legacyUser.fullName || legacyUser.username || legacyUser.email,
+      username: legacyUser.username || "",
+      email: legacyUser.email || "",
+      role: legacyUser.role || "sales",
+      active: legacyUser.active !== false
+    },
+    profile: null
+  };
+}
+
+async function logout() {
+  try {
+    await logoutUser();
+  } catch (error) {
+    console.error("Logout failed:", error);
+  }
+
   state.user = null;
+  state.sessionUser = null;
   saveState();
   renderLogin();
+}
+
+function buildSessionUser(profile) {
+  return {
+    id: profile.id || profile.uid,
+    uid: profile.uid || profile.id,
+    fullName: profile.fullName || profile.displayName || profile.username || profile.email,
+    username: profile.username || profile.email || "",
+    email: profile.email || "",
+    role: profile.role || "sales",
+    active: profile.active !== false && profile.isActive !== false
+  };
+}
+
+async function syncAuthenticatedUser(uid) {
+  if (!uid) {
+    state.user = null;
+    saveState();
+    return false;
+  }
+
+  const profile = await getUserProfile(uid);
+
+  if (profile.active === false || profile.isActive === false) {
+    state.user = null;
+    saveState();
+    return false;
+  }
+
+  const sessionUser = buildSessionUser(profile);
+  state.user = sessionUser;
+  state.sessionUser = profile;
+  saveState();
+  return true;
 }
 
 function renderShell() {
@@ -816,6 +927,34 @@ window.app.formatStock = window.formatStock;
 window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;
 window.app.retryPendingSalesSync = retryPendingSalesSync;
 
+let authReadyResolver;
+const authReady = new Promise((resolve) => {
+  authReadyResolver = resolve;
+});
+
+observeAuthState(async (firebaseUser) => {
+  try {
+    if (!firebaseUser) {
+      state.user = null;
+      state.sessionUser = null;
+      saveState();
+      authReadyResolver?.();
+      authReadyResolver = null;
+      return;
+    }
+
+    await syncAuthenticatedUser(firebaseUser.uid);
+  } catch (error) {
+    console.error("Auth state sync failed:", error);
+    state.user = null;
+    state.sessionUser = null;
+    saveState();
+  } finally {
+    authReadyResolver?.();
+    authReadyResolver = null;
+  }
+});
+
 async function startCloudProductSyncInBackground() {
   try {
     await startCloudProductSync();
@@ -836,7 +975,8 @@ async function bootApp() {
 
   await Promise.all([
     wait(SPLASH_MINIMUM_MS),
-    initialSyncWindow
+    initialSyncWindow,
+    authReady
   ]);
 
   renderCurrentEntryPage();

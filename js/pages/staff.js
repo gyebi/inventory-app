@@ -1,4 +1,5 @@
 import { saveUserToCloud } from "../services/cloudUserService.js";
+import { createStaffUserAccount } from "../services/staffAccountService.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
@@ -16,8 +17,9 @@ function renderStaff(error = "", values = {}, success = "") {
     ? `<div class="card">No staff users saved yet.</div>`
     : `<div class="inventory-list">${state.users.map((user) => `
         <div class="inventory-row">
-          <div><strong>Name:</strong> ${user.fullName || user.username}</div>
-          <div><strong>Username:</strong> ${user.username}</div>
+          <div><strong>Name:</strong> ${user.fullName || user.email || user.username || "N/A"}</div>
+          <div><strong>Email:</strong> ${user.email || "N/A"}</div>
+          <div><strong>Username:</strong> ${user.username || "N/A"}</div>
           <div><strong>Role:</strong> ${formatRole(user.role)}</div>
           <div><strong>Status:</strong> ${user.active === false ? "Inactive" : "Active"}</div>
         </div>
@@ -39,13 +41,13 @@ function renderStaff(error = "", values = {}, success = "") {
       </div>
 
       <div class="form-row">
-        <label for="staffUsername">Username</label>
-        <input id="staffUsername" value="${values.username || ""}">
+        <label for="staffEmail">Email</label>
+        <input id="staffEmail" type="email" value="${values.email || ""}">
       </div>
 
       <div class="form-row">
-        <label for="staffPassword">Password</label>
-        <input id="staffPassword" type="password" value="${values.password || ""}">
+        <label for="staffUsername">Username (Optional)</label>
+        <input id="staffUsername" value="${values.username || ""}">
       </div>
 
       <div class="form-row">
@@ -68,13 +70,17 @@ function renderStaff(error = "", values = {}, success = "") {
       <button id="addStaffButton" onclick="addStaffUser()">Add Staff</button>
     </div>
 
+    <div class="card">
+      Staff profiles are saved to Firestore here. Secure Firebase Auth account creation should happen in your backend createStaffUser function.
+    </div>
+
     <h3>Staff Users</h3>
     ${staffRows}
   `);
 }
 
-function createUserId(username) {
-  return `user_${username.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${Date.now()}`;
+function createUserId(email) {
+  return `user_${email.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
 function setStaffProcessing(isProcessing) {
@@ -92,14 +98,14 @@ function setStaffProcessing(isProcessing) {
 
 async function addStaffUser() {
   const fullName = document.getElementById("staffFullName").value.trim();
+  const email = document.getElementById("staffEmail").value.trim().toLowerCase();
   const username = document.getElementById("staffUsername").value.trim();
-  const password = document.getElementById("staffPassword").value.trim();
   const role = document.getElementById("staffRole").value;
   const active = document.getElementById("staffActive").value;
   const values = {
     fullName,
+    email,
     username,
-    password,
     role,
     active
   };
@@ -109,35 +115,41 @@ async function addStaffUser() {
     return;
   }
 
-  if (!username) {
-    renderStaff("Enter a username for this staff member.", values);
+  if (!email) {
+    renderStaff("Enter an email address for this staff member.", values);
     return;
   }
 
-  if (!password) {
-    renderStaff("Enter a password for this staff member.", values);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    renderStaff("Enter a valid email address for this staff member.", values);
     return;
   }
 
-  if (state.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
+  if (state.users.some((user) => (user.email || "").toLowerCase() === email)) {
+    renderStaff("A staff user with this email already exists.", values);
+    return;
+  }
+
+  if (username && state.users.some((user) => (user.username || "").toLowerCase() === username.toLowerCase())) {
     renderStaff("A staff user with this username already exists.", values);
     return;
   }
 
   const currentUser = state.user;
   const staffUser = {
-    id: createUserId(username),
+    id: createUserId(email),
     fullName,
+    email,
     username,
-    password,
     role,
     active: active === "true",
     createdAt: new Date().toISOString(),
     createdBy: currentUser
       ? {
-          id: currentUser.id || currentUser.username,
-          fullName: currentUser.fullName || currentUser.username,
-          username: currentUser.username,
+          id: currentUser.id || currentUser.uid || currentUser.email,
+          fullName: currentUser.fullName || currentUser.username || currentUser.email,
+          username: currentUser.username || "",
+          email: currentUser.email || "",
           role: currentUser.role
         }
       : null
@@ -145,8 +157,28 @@ async function addStaffUser() {
 
   try {
     setStaffProcessing(true);
+    const backendResult = await tryCreateStaffUserWithBackend(staffUser);
+
+    if (backendResult?.user) {
+      const createdUser = {
+        ...staffUser,
+        id: backendResult.user.uid || backendResult.user.id || staffUser.id,
+        uid: backendResult.user.uid || null,
+        active: backendResult.user.active !== false,
+        createdAt: backendResult.user.createdAt || staffUser.createdAt
+      };
+
+      state.users.push(createdUser);
+      saveState();
+      renderStaff("", {}, "Staff account created through the secure backend and profile saved successfully.");
+      return;
+    }
+
     await withTimeout(
-      saveUserToCloud(staffUser),
+      saveUserToCloud({
+        ...staffUser,
+        pendingAuthCreation: true
+      }),
       CLOUD_SAVE_TIMEOUT_MS,
       "Firestore is taking too long to create this staff user. Check your internet connection, Firebase config, and Firestore rules before trying again."
     );
@@ -156,9 +188,12 @@ async function addStaffUser() {
     return;
   }
 
-  state.users.push(staffUser);
+  state.users.push({
+    ...staffUser,
+    pendingAuthCreation: true
+  });
   saveState();
-  renderStaff("", {}, "Staff user added. They can now login with their username and password.");
+  renderStaff("", {}, "Staff profile saved to Firestore. Backend account creation is not available yet, so this user cannot sign in until createStaffUser is deployed.");
 }
 
 function formatRole(role) {
@@ -176,6 +211,27 @@ function withTimeout(promise, timeoutMs, message) {
     promise.finally(() => clearTimeout(timeoutId)),
     timeout
   ]);
+}
+
+async function tryCreateStaffUserWithBackend(staffUser) {
+  try {
+    return await withTimeout(
+      createStaffUserAccount({
+        staff: {
+          fullName: staffUser.fullName,
+          email: staffUser.email,
+          username: staffUser.username,
+          role: staffUser.role,
+          active: staffUser.active
+        }
+      }),
+      CLOUD_SAVE_TIMEOUT_MS,
+      "The secure staff account creation function is taking too long to respond."
+    );
+  } catch (error) {
+    console.warn("Secure staff account creation unavailable, falling back to profile-only save.", error);
+    return null;
+  }
 }
 
 window.renderStaff = renderStaff;

@@ -1,4 +1,12 @@
 import { getState, setState } from "../state.js";
+// js/services/authService.js
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "firebase/auth";
+import { auth } from "../firebase.js";
+
 
 const rolePermissions = {
   admin: ["all"],
@@ -10,35 +18,15 @@ const rolePermissions = {
   manager: ["view_dashboard", "view_reports", "manage_stock"]
 };
 
-export const login = (username, password) => {
-  const state = getState();
-
-  const user = state.users?.find(
-    (u) => u.username === username && u.password === password
-  );
-
-  if (!user) {
-    throw new Error("Invalid credentials");
-  }
-
-  if (user.active === false) {
-    throw new Error("This user account is inactive");
-  }
-
-  state.user = {
-    id: user.id || user.username,
-    fullName: user.fullName || user.username,
-    username: user.username,
-    role: user.role
-  };
-  setState(state);
-
-  return state.user;
+export const login = async (email, password) => {
+  return loginWithEmail(email, password);
 };
 
-export const logout = () => {
+export const logout = async () => {
+  await signOut(auth);
   const state = getState();
   state.user = null;
+  state.sessionUser = null;
   setState(state);
 };
 
@@ -90,3 +78,39 @@ export const requirePermission = (action) => {
     throw new Error("Access denied");
   }
 };
+
+
+//new log in wiring to firebase 
+export async function loginWithEmail(email, password) {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  return userCredential.user;
+}
+
+export async function logoutUser() {
+  await logout();
+}
+
+export function observeAuthState(callback) {
+  return onAuthStateChanged(auth, callback);
+}
+
+export function setSessionUser(profile) {
+  const state = getState();
+  state.sessionUser = profile;
+  state.user = profile
+    ? {
+        id: profile.id || profile.uid,
+        uid: profile.uid || profile.id,
+        fullName: profile.fullName || profile.displayName || profile.username || profile.email,
+        username: profile.username || profile.email || "",
+        email: profile.email || "",
+        role: profile.role || "sales",
+        active: profile.active !== false && profile.isActive !== false
+      }
+    : null;
+  setState(state);
+}
+
+export function getSessionUser() {
+  return getState().sessionUser;
+}

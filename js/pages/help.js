@@ -10,12 +10,12 @@ function renderHelp() {
     <div class="list-grid">
       <div class="card">
         <strong>1. Login</strong><br>
-        Login with the username and password created for you by an Admin.
+        Login with the email and password for your Firebase Auth account.
       </div>
 
       <div class="card">
         <strong>2. Staff</strong><br>
-        Admin users can onboard staff, set usernames and passwords, and assign each person a role.
+        Admin users can save staff profiles, assign roles, and then create secure staff accounts through the backend setup.
       </div>
 
       <div class="card">

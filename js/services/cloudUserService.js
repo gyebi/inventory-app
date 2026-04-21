@@ -12,9 +12,10 @@ const usersCollection = collection(db, "users");
 const toCloudUser = (user) => ({
   fullName: user.fullName,
   username: user.username,
-  password: user.password,
+  email: user.email || "",
   role: user.role,
-  active: user.active !== false,
+  active: user.active !== false && user.isActive !== false,
+  pendingAuthCreation: user.pendingAuthCreation === true,
   updatedAt: serverTimestamp(),
   createdBy: user.createdBy || null
 });

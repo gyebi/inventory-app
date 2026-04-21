@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return signedIn() && exists(currentUserPath());
+    }
+
+    function currentUserRole() {
+      return get(currentUserPath()).data.role;
+    }
+
+    function isAdmin() {
+      return hasUserProfile() && currentUserRole() == "admin";
+    }
+
+    function canManageStock() {
+      return hasUserProfile() && (
+        currentUserRole() == "admin" ||
+        currentUserRole() == "manager" ||
+        currentUserRole() == "storekeeper"
+      );
+    }
+
+    function canCreateSale() {
+      return hasUserProfile() && (
+        currentUserRole() == "admin" ||
+        currentUserRole() == "sales"
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageStock();
+    }
+
+    match /stockReceipts/{receiptId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageStock();
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageStock();
+    }
+
+    match /sales/{saleId} {
+      allow read: if signedIn();
+      allow create: if canCreateSale();
+      allow update, delete: if isAdmin();
+    }
+  }
+}
