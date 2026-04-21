@@ -153,6 +153,7 @@ function normalizeUser(user) {
     email: user.email || "",
     role: user.role || "sales",
     active: user.active !== false && user.isActive !== false,
+    pendingAuthCreation: user.pendingAuthCreation === true,
     createdAt: user.createdAt || null,
     createdBy: user.createdBy || null
   };

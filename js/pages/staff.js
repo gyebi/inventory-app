@@ -22,6 +22,7 @@ function renderStaff(error = "", values = {}, success = "") {
           <div><strong>Username:</strong> ${user.username || "N/A"}</div>
           <div><strong>Role:</strong> ${formatRole(user.role)}</div>
           <div><strong>Status:</strong> ${user.active === false ? "Inactive" : "Active"}</div>
+          <div><strong>Auth:</strong> ${user.pendingAuthCreation ? "Pending backend setup" : "Ready"}</div>
         </div>
       `).join("")}</div>`;
 
@@ -48,6 +49,11 @@ function renderStaff(error = "", values = {}, success = "") {
       <div class="form-row">
         <label for="staffUsername">Username (Optional)</label>
         <input id="staffUsername" value="${values.username || ""}">
+      </div>
+
+      <div class="form-row">
+        <label for="staffTempPassword">Temporary Password (Optional)</label>
+        <input id="staffTempPassword" type="password" value="${values.tempPassword || ""}">
       </div>
 
       <div class="form-row">
@@ -100,12 +106,14 @@ async function addStaffUser() {
   const fullName = document.getElementById("staffFullName").value.trim();
   const email = document.getElementById("staffEmail").value.trim().toLowerCase();
   const username = document.getElementById("staffUsername").value.trim();
+  const tempPassword = document.getElementById("staffTempPassword").value.trim();
   const role = document.getElementById("staffRole").value;
   const active = document.getElementById("staffActive").value;
   const values = {
     fullName,
     email,
     username,
+    tempPassword,
     role,
     active
   };
@@ -122,6 +130,11 @@ async function addStaffUser() {
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     renderStaff("Enter a valid email address for this staff member.", values);
+    return;
+  }
+
+  if (tempPassword && tempPassword.length < 6) {
+    renderStaff("Temporary password must be at least 6 characters.", values);
     return;
   }
 
@@ -157,7 +170,7 @@ async function addStaffUser() {
 
   try {
     setStaffProcessing(true);
-    const backendResult = await tryCreateStaffUserWithBackend(staffUser);
+    const backendResult = await tryCreateStaffUserWithBackend(staffUser, tempPassword);
 
     if (backendResult?.user) {
       const createdUser = {
@@ -165,12 +178,19 @@ async function addStaffUser() {
         id: backendResult.user.uid || backendResult.user.id || staffUser.id,
         uid: backendResult.user.uid || null,
         active: backendResult.user.active !== false,
+        pendingAuthCreation: false,
         createdAt: backendResult.user.createdAt || staffUser.createdAt
       };
 
       state.users.push(createdUser);
       saveState();
-      renderStaff("", {}, "Staff account created through the secure backend and profile saved successfully.");
+      renderStaff(
+        "",
+        {},
+        tempPassword
+          ? "Staff account created through the secure backend. The user can sign in with their email and temporary password."
+          : "Staff account created through the secure backend and profile saved successfully."
+      );
       return;
     }
 
@@ -213,7 +233,7 @@ function withTimeout(promise, timeoutMs, message) {
   ]);
 }
 
-async function tryCreateStaffUserWithBackend(staffUser) {
+async function tryCreateStaffUserWithBackend(staffUser, tempPassword = "") {
   try {
     return await withTimeout(
       createStaffUserAccount({
@@ -222,7 +242,8 @@ async function tryCreateStaffUserWithBackend(staffUser) {
           email: staffUser.email,
           username: staffUser.username,
           role: staffUser.role,
-          active: staffUser.active
+          active: staffUser.active,
+          temporaryPassword: tempPassword || undefined
         }
       }),
       CLOUD_SAVE_TIMEOUT_MS,
