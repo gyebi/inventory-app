@@ -1,5 +1,8 @@
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../firebase.js";
+
+const ENSURE_SIGNED_IN_USER_PROFILE_FUNCTION = "ensureSignedInUserProfile";
 
 export async function getUserProfile(uid) {
   if (!uid) {
@@ -7,7 +10,12 @@ export async function getUserProfile(uid) {
   }
 
   const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
+  let snapshot = await getDoc(userRef);
+
+  if (!snapshot.exists()) {
+    await ensureSignedInUserProfile();
+    snapshot = await getDoc(userRef);
+  }
 
   if (!snapshot.exists()) {
     throw new Error("User profile not found");
@@ -17,4 +25,9 @@ export async function getUserProfile(uid) {
     uid: snapshot.id,
     ...snapshot.data()
   };
+}
+
+async function ensureSignedInUserProfile() {
+  const callable = httpsCallable(functions, ENSURE_SIGNED_IN_USER_PROFILE_FUNCTION);
+  await callable({});
 }

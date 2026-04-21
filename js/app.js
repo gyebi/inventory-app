@@ -3,7 +3,9 @@ import {
   hasPermission,
   loginWithEmail,
   logoutUser,
-  observeAuthState
+  normalizeUserProfile,
+  observeAuthState,
+  validateSessionProfile
 } from "./services/authService.js";
 import {
   fetchProductsFromCloud,
@@ -31,17 +33,10 @@ const modalBody = document.getElementById("modal-body");
 const STORAGE_KEY = "inventory_app";
 const SPLASH_MINIMUM_MS = 5000;
 const INITIAL_SYNC_WAIT_MS = 10000;
-const ENABLE_LEGACY_AUTH_FALLBACK = true;
-
-const defaultUsers = [
-  { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
-  { id: "user_sales", fullName: "Sales Staff", username: "sales", password: "1234", role: "sales", active: true },
-  { id: "user_store", fullName: "Storekeeper", username: "store", password: "1234", role: "storekeeper", active: true }
-];
 
 const defaultState = {
   user: null,
-  users: defaultUsers,
+  users: [],
   products: [],
   stock: [],
   sales: [],
@@ -68,6 +63,33 @@ let cloudStatus = {
   lastUpdatedAt: null
 };
 
+function sanitizePersistedUsers(users = []) {
+  return users
+    .filter((user) => user && typeof user === "object")
+    .map((user) => {
+      const normalizedUser = normalizeUserProfile(user);
+
+      return normalizedUser
+        ? {
+            id: normalizedUser.id,
+            uid: normalizedUser.uid,
+            fullName: normalizedUser.fullName,
+            username: normalizedUser.username,
+            email: normalizedUser.email,
+            role: normalizedUser.role,
+            active: normalizedUser.active,
+            isActive: normalizedUser.active,
+            pendingAuthCreation: normalizedUser.pendingAuthCreation === true,
+            createdAt: normalizedUser.createdAt || null,
+            createdBy: normalizedUser.createdBy || null,
+            mustChangePassword: normalizedUser.mustChangePassword === true,
+            credentialSetupMode: normalizedUser.credentialSetupMode || null
+          }
+        : null;
+    })
+    .filter(Boolean);
+}
+
 function loadAppState() {
   const savedState = localStorage.getItem(STORAGE_KEY);
 
@@ -82,8 +104,8 @@ function loadAppState() {
       ...structuredClone(defaultState),
       ...parsedState,
       users: Array.isArray(parsedState.users) && parsedState.users.length > 0
-        ? parsedState.users
-        : structuredClone(defaultUsers)
+        ? sanitizePersistedUsers(parsedState.users)
+        : []
     };
   } catch (error) {
     return structuredClone(defaultState);
@@ -145,22 +167,22 @@ function replaceProducts(products = []) {
 }
 
 function normalizeUser(user) {
-  return {
-    id: user.id || user.uid || `user_${user.username || user.email || Date.now()}`,
-    uid: user.uid || user.id || null,
-    fullName: user.fullName || user.displayName || user.name || user.username || user.email,
-    username: user.username || "",
-    email: user.email || "",
-    role: user.role || "sales",
-    active: user.active !== false && user.isActive !== false,
-    pendingAuthCreation: user.pendingAuthCreation === true,
-    createdAt: user.createdAt || null,
-    createdBy: user.createdBy || null
-  };
-}
+  const normalizedUser = normalizeUserProfile(user);
 
-function getLegacyFallbackUsers() {
-  return state.users.filter((user) => user.password);
+  return {
+    id: normalizedUser.id || normalizedUser.uid || `user_${normalizedUser.username || normalizedUser.email || Date.now()}`,
+    uid: normalizedUser.uid || normalizedUser.id || null,
+    fullName: normalizedUser.fullName,
+    username: normalizedUser.username || "",
+    email: normalizedUser.email || "",
+    role: normalizedUser.role,
+    active: normalizedUser.active,
+    pendingAuthCreation: normalizedUser.pendingAuthCreation === true,
+    createdAt: normalizedUser.createdAt || null,
+    createdBy: normalizedUser.createdBy || null,
+    mustChangePassword: normalizedUser.mustChangePassword === true,
+    credentialSetupMode: normalizedUser.credentialSetupMode || null
+  };
 }
 
 function replaceUsers(users = []) {
@@ -172,27 +194,14 @@ function replaceUsers(users = []) {
     return;
   }
 
-  const legacyUsers = getLegacyFallbackUsers();
-  const mergedUsers = [...normalizedUsers];
-
-  legacyUsers.forEach((legacyUser) => {
-    const duplicate = mergedUsers.some((candidate) => {
-      const sameId = legacyUser.id && candidate.id === legacyUser.id;
-      const sameUsername = legacyUser.username && candidate.username === legacyUser.username;
-      const sameEmail = legacyUser.email && candidate.email === legacyUser.email;
-
-      return sameId || sameUsername || sameEmail;
-    });
-
-    if (!duplicate) {
-      mergedUsers.push(legacyUser);
-    }
-  });
-
-  state.users = mergedUsers;
+  state.users = normalizedUsers;
 
   if (state.user) {
-    const refreshedUser = state.users.find((user) => user.id === state.user.id || user.username === state.user.username);
+    const refreshedUser = state.users.find((user) => (
+      (state.user.uid && (user.uid === state.user.uid || user.id === state.user.uid)) ||
+      (state.user.id && user.id === state.user.id) ||
+      (state.user.email && user.email === state.user.email)
+    ));
 
     if (refreshedUser) {
       state.user = {
@@ -203,7 +212,7 @@ function replaceUsers(users = []) {
         email: refreshedUser.email || "",
         role: refreshedUser.role,
         active: refreshedUser.active !== false,
-        authSource: state.user.authSource || "firebase"
+        authSource: "firebase"
       };
     }
   }
@@ -497,8 +506,8 @@ function renderLogin(error = "") {
 
         <div class="form-column">
           <div class="form-row">
-            <label for="identifier">Email or Username</label>
-            <input id="identifier" autocomplete="username">
+            <label for="identifier">Email</label>
+            <input id="identifier" type="email" autocomplete="email">
           </div>
 
           <div class="form-row">
@@ -518,7 +527,7 @@ async function login() {
   const password = document.getElementById("password").value.trim();
 
   if (!identifier || !password) {
-    renderLogin("Enter your email or username and password.");
+    renderLogin("Enter your email and password.");
     return;
   }
 
@@ -526,7 +535,7 @@ async function login() {
     const user = await authenticateUser(identifier, password);
 
     if (!user) {
-      renderLogin("Invalid email, username, or password.");
+      renderLogin("Invalid email or password.");
       return;
     }
 
@@ -542,68 +551,23 @@ async function login() {
 
 async function authenticateUser(identifier, password) {
   const normalizedIdentifier = identifier.trim().toLowerCase();
-  const looksLikeEmail = normalizedIdentifier.includes("@");
 
-  if (looksLikeEmail) {
-    try {
-      const authUser = await loginWithEmail(normalizedIdentifier, password);
-      const profile = await getUserProfile(authUser.uid);
-
-      if (profile.active === false || profile.isActive === false) {
-        await logoutUser();
-        throw new Error("This user account is inactive.");
-      }
-
-      return {
-        user: buildSessionUser(profile),
-        profile
-      };
-    } catch (error) {
-      if (!ENABLE_LEGACY_AUTH_FALLBACK) {
-        throw error;
-      }
-    }
+  if (!normalizedIdentifier.includes("@")) {
+    throw new Error("Use the staff email address to sign in.");
   }
 
-  if (!ENABLE_LEGACY_AUTH_FALLBACK) {
-    return null;
+  try {
+    const authUser = await loginWithEmail(normalizedIdentifier, password);
+    const profile = validateSessionProfile(await getUserProfile(authUser.uid));
+
+    return {
+      user: buildSessionUser(profile),
+      profile
+    };
+  } catch (error) {
+    await logoutUser().catch(() => {});
+    throw error;
   }
-
-  return authenticateLegacyUser(normalizedIdentifier, password);
-}
-
-function authenticateLegacyUser(identifier, password) {
-  const legacyUser = state.users.find((candidate) => {
-    const username = (candidate.username || "").toLowerCase();
-    const email = (candidate.email || "").toLowerCase();
-
-    return (
-      (username === identifier || email === identifier) &&
-      candidate.password === password
-    );
-  });
-
-  if (!legacyUser) {
-    return null;
-  }
-
-  if (legacyUser.active === false) {
-    throw new Error("This user account is inactive.");
-  }
-
-  return {
-    user: {
-      id: legacyUser.id || legacyUser.username,
-      uid: legacyUser.uid || null,
-      fullName: legacyUser.fullName || legacyUser.username || legacyUser.email,
-      username: legacyUser.username || "",
-      email: legacyUser.email || "",
-      role: legacyUser.role || "sales",
-      active: legacyUser.active !== false,
-      authSource: "legacy"
-    },
-    profile: null
-  };
 }
 
 async function logout() {
@@ -620,14 +584,16 @@ async function logout() {
 }
 
 function buildSessionUser(profile) {
+  const normalizedProfile = normalizeUserProfile(profile);
+
   return {
-    id: profile.id || profile.uid,
-    uid: profile.uid || profile.id,
-    fullName: profile.fullName || profile.displayName || profile.username || profile.email,
-    username: profile.username || profile.email || "",
-    email: profile.email || "",
-    role: profile.role || "sales",
-    active: profile.active !== false && profile.isActive !== false,
+    id: normalizedProfile.id || normalizedProfile.uid,
+    uid: normalizedProfile.uid || normalizedProfile.id,
+    fullName: normalizedProfile.fullName,
+    username: normalizedProfile.username || normalizedProfile.email || "",
+    email: normalizedProfile.email || "",
+    role: normalizedProfile.role || "sales",
+    active: normalizedProfile.active !== false,
     authSource: "firebase"
   };
 }
@@ -639,13 +605,7 @@ async function syncAuthenticatedUser(uid) {
     return false;
   }
 
-  const profile = await getUserProfile(uid);
-
-  if (profile.active === false || profile.isActive === false) {
-    state.user = null;
-    saveState();
-    return false;
-  }
+  const profile = validateSessionProfile(await getUserProfile(uid));
 
   const sessionUser = buildSessionUser(profile);
   state.user = sessionUser;
@@ -960,7 +920,7 @@ const authReady = new Promise((resolve) => {
 observeAuthState(async (firebaseUser) => {
   try {
     if (!firebaseUser) {
-      if (state.user?.authSource === "firebase" || state.sessionUser) {
+      if (state.user || state.sessionUser) {
         state.user = null;
         state.sessionUser = null;
         saveState();

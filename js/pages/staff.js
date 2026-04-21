@@ -84,6 +84,15 @@ function renderStaff(error = "", values = {}, success = "") {
   `);
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function createUserId(email) {
   return `user_${email.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
@@ -177,16 +186,11 @@ async function addStaffUser() {
     setStaffProcessing(true);
     const backendResult = await tryCreateStaffUserWithBackend(staffUser, tempPassword);
     const createdUser = normalizeCreatedStaffUser(staffUser, backendResult);
+    const successMessage = buildStaffCreationSuccessMessage(backendResult);
 
     upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser);
     saveState();
-    renderStaff(
-      "",
-      {},
-      tempPassword
-        ? "Staff account created through the secure backend. The user can sign in with their email and temporary password."
-        : "Staff account created through the secure backend and profile saved successfully."
-    );
+    renderStaff("", {}, successMessage);
   } catch (error) {
     setStaffProcessing(false);
     renderStaff(error.message || "Unable to create the staff account securely.", values);
@@ -240,9 +244,24 @@ function normalizeCreatedStaffUser(staffUser, backendResult) {
     id: backendResult.user.uid || backendResult.user.id || staffUser.id,
     uid: backendResult.user.uid,
     active: backendResult.user.active !== false,
+    mustChangePassword: backendResult.user.mustChangePassword !== false,
+    credentialSetupMode: backendResult.user.credentialSetupMode || "temporary_password",
     pendingAuthCreation: false,
     createdAt: backendResult.user.createdAt || staffUser.createdAt
   };
+}
+
+function buildStaffCreationSuccessMessage(backendResult) {
+  const setupMode = backendResult?.user?.credentialSetupMode;
+  const setupLink = backendResult?.user?.passwordSetupLink;
+
+  if (setupMode === "setup_link" && setupLink) {
+    const escapedLink = escapeHtml(setupLink);
+
+    return `Staff account created securely. Share this password setup link with the staff member: <a href="${escapedLink}" target="_blank" rel="noopener noreferrer">Open setup link</a>`;
+  }
+
+  return "Staff account created through the secure backend. The user can sign in with their email and temporary password.";
 }
 
 function upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser) {

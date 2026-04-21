@@ -1,14 +1,29 @@
 import { loadState, saveState } from "./storage/localStorageService.js";
 
-const defaultUsers = [
-  { id: "user_admin", fullName: "System Administrator", username: "admin", password: "1234", role: "admin", active: true },
-  { id: "user_sales", fullName: "Sales Staff", username: "sales", password: "1234", role: "sales", active: true },
-  { id: "user_store", fullName: "Storekeeper", username: "store", password: "1234", role: "storekeeper", active: true }
-];
+function sanitizeUsers(users = []) {
+  return users
+    .filter((user) => user && typeof user === "object")
+    .map((user) => ({
+      id: user.id || user.uid || "",
+      uid: user.uid || user.id || "",
+      fullName: user.fullName || user.displayName || user.username || user.email || "",
+      username: user.username || "",
+      email: user.email || "",
+      role: user.role || "sales",
+      active: user.active !== false && user.isActive !== false,
+      isActive: user.active !== false && user.isActive !== false,
+      pendingAuthCreation: user.pendingAuthCreation === true,
+      createdAt: user.createdAt || null,
+      createdBy: user.createdBy || null,
+      mustChangePassword: user.mustChangePassword === true,
+      credentialSetupMode: user.credentialSetupMode || null
+    }))
+    .filter((user) => user.id || user.email || user.username || user.fullName);
+}
 
 const defaultState = {
   user: null,
-  users: defaultUsers,
+  users: [],
 
   products: [],
   stock: [],
@@ -26,9 +41,7 @@ const defaultState = {
 
 let state = loadState() || defaultState;
 
-if (!Array.isArray(state.users) || state.users.length === 0) {
-  state.users = defaultUsers;
-}
+state.users = sanitizeUsers(state.users);
 
 export const getState = () => state;
 

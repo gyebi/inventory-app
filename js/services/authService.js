@@ -18,6 +18,26 @@ const rolePermissions = {
   manager: ["view_dashboard", "view_reports", "manage_stock"]
 };
 
+function isKnownRole(role) {
+  return Object.prototype.hasOwnProperty.call(rolePermissions, role);
+}
+
+function extractFirebaseErrorMessage(error, fallbackMessage) {
+  if (!error) {
+    return fallbackMessage;
+  }
+
+  if (typeof error.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error.code === "string" && error.code.trim()) {
+    return error.code;
+  }
+
+  return fallbackMessage;
+}
+
 export const login = async (email, password) => {
   return loginWithEmail(email, password);
 };
@@ -82,8 +102,12 @@ export const requirePermission = (action) => {
 
 //new log in wiring to firebase 
 export async function loginWithEmail(email, password) {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  return userCredential.user;
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+  } catch (error) {
+    throw new Error(extractFirebaseErrorMessage(error, "Unable to sign in with email and password."));
+  }
 }
 
 export async function logoutUser() {
@@ -94,10 +118,50 @@ export function observeAuthState(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
-export function setSessionUser(profile) {
-  const state = getState();
-  state.sessionUser = profile;
-  state.user = profile
+export function normalizeUserProfile(profile) {
+  if (!profile) {
+    return null;
+  }
+
+  const uid = profile.uid || profile.id || "";
+  const fullName = profile.fullName || profile.displayName || profile.name || profile.username || profile.email || "";
+  const role = isKnownRole(profile.role) ? profile.role : "sales";
+  const active = profile.active !== false && profile.isActive !== false;
+
+  return {
+    ...profile,
+    id: profile.id || uid,
+    uid,
+    fullName,
+    displayName: profile.displayName || fullName,
+    username: profile.username || profile.email || "",
+    email: profile.email || "",
+    role,
+    active,
+    isActive: active
+  };
+}
+
+export function validateSessionProfile(profile) {
+  const normalizedProfile = normalizeUserProfile(profile);
+
+  if (!normalizedProfile?.uid) {
+    throw new Error("User profile is incomplete.");
+  }
+
+  if (!normalizedProfile.active) {
+    throw new Error("This account has been deactivated");
+  }
+
+  if (!isKnownRole(normalizedProfile.role)) {
+    throw new Error("This account does not have a valid role assigned.");
+  }
+
+  return normalizedProfile;
+}
+
+function buildSessionUser(profile) {
+  return profile
     ? {
         id: profile.id || profile.uid,
         uid: profile.uid || profile.id,
@@ -108,6 +172,13 @@ export function setSessionUser(profile) {
         active: profile.active !== false && profile.isActive !== false
       }
     : null;
+}
+
+export function setSessionUser(profile) {
+  const normalizedProfile = normalizeUserProfile(profile);
+  const state = getState();
+  state.sessionUser = normalizedProfile;
+  state.user = buildSessionUser(normalizedProfile);
   setState(state);
 }
 
