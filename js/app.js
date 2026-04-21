@@ -159,6 +159,10 @@ function normalizeUser(user) {
   };
 }
 
+function getLegacyFallbackUsers() {
+  return state.users.filter((user) => user.password);
+}
+
 function replaceUsers(users = []) {
   const normalizedUsers = users
     .filter((user) => user.email || user.username || user.fullName || user.displayName)
@@ -168,7 +172,24 @@ function replaceUsers(users = []) {
     return;
   }
 
-  state.users = normalizedUsers;
+  const legacyUsers = getLegacyFallbackUsers();
+  const mergedUsers = [...normalizedUsers];
+
+  legacyUsers.forEach((legacyUser) => {
+    const duplicate = mergedUsers.some((candidate) => {
+      const sameId = legacyUser.id && candidate.id === legacyUser.id;
+      const sameUsername = legacyUser.username && candidate.username === legacyUser.username;
+      const sameEmail = legacyUser.email && candidate.email === legacyUser.email;
+
+      return sameId || sameUsername || sameEmail;
+    });
+
+    if (!duplicate) {
+      mergedUsers.push(legacyUser);
+    }
+  });
+
+  state.users = mergedUsers;
 
   if (state.user) {
     const refreshedUser = state.users.find((user) => user.id === state.user.id || user.username === state.user.username);
@@ -181,7 +202,8 @@ function replaceUsers(users = []) {
         username: refreshedUser.username,
         email: refreshedUser.email || "",
         role: refreshedUser.role,
-        active: refreshedUser.active !== false
+        active: refreshedUser.active !== false,
+        authSource: state.user.authSource || "firebase"
       };
     }
   }
@@ -577,7 +599,8 @@ function authenticateLegacyUser(identifier, password) {
       username: legacyUser.username || "",
       email: legacyUser.email || "",
       role: legacyUser.role || "sales",
-      active: legacyUser.active !== false
+      active: legacyUser.active !== false,
+      authSource: "legacy"
     },
     profile: null
   };
@@ -604,7 +627,8 @@ function buildSessionUser(profile) {
     username: profile.username || profile.email || "",
     email: profile.email || "",
     role: profile.role || "sales",
-    active: profile.active !== false && profile.isActive !== false
+    active: profile.active !== false && profile.isActive !== false,
+    authSource: "firebase"
   };
 }
 
@@ -936,9 +960,11 @@ const authReady = new Promise((resolve) => {
 observeAuthState(async (firebaseUser) => {
   try {
     if (!firebaseUser) {
-      state.user = null;
-      state.sessionUser = null;
-      saveState();
+      if (state.user?.authSource === "firebase" || state.sessionUser) {
+        state.user = null;
+        state.sessionUser = null;
+        saveState();
+      }
       authReadyResolver?.();
       authReadyResolver = null;
       return;
