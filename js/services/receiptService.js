@@ -67,36 +67,40 @@ function getReceiptItemsMarkup(items = []) {
 
 function buildReceiptMarkup(sale) {
   return `
-    <div class="page-title">
-      <h2>🧾 Receipt</h2>
-      <p>${RECEIPT_BUSINESS_NAME}</p>
-    </div>
+    <div class="receipt-page">
+      <div class="page-title">
+        <h2>🧾 Receipt</h2>
+        <p>${RECEIPT_BUSINESS_NAME}</p>
+      </div>
 
-    <div class="card">
-      <strong>Business Name:</strong> ${RECEIPT_BUSINESS_NAME}<br>
-      <strong>Receipt ID:</strong> ${sale.id}<br>
-      <strong>Date/Time:</strong> ${formatReceiptDateTime(sale.createdAt)}<br>
-      <strong>Cashier:</strong> ${getReceiptCashierName(sale)}<br>
-      <hr>
-      <table class="receipt-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Quantity</th>
-            <th>Price</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${getReceiptItemsMarkup(sale.items)}
-        </tbody>
-      </table>
-      <hr>
-      <strong>Total:</strong> ${formatReceiptCurrency(sale.totalAmount)}
-    </div>
+      <div class="card receipt-card">
+        <strong>Business Name:</strong> ${RECEIPT_BUSINESS_NAME}<br>
+        <strong>Receipt ID:</strong> ${sale.id}<br>
+        <strong>Date/Time:</strong> ${formatReceiptDateTime(sale.createdAt)}<br>
+        <strong>Cashier:</strong> ${getReceiptCashierName(sale)}<br>
+        <hr>
+        <table class="receipt-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${getReceiptItemsMarkup(sale.items)}
+          </tbody>
+        </table>
+        <hr>
+        <strong>Total:</strong> ${formatReceiptCurrency(sale.totalAmount)}
+      </div>
 
-    <button onclick="navigate('sales')">Back to Sale</button>
-    <button onclick="printReceipt()">🖨 Print</button>
+      <div class="receipt-actions">
+        <button onclick="navigate('sales')">Back to Sale</button>
+        <button onclick="printReceipt()">🖨 Print</button>
+      </div>
+    </div>
   `;
 }
 

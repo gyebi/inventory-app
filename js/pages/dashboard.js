@@ -57,13 +57,17 @@ function showDashboardDetails(type) {
   let body = "";
 
   if (type === "products") {
-    title = "Total Products";
+    title = "Product Report";
     body = state.products.length === 0
       ? `<div class="card">No products added yet.</div>`
-      : state.products.map((product) => `
+      : state.products
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((product, index) => `
           <div class="card dashboard-detail-card">
-            <strong>${product.name}</strong><br>
+            <strong>${index + 1}. ${product.name}</strong><br>
             Category: ${product.category}<br>
+            Total Base Units: ${product.quantity} ${product.baseUnit}(s)<br>
             Stock: ${formatStock(product)}<br>
             Expired Stock: ${getExpiredStockQuantity(product.id)} ${product.baseUnit}(s)<br>
             Base Price: ${formatReceiptCurrency(product.sellingPrice)}<br>

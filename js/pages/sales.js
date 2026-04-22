@@ -3,15 +3,92 @@ import { createSale } from "../services/salesService.js";
 
 const { ensureStockState, renderPage, state } = window.app;
 let saleCart = [];
+let selectedProductId = "";
+let selectedSaleUnit = "bulk";
 
 function formatSaleStock(product) {
   return window.app.formatStock(product);
 }
 
+function getCommittedBaseQuantity(product) {
+  return Number(product?.quantity || 0);
+}
+
+function getProductUnitLabel(product, saleUnit = "bulk") {
+  if (!product) {
+    return saleUnit;
+  }
+
+  return saleUnit === "base"
+    ? (product.baseUnit || "base unit")
+    : (product.bulkUnit || "bulk unit");
+}
+
+function getSaleUnitPrice(product, saleUnit = "bulk") {
+  if (!product) {
+    return 0;
+  }
+
+  if (saleUnit === "base") {
+    return Number(product.sellingPrice || 0);
+  }
+
+  return Number(product.bulkSellingPrice ?? ((product.sellingPrice || 0) * (product.unitsPerBulk || 1)));
+}
+
+function toBaseQuantity(product, quantity, saleUnit = "bulk") {
+  if (!product) {
+    return 0;
+  }
+
+  return saleUnit === "base"
+    ? quantity
+    : quantity * Number(product.unitsPerBulk || 1);
+}
+
+function getCartProductBaseQuantity(product) {
+  if (!product) {
+    return 0;
+  }
+
+  return saleCart
+    .filter((item) => item.productId === product.id)
+    .reduce((sum, item) => sum + toBaseQuantity(product, item.quantity, item.saleUnit), 0);
+}
+
+function formatBaseQuantity(product, quantity) {
+  const unitLabel = product?.baseUnit || "base unit";
+  return `${quantity} ${unitLabel}(s)`;
+}
+
+function getSaleAvailabilitySummary(product, saleUnit = "bulk") {
+  if (!product) {
+    return {
+      committedBaseQuantity: 0,
+      reservedBaseQuantity: 0,
+      availableBaseQuantity: 0,
+      unitLabel: saleUnit,
+      unitPrice: 0
+    };
+  }
+
+  const committedBaseQuantity = getCommittedBaseQuantity(product);
+  const reservedBaseQuantity = getCartProductBaseQuantity(product);
+  const availableBaseQuantity = Math.max(committedBaseQuantity - reservedBaseQuantity, 0);
+
+  return {
+    committedBaseQuantity,
+    reservedBaseQuantity,
+    availableBaseQuantity,
+    unitLabel: getProductUnitLabel(product, saleUnit),
+    unitPrice: getSaleUnitPrice(product, saleUnit)
+  };
+}
+
 function getCartTotal() {
   return saleCart.reduce((sum, item) => {
     const product = state.products.find((candidate) => candidate.id === item.productId);
-    const unitPrice = Number(product?.bulkSellingPrice ?? ((product?.sellingPrice || 0) * (product?.unitsPerBulk || 1)));
+    const unitPrice = getSaleUnitPrice(product, item.saleUnit);
 
     return sum + (unitPrice * item.quantity);
   }, 0);
@@ -24,14 +101,15 @@ function renderCartItems() {
 
   return saleCart.map((item, index) => {
     const product = state.products.find((candidate) => candidate.id === item.productId);
-    const unitPrice = Number(product?.bulkSellingPrice ?? ((product?.sellingPrice || 0) * (product?.unitsPerBulk || 1)));
+    const unitLabel = getProductUnitLabel(product, item.saleUnit);
+    const unitPrice = getSaleUnitPrice(product, item.saleUnit);
     const itemTotal = unitPrice * item.quantity;
 
     return `
       <div class="sale-cart-row">
         <div>
           <strong>${product?.name || "Unknown product"}</strong>
-          <small>${item.quantity} ${product?.bulkUnit || "bulk unit"}(s)</small>
+          <small>${item.quantity} ${unitLabel}(s)</small>
         </div>
         <div>
           <span>${window.app.formatReceiptCurrency(itemTotal)}</span>
@@ -57,10 +135,24 @@ function renderSales(error = "") {
     return;
   }
 
+  if (!selectedProductId || !state.products.some((product) => product.id === selectedProductId)) {
+    selectedProductId = state.products[0]?.id || "";
+  }
+
+  const selectedProduct = state.products.find((product) => product.id === selectedProductId) || state.products[0];
+  if (!selectedProduct) {
+    return;
+  }
+
   const options = state.products.map(
-    (product) => `<option value="${product.id}">${product.name}</option>`
+    (product) => `<option value="${product.id}" ${product.id === selectedProduct.id ? "selected" : ""}>${product.name}</option>`
   ).join("");
-  const selectedProduct = state.products[0];
+  const baseUnitLabel = selectedProduct.baseUnit || "base unit";
+  const bulkUnitLabel = selectedProduct.bulkUnit || "bulk unit";
+  const {
+    availableBaseQuantity,
+    unitLabel: quantityUnitLabel
+  } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
 
   renderPage(`
     <div class="page-title">
@@ -74,7 +166,7 @@ function renderSales(error = "") {
       <div class="sale-summary">
         <strong>Available Stock</strong>
         <span>${formatSaleStock(selectedProduct)}</span>
-        <small>Sold in ${selectedProduct.bulkUnit}(s)</small>
+        <small>Available for next sale: ${formatBaseQuantity(selectedProduct, availableBaseQuantity)}</small>
       </div>
 
       <div class="form-column">
@@ -84,7 +176,15 @@ function renderSales(error = "") {
         </div>
 
         <div class="form-row">
-          <label for="qty">Quantity (${selectedProduct.bulkUnit})</label>
+          <label for="saleUnit">Unit Type</label>
+          <select id="saleUnit" onchange="updateSalePreview()">
+            <option value="bulk" ${selectedSaleUnit === "bulk" ? "selected" : ""}>Bulk Unit (${bulkUnitLabel})</option>
+            <option value="base" ${selectedSaleUnit === "base" ? "selected" : ""}>Base Unit (${baseUnitLabel})</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label for="qty">Quantity (${quantityUnitLabel})</label>
           <input id="qty" class="number-field" type="number" min="1" step="1">
         </div>
 
@@ -120,20 +220,32 @@ function setSaleProcessing(isProcessing) {
 
 function updateSalePreview() {
   const productId = document.getElementById("productIndex")?.value;
+  const saleUnit = document.getElementById("saleUnit")?.value || selectedSaleUnit;
   const product = state.products.find((item) => item.id === productId);
   const summary = document.querySelector(".sale-summary");
   const quantityLabel = document.querySelector("label[for='qty']");
+  const unitSelect = document.getElementById("saleUnit");
 
-  if (!product || !summary || !quantityLabel) {
+  if (!product || !summary || !quantityLabel || !unitSelect) {
     return;
   }
 
-  quantityLabel.textContent = `Quantity (${product.bulkUnit})`;
+  selectedProductId = product.id;
+  selectedSaleUnit = saleUnit;
+  const {
+    availableBaseQuantity,
+    unitLabel
+  } = getSaleAvailabilitySummary(product, saleUnit);
+  quantityLabel.textContent = `Quantity (${getProductUnitLabel(product, saleUnit)})`;
+  unitSelect.innerHTML = `
+    <option value="bulk" ${saleUnit === "bulk" ? "selected" : ""}>Bulk Unit (${product.bulkUnit || "bulk unit"})</option>
+    <option value="base" ${saleUnit === "base" ? "selected" : ""}>Base Unit (${product.baseUnit || "base unit"})</option>
+  `;
 
   summary.innerHTML = `
     <strong>Available Stock</strong>
     <span>${formatSaleStock(product)}</span>
-    <small>Sold in ${product.bulkUnit}(s)</small>
+    <small>Available for next sale: ${formatBaseQuantity(product, availableBaseQuantity)}</small>
   `;
 }
 
@@ -141,6 +253,7 @@ function addSaleCartItem() {
   ensureStockState();
 
   const productId = document.getElementById("productIndex")?.value;
+  const saleUnit = document.getElementById("saleUnit")?.value || "bulk";
   const quantity = Number(document.getElementById("qty")?.value);
   const product = state.products.find((item) => item.id === productId);
 
@@ -154,11 +267,12 @@ function addSaleCartItem() {
     return;
   }
 
-  const requestedBaseQuantity = quantity * Number(product.unitsPerBulk || 1);
-  const existingCartItem = saleCart.find((item) => item.productId === productId);
-  const existingBaseQuantity = existingCartItem
-    ? existingCartItem.quantity * Number(product.unitsPerBulk || 1)
-    : 0;
+  selectedProductId = productId;
+  selectedSaleUnit = saleUnit;
+
+  const requestedBaseQuantity = toBaseQuantity(product, quantity, saleUnit);
+  const existingCartItem = saleCart.find((item) => item.productId === productId && item.saleUnit === saleUnit);
+  const existingBaseQuantity = getCartProductBaseQuantity(product);
 
   if (requestedBaseQuantity + existingBaseQuantity > Number(product.quantity || 0)) {
     renderSales(`Not enough stock available for ${product.name}.`);
@@ -171,11 +285,17 @@ function addSaleCartItem() {
     saleCart.push({
       productId,
       quantity,
-      unit: product.bulkUnit
+      unit: getProductUnitLabel(product, saleUnit),
+      saleUnit
     });
   }
 
   renderSales();
+
+  const quantityInput = document.getElementById("qty");
+  if (quantityInput) {
+    quantityInput.value = "";
+  }
 }
 
 function removeSaleCartItem(index) {

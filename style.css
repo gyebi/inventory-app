@@ -284,6 +284,19 @@ button {
   gap: 12px;
 }
 
+.inventory-toolbar {
+  margin-bottom: 16px;
+}
+
+.inventory-search-input {
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  width: min(420px, 100%);
+}
+
 .inventory-row {
   background: var(--brand-surface);
   border: 1px solid var(--brand-line);
@@ -698,4 +711,46 @@ p {
   float: right;
   cursor: pointer;
   font-size: 20px;
+}
+
+@media print {
+  body {
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .app-header,
+  .receipt-actions,
+  #modal {
+    display: none !important;
+  }
+
+  #app,
+  #page,
+  .page-section,
+  .receipt-page,
+  .receipt-card {
+    background: #ffffff;
+    border: 0;
+    box-shadow: none;
+    margin: 0;
+    max-width: none;
+    padding: 0;
+    width: 100%;
+  }
+
+  .page-title {
+    margin-bottom: 12px;
+  }
+
+  .receipt-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .receipt-table th,
+  .receipt-table td {
+    padding: 6px 0;
+    text-align: left;
+  }
 }

@@ -406,6 +406,7 @@ const menuItems = [
   { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
+  { page: "reports", icon: "📑", title: "Reports", text: "Open product and sales reports" },
   { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
   { page: "staff", icon: "👤", title: "Staff", text: "Add staff and assign roles" },
   { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
@@ -454,7 +455,7 @@ function navigate(page) {
   renderShell();
 
   if (page === "home") renderHome();
-  if (page === "dashboard") window.renderDashboard?.();
+  if (page === "dashboard" || page === "reports") window.renderDashboard?.();
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "suppliers") window.renderSuppliers?.();

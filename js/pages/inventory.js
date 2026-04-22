@@ -10,6 +10,8 @@ const {
   formatReceiptCurrency
 } = window.app;
 
+let inventorySearchQuery = "";
+
 function renderInventory() {
   ensureStockState();
 
@@ -24,15 +26,53 @@ function renderInventory() {
     return;
   }
 
+  const normalizedQuery = inventorySearchQuery.trim().toLowerCase();
+  const filteredProducts = normalizedQuery
+    ? state.products.filter((product) => {
+        const searchableText = [
+          product.name,
+          product.category,
+          product.baseUnit,
+          product.bulkUnit
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(normalizedQuery);
+      })
+    : state.products;
+
   let html = `
     <div class="page-title">
       <h2>📦 Inventory</h2>
       <p>Use the physical stock breakdown for counting and reconciliation.</p>
     </div>
-    <div class="inventory-list">
+    <div class="inventory-toolbar">
+      <input
+        id="inventorySearch"
+        class="inventory-search-input"
+        type="search"
+        placeholder="Search products by name or category"
+        value="${escapeHtml(inventorySearchQuery)}"
+        oninput="updateInventorySearch(this.value)"
+      >
+    </div>
   `;
 
-  state.products.forEach((p) => {
+  if (filteredProducts.length === 0) {
+    html += `
+      <div class="card">
+        No products match "${escapeHtml(inventorySearchQuery.trim())}".
+      </div>
+    `;
+    renderPage(html);
+    return;
+  }
+
+  html += `<div class="inventory-list">`;
+
+  filteredProducts.forEach((p) => {
     const productBatches = getBatchesByProductId(p.id);
     const activeBatches = getSellableBatches(p.id);
     const expiredBatches = getExpiredBatches(p.id);
@@ -70,6 +110,7 @@ function renderInventory() {
 }
 
 window.renderInventory = renderInventory;
+window.updateInventorySearch = updateInventorySearch;
 
 function getUnitsPerBulk(product) {
   const unitsPerBulk = Number(product.unitsPerBulk);
@@ -93,4 +134,25 @@ function getPhysicalStock(product) {
     fullBulk: Math.floor(quantity / unitsPerBulk),
     remainder: quantity % unitsPerBulk
   };
+}
+
+function updateInventorySearch(value = "") {
+  inventorySearchQuery = value;
+  renderInventory();
+
+  const searchInput = document.getElementById("inventorySearch");
+
+  if (searchInput) {
+    searchInput.focus();
+    searchInput.setSelectionRange(value.length, value.length);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
