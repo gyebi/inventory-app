@@ -351,6 +351,36 @@ button {
   margin-top: 0;
 }
 
+.report-subtitle {
+  color: var(--brand-muted);
+  margin-top: 0;
+}
+
+.report-actions {
+  margin-top: 16px;
+}
+
+.report-card-button {
+  min-height: 150px;
+}
+
+.report-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.report-table th,
+.report-table td {
+  border-bottom: 1px solid var(--brand-line);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-total-card {
+  margin-top: 16px;
+}
+
 .danger-button {
   border-color: var(--brand-danger);
   color: var(--brand-danger);
@@ -721,15 +751,39 @@ p {
 
   .app-header,
   .receipt-actions,
+  .report-actions,
   #modal {
     display: none !important;
+  }
+
+  body.printing-report #modal {
+    display: flex !important;
+    position: static;
+    background: #ffffff;
+    height: auto;
+    width: 100%;
+  }
+
+  body.printing-report #app {
+    display: none !important;
+  }
+
+  body.printing-report .modal-content {
+    background: #ffffff;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    max-width: none;
+    padding: 0;
+    width: 100%;
   }
 
   #app,
   #page,
   .page-section,
   .receipt-page,
-  .receipt-card {
+  .receipt-card,
+  .printable-report {
     background: #ffffff;
     border: 0;
     box-shadow: none;
@@ -749,7 +803,9 @@ p {
   }
 
   .receipt-table th,
-  .receipt-table td {
+  .receipt-table td,
+  .report-table th,
+  .report-table td {
     padding: 6px 0;
     text-align: left;
   }

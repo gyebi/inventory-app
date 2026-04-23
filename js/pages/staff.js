@@ -244,7 +244,7 @@ function normalizeCreatedStaffUser(staffUser, backendResult) {
     id: backendResult.user.uid || backendResult.user.id || staffUser.id,
     uid: backendResult.user.uid,
     active: backendResult.user.active !== false,
-    mustChangePassword: backendResult.user.mustChangePassword !== false,
+    mustChangePassword: backendResult.user.mustChangePassword === true,
     credentialSetupMode: backendResult.user.credentialSetupMode || "temporary_password",
     pendingAuthCreation: false,
     createdAt: backendResult.user.createdAt || staffUser.createdAt
@@ -261,7 +261,7 @@ function buildStaffCreationSuccessMessage(backendResult) {
     return `Staff account created securely. Share this password setup link with the staff member: <a href="${escapedLink}" target="_blank" rel="noopener noreferrer">Open setup link</a>`;
   }
 
-  return "Staff account created through the secure backend. The user can sign in with their email and temporary password.";
+  return "Staff account created through the secure backend. The user must sign in with their email and temporary password, then change that password before using the app.";
 }
 
 function upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser) {

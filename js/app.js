@@ -1,10 +1,12 @@
 import { setState as setSharedState } from "./state.js";
 import {
   hasPermission,
+  isPasswordChangeRequired,
   loginWithEmail,
   logoutUser,
   normalizeUserProfile,
   observeAuthState,
+  updateCurrentUserPassword,
   validateSessionProfile
 } from "./services/authService.js";
 import {
@@ -24,7 +26,7 @@ import {
 import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
 import { migrateLocalSuppliersToCloudOnce } from "./services/supplierMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
-import { getUserProfile } from "./services/userProfileService.js";
+import { clearRequiredPasswordChange, getUserProfile } from "./services/userProfileService.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
 const app = document.getElementById("app");
@@ -57,11 +59,14 @@ let stopStockReceiptsListener = null;
 let stopSalesListener = null;
 let stopUsersListener = null;
 let stopSuppliersListener = null;
+let cloudSyncPromise = null;
+let currentPage = "home";
 let cloudStatus = {
   connected: false,
   message: "Connecting to Firestore",
   lastUpdatedAt: null
 };
+let isPrintingModal = false;
 
 function sanitizePersistedUsers(users = []) {
   return users
@@ -190,10 +195,6 @@ function replaceUsers(users = []) {
     .filter((user) => user.email || user.username || user.fullName || user.displayName)
     .map(normalizeUser);
 
-  if (normalizedUsers.length === 0) {
-    return;
-  }
-
   state.users = normalizedUsers;
 
   if (state.user) {
@@ -219,6 +220,10 @@ function replaceUsers(users = []) {
 
   markCloudUpdated("Users synced");
   saveState();
+}
+
+function canSyncAllUsers() {
+  return state.user?.role === "admin";
 }
 
 function rebuildStockFromCloudReceipts() {
@@ -313,15 +318,44 @@ function replaceSuppliers(suppliers = []) {
   saveState();
 }
 
+function stopCloudListeners() {
+  if (stopProductsListener) {
+    stopProductsListener();
+    stopProductsListener = null;
+  }
+
+  if (stopStockReceiptsListener) {
+    stopStockReceiptsListener();
+    stopStockReceiptsListener = null;
+  }
+
+  if (stopSalesListener) {
+    stopSalesListener();
+    stopSalesListener = null;
+  }
+
+  if (stopUsersListener) {
+    stopUsersListener();
+    stopUsersListener = null;
+  }
+
+  if (stopSuppliersListener) {
+    stopSuppliersListener();
+    stopSuppliersListener = null;
+  }
+}
+
 async function startCloudProductSync() {
   await migrateLocalProductsToCloudOnce();
   await migrateLocalSuppliersToCloudOnce();
+
+  const syncUsers = canSyncAllUsers();
 
   const [cloudProducts, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers] = await Promise.all([
     fetchProductsFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
-    fetchUsersFromCloud(),
+    syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
     fetchSuppliersFromCloud()
   ]);
 
@@ -331,24 +365,15 @@ async function startCloudProductSync() {
 
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
-  replaceUsers(cloudUsers);
+  if (syncUsers) {
+    replaceUsers(cloudUsers);
+  } else {
+    state.users = [];
+    saveState();
+  }
   replaceSuppliers(cloudSuppliers);
 
-  if (stopProductsListener) {
-    stopProductsListener();
-  }
-  if (stopStockReceiptsListener) {
-    stopStockReceiptsListener();
-  }
-  if (stopSalesListener) {
-    stopSalesListener();
-  }
-  if (stopUsersListener) {
-    stopUsersListener();
-  }
-  if (stopSuppliersListener) {
-    stopSuppliersListener();
-  }
+  stopCloudListeners();
 
   stopProductsListener = listenToProducts(
     (products) => {
@@ -380,15 +405,17 @@ async function startCloudProductSync() {
     }
   );
 
-  stopUsersListener = listenToUsers(
-    (users) => {
-      replaceUsers(users);
-    },
-    (error) => {
-      setCloudStatus({ connected: false, message: "User sync error" });
-      console.error("User listener failed:", error);
-    }
-  );
+  if (syncUsers) {
+    stopUsersListener = listenToUsers(
+      (users) => {
+        replaceUsers(users);
+      },
+      (error) => {
+        setCloudStatus({ connected: false, message: "User sync error" });
+        console.error("User listener failed:", error);
+      }
+    );
+  }
 
   stopSuppliersListener = listenToSuppliers(
     (suppliers) => {
@@ -399,6 +426,50 @@ async function startCloudProductSync() {
       console.error("Supplier listener failed:", error);
     }
   );
+}
+
+function isReadyForProtectedCloudSync() {
+  return Boolean(state.user?.uid);
+}
+
+async function ensureAuthenticatedCloudSync() {
+  if (!isReadyForProtectedCloudSync()) {
+    stopCloudListeners();
+    setCloudStatus({ connected: false, message: "Sign in to sync data" });
+    return false;
+  }
+
+  if (!cloudSyncPromise) {
+    cloudSyncPromise = (async () => {
+      try {
+        setCloudStatus({ connected: false, message: "Connecting to Firestore" });
+        await startCloudProductSync();
+        return true;
+      } catch (error) {
+        setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
+        console.error("Cloud startup sync failed:", error);
+        return false;
+      } finally {
+        cloudSyncPromise = null;
+      }
+    })();
+  }
+
+  return cloudSyncPromise;
+}
+
+async function waitForInitialCloudSync() {
+  if (!isReadyForProtectedCloudSync()) {
+    return false;
+  }
+
+  return Promise.race([
+    ensureAuthenticatedCloudSync(),
+    wait(INITIAL_SYNC_WAIT_MS).then(() => {
+      setCloudStatus({ connected: false, message: "Ready" });
+      return false;
+    })
+  ]);
 }
 
 const menuItems = [
@@ -424,8 +495,13 @@ function canAccessPage(page) {
   return hasPermission(requiredPermission);
 }
 
+function hasPendingRequiredPasswordChange() {
+  return isPasswordChangeRequired(state.sessionUser);
+}
+
 function navigate(page) {
   if (page === "login") {
+    currentPage = page;
     renderLogin();
     return;
   }
@@ -440,7 +516,14 @@ function navigate(page) {
     return;
   }
 
+  if (hasPendingRequiredPasswordChange() && page !== "logout" && page !== "changePassword") {
+    currentPage = "changePassword";
+    renderRequiredPasswordChange();
+    return;
+  }
+
   if (!canAccessPage(page)) {
+    currentPage = page;
     renderShell();
     renderPage(`
       <div class="page-title">
@@ -452,6 +535,7 @@ function navigate(page) {
     return;
   }
 
+  currentPage = page;
   renderShell();
 
   if (page === "home") renderHome();
@@ -463,6 +547,7 @@ function navigate(page) {
   if (page === "inventory") window.renderInventory?.();
   if (page === "staff") window.renderStaff?.();
   if (page === "help") window.renderHelp?.();
+  if (page === "changePassword") renderRequiredPasswordChange();
 }
 
 function wait(milliseconds) {
@@ -484,6 +569,11 @@ function renderSplash() {
 
 function renderCurrentEntryPage() {
   if (isLoggedIn()) {
+    if (hasPendingRequiredPasswordChange()) {
+      renderRequiredPasswordChange();
+      return;
+    }
+
     void retryPendingSalesSync();
     navigate("home");
     return;
@@ -523,6 +613,53 @@ function renderLogin(error = "") {
   `;
 }
 
+function renderRequiredPasswordChange(error = "") {
+  currentPage = "changePassword";
+  renderShell();
+
+  const setupMode = state.sessionUser?.credentialSetupMode || "temporary_password";
+  const helperText = setupMode === "temporary_password"
+    ? "You signed in with a temporary password. Choose a new password before using the app."
+    : "Choose a new password before using the app.";
+
+  renderPage(`
+    <div class="page-title">
+      <h2>Change Password</h2>
+      <p>${helperText}</p>
+    </div>
+
+    ${error ? `<div class="message error">${error}</div>` : ""}
+
+    <div class="form-column panel">
+      <div class="form-row">
+        <label for="newPassword">New Password</label>
+        <input id="newPassword" type="password" autocomplete="new-password">
+      </div>
+
+      <div class="form-row">
+        <label for="confirmPassword">Confirm Password</label>
+        <input id="confirmPassword" type="password" autocomplete="new-password">
+      </div>
+
+      <button id="completePasswordChangeButton" onclick="completeRequiredPasswordChange()">Save New Password</button>
+      <button type="button" onclick="navigate('logout')">Sign Out</button>
+    </div>
+  `);
+}
+
+function setPasswordChangeProcessing(isProcessing) {
+  const button = document.getElementById("completePasswordChangeButton");
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = isProcessing;
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Saving...`
+    : "Save New Password";
+}
+
 async function login() {
   const identifier = document.getElementById("identifier").value.trim();
   const password = document.getElementById("password").value.trim();
@@ -543,11 +680,26 @@ async function login() {
     state.user = user.user;
     state.sessionUser = user.profile || null;
     saveState();
+    await waitForInitialCloudSync();
     navigate("home");
   } catch (error) {
     console.error("Login failed:", error);
     renderLogin(error.message || "Login failed.");
   }
+}
+
+async function loadValidatedSessionProfile(uid) {
+  let profile = validateSessionProfile(await getUserProfile(uid));
+
+  if (profile.mustChangePassword && profile.credentialSetupMode === "setup_link") {
+    const clearedProfile = await clearRequiredPasswordChange();
+    profile = validateSessionProfile(clearedProfile || {
+      ...profile,
+      mustChangePassword: false
+    });
+  }
+
+  return profile;
 }
 
 async function authenticateUser(identifier, password) {
@@ -559,7 +711,7 @@ async function authenticateUser(identifier, password) {
 
   try {
     const authUser = await loginWithEmail(normalizedIdentifier, password);
-    const profile = validateSessionProfile(await getUserProfile(authUser.uid));
+    const profile = await loadValidatedSessionProfile(authUser.uid);
 
     return {
       user: buildSessionUser(profile),
@@ -578,9 +730,11 @@ async function logout() {
     console.error("Logout failed:", error);
   }
 
+  stopCloudListeners();
   state.user = null;
   state.sessionUser = null;
   saveState();
+  setCloudStatus({ connected: false, message: "Sign in to sync data" });
   renderLogin();
 }
 
@@ -606,13 +760,52 @@ async function syncAuthenticatedUser(uid) {
     return false;
   }
 
-  const profile = validateSessionProfile(await getUserProfile(uid));
+  const profile = await loadValidatedSessionProfile(uid);
 
   const sessionUser = buildSessionUser(profile);
   state.user = sessionUser;
   state.sessionUser = profile;
   saveState();
   return true;
+}
+
+async function completeRequiredPasswordChange() {
+  const newPassword = document.getElementById("newPassword")?.value.trim() || "";
+  const confirmPassword = document.getElementById("confirmPassword")?.value.trim() || "";
+
+  if (!newPassword || !confirmPassword) {
+    renderRequiredPasswordChange("Enter and confirm your new password.");
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    renderRequiredPasswordChange("New password must be at least 6 characters.");
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    renderRequiredPasswordChange("The new password and confirmation do not match.");
+    return;
+  }
+
+  try {
+    setPasswordChangeProcessing(true);
+    await updateCurrentUserPassword(newPassword);
+    const updatedProfile = validateSessionProfile(
+      await clearRequiredPasswordChange() || {
+        ...state.sessionUser,
+        mustChangePassword: false
+      }
+    );
+
+    state.user = buildSessionUser(updatedProfile);
+    state.sessionUser = updatedProfile;
+    saveState();
+    navigate("home");
+  } catch (error) {
+    console.error("Required password change failed:", error);
+    renderRequiredPasswordChange(error.message || "Unable to change the password.");
+  }
 }
 
 function renderShell() {
@@ -854,6 +1047,24 @@ function printReceipt() {
   window.print();
 }
 
+function printModalReport() {
+  if (isPrintingModal) {
+    return;
+  }
+
+  isPrintingModal = true;
+  document.body.classList.add("printing-report");
+
+  const cleanup = () => {
+    isPrintingModal = false;
+    document.body.classList.remove("printing-report");
+    window.removeEventListener("afterprint", cleanup);
+  };
+
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+}
+
 
 function openModal(content) {
   modalBody.innerHTML = content;
@@ -887,12 +1098,16 @@ window.app = {
   openModal,
   closeModal,
   resetData
+  ,
+  getCurrentPage: () => currentPage
 };
 
 window.navigate = navigate;
 window.login = login;
+window.completeRequiredPasswordChange = completeRequiredPasswordChange;
 window.closeModal = closeModal;
 window.printReceipt = printReceipt;
+window.printModalReport = printModalReport;
 window.resetData = resetData;
 
 renderSplash();
@@ -921,51 +1136,44 @@ const authReady = new Promise((resolve) => {
 observeAuthState(async (firebaseUser) => {
   try {
     if (!firebaseUser) {
+      stopCloudListeners();
       if (state.user || state.sessionUser) {
         state.user = null;
         state.sessionUser = null;
         saveState();
       }
+      setCloudStatus({ connected: false, message: "Sign in to sync data" });
       authReadyResolver?.();
       authReadyResolver = null;
       return;
     }
 
     await syncAuthenticatedUser(firebaseUser.uid);
+    void ensureAuthenticatedCloudSync();
   } catch (error) {
     console.error("Auth state sync failed:", error);
+    stopCloudListeners();
     state.user = null;
     state.sessionUser = null;
     saveState();
+    setCloudStatus({ connected: false, message: "Sign in to sync data" });
   } finally {
     authReadyResolver?.();
     authReadyResolver = null;
   }
 });
 
-async function startCloudProductSyncInBackground() {
-  try {
-    await startCloudProductSync();
-  } catch (error) {
-    setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
-    console.error("Cloud startup sync failed:", error);
-  }
-}
-
 async function bootApp() {
-  const syncPromise = startCloudProductSyncInBackground();
-  const initialSyncWindow = Promise.race([
-    syncPromise,
-    wait(INITIAL_SYNC_WAIT_MS).then(() => {
-      setCloudStatus({ connected: false, message: "Ready" });
-    })
-  ]);
-
   await Promise.all([
     wait(SPLASH_MINIMUM_MS),
-    initialSyncWindow,
     authReady
   ]);
+
+  if (isLoggedIn()) {
+    await waitForInitialCloudSync();
+  } else {
+    setCloudStatus({ connected: false, message: "Ready" });
+  }
 
   renderCurrentEntryPage();
 }
@@ -973,7 +1181,7 @@ async function bootApp() {
 window.addEventListener("online", () => {
   setCloudStatus({ connected: false, message: "Reconnecting to Firestore" });
   void retryPendingSalesSync();
-  void startCloudProductSync();
+  void ensureAuthenticatedCloudSync();
 });
 
 window.addEventListener("offline", () => {

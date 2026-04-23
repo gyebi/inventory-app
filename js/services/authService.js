@@ -3,7 +3,8 @@ import { getState, setState } from "../state.js";
 import {
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  updatePassword
 } from "firebase/auth";
 import { auth } from "../firebase.js";
 
@@ -118,6 +119,22 @@ export function observeAuthState(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
+export async function updateCurrentUserPassword(newPassword) {
+  if (!auth.currentUser) {
+    throw new Error("No authenticated user is available for password change.");
+  }
+
+  try {
+    await updatePassword(auth.currentUser, newPassword);
+  } catch (error) {
+    if (error?.code === "auth/requires-recent-login") {
+      throw new Error("Please sign out and sign back in before changing your password.");
+    }
+
+    throw new Error(extractFirebaseErrorMessage(error, "Unable to update the password."));
+  }
+}
+
 export function normalizeUserProfile(profile) {
   if (!profile) {
     return null;
@@ -158,6 +175,11 @@ export function validateSessionProfile(profile) {
   }
 
   return normalizedProfile;
+}
+
+export function isPasswordChangeRequired(profile) {
+  const normalizedProfile = normalizeUserProfile(profile);
+  return normalizedProfile?.mustChangePassword === true;
 }
 
 function buildSessionUser(profile) {

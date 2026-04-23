@@ -3,6 +3,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase.js";
 
 const ENSURE_SIGNED_IN_USER_PROFILE_FUNCTION = "ensureSignedInUserProfile";
+const CLEAR_REQUIRED_PASSWORD_CHANGE_FUNCTION = "clearRequiredPasswordChange";
 
 export async function getUserProfile(uid) {
   if (!uid) {
@@ -30,4 +31,10 @@ export async function getUserProfile(uid) {
 async function ensureSignedInUserProfile() {
   const callable = httpsCallable(functions, ENSURE_SIGNED_IN_USER_PROFILE_FUNCTION);
   await callable({});
+}
+
+export async function clearRequiredPasswordChange() {
+  const callable = httpsCallable(functions, CLEAR_REQUIRED_PASSWORD_CHANGE_FUNCTION);
+  const result = await callable({});
+  return result?.data?.user || null;
 }

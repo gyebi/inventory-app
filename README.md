@@ -31,11 +31,14 @@ Deploy Cloud Functions:
 npm run deploy:functions
 ```
 
-Current callable backend function:
+Current callable backend functions:
 
 - `createStaffUser`
+- `ensureSignedInUserProfile`
+- `clearRequiredPasswordChange`
 
 Notes:
 
+- on a brand-new project with an empty `users` collection, the first signed-in Firebase Auth user is bootstrapped as `admin`
+- after that first bootstrap, every additional user must have a staff profile created by an admin
 - the app currently supports a temporary legacy login fallback while Firebase Auth migration is in progress
-- the staff page will try the secure backend function first, then fall back to a Firestore profile-only save if the function is not deployed yet

@@ -16,6 +16,8 @@ const toCloudUser = (user) => ({
   role: user.role,
   active: user.active !== false && user.isActive !== false,
   pendingAuthCreation: user.pendingAuthCreation === true,
+  mustChangePassword: user.mustChangePassword === true,
+  credentialSetupMode: user.credentialSetupMode || null,
   updatedAt: serverTimestamp(),
   createdBy: user.createdBy || null
 });

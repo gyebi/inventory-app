@@ -122,6 +122,45 @@ async function findUserDocsByEmail(email) {
   return snapshot.docs;
 }
 
+async function hasAnyUserProfiles() {
+  const snapshot = await db
+    .collection("users")
+    .limit(1)
+    .get();
+
+  return !snapshot.empty;
+}
+
+async function bootstrapFirstAdminProfile({ uid, userRecord, email }) {
+  const fullName = userRecord.displayName || email;
+  const adminProfile = {
+    uid,
+    fullName,
+    email,
+    username: "",
+    role: "admin",
+    active: true,
+    pendingAuthCreation: false,
+    authProvider: Array.isArray(userRecord.providerData) && userRecord.providerData.length > 0
+      ? userRecord.providerData[0].providerId || "password"
+      : "password",
+    mustChangePassword: false,
+    credentialSetupMode: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    bootstrapMethod: "first_sign_in"
+  };
+
+  await db.collection("users").doc(uid).set(adminProfile, { merge: true });
+
+  return {
+    uid,
+    ...adminProfile,
+    createdAt: undefined,
+    updatedAt: undefined
+  };
+}
+
 function selectUserDocForMigration(userDocs = [], uid) {
   const matchingUidDoc = userDocs.find((doc) => doc.id === uid);
 
@@ -163,6 +202,7 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
   const temporaryPassword = String(payload.temporaryPassword || "").trim();
   const passwordSetupUrl = resolvePasswordSetupUrl(payload.passwordSetupUrl);
   const credentialSetupMode = temporaryPassword ? "temporary_password" : "setup_link";
+  const mustChangePassword = credentialSetupMode === "temporary_password";
 
   await ensureUniqueUsernameWithinUsers(username, pendingUserSnapshot?.id || null);
 
@@ -211,7 +251,7 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
     active,
     pendingAuthCreation: false,
     authProvider: "password",
-    mustChangePassword: true,
+    mustChangePassword,
     credentialSetupMode,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -236,7 +276,7 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
       role,
       active,
       pendingAuthCreation: false,
-      mustChangePassword: true,
+      mustChangePassword,
       credentialSetupMode,
       passwordSetupLink
     }
@@ -273,7 +313,19 @@ exports.ensureSignedInUserProfile = onCall({ cors: ALLOWED_ORIGINS }, async (req
   const sourceSnapshot = selectUserDocForMigration(userDocs, uid);
 
   if (!sourceSnapshot) {
-    throw new HttpsError("not-found", "No matching Firestore user profile was found for this email.");
+    if (!(await hasAnyUserProfiles())) {
+      const bootstrappedUser = await bootstrapFirstAdminProfile({ uid, userRecord, email });
+
+      return {
+        ok: true,
+        user: bootstrappedUser
+      };
+    }
+
+    throw new HttpsError(
+      "not-found",
+      "No matching Firestore user profile was found for this email. Ask an admin to create your staff profile first."
+    );
   }
 
   const sourceData = sourceSnapshot.data() || {};
@@ -300,6 +352,38 @@ exports.ensureSignedInUserProfile = onCall({ cors: ALLOWED_ORIGINS }, async (req
       uid,
       ...migratedDoc,
       updatedAt: undefined
+    }
+  };
+});
+
+exports.clearRequiredPasswordChange = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const userRef = db.collection("users").doc(request.auth.uid);
+  const snapshot = await userRef.get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "User profile not found.");
+  }
+
+  const currentUser = snapshot.data() || {};
+
+  await userRef.set(
+    {
+      mustChangePassword: false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  return {
+    ok: true,
+    user: {
+      uid: request.auth.uid,
+      ...currentUser,
+      mustChangePassword: false
     }
   };
 });
