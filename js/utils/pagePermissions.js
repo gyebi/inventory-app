@@ -2,6 +2,7 @@ export const pagePermissions = {
   dashboard: "view_dashboard",
   sales: "create_sale",
   receiveStock: "manage_stock",
+  stockAdjustment: "manage_stock",
   inventory: "manage_stock",
   suppliers: "manage_stock",
   addProduct: "add_product",

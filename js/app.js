@@ -44,6 +44,7 @@ const defaultState = {
   sales: [],
   suppliers: [],
   stockReceipts: [],
+  stockAdjustments: [],
   settings: {
     lowStockThreshold: 10,
     salesSyncEndpoint: null,
@@ -228,6 +229,7 @@ function canSyncAllUsers() {
 
 function rebuildStockFromCloudReceipts() {
   const soldByBatch = new Map();
+  const adjustedByBatch = new Map();
 
   state.sales.forEach((sale) => {
     (sale.items || []).forEach((item) => {
@@ -240,15 +242,35 @@ function rebuildStockFromCloudReceipts() {
     });
   });
 
+  (state.stockAdjustments || []).forEach((adjustment) => {
+    if (Array.isArray(adjustment.batchAllocations) && adjustment.batchAllocations.length > 0) {
+      adjustment.batchAllocations.forEach((allocation) => {
+        adjustedByBatch.set(
+          allocation.batchId,
+          (adjustedByBatch.get(allocation.batchId) || 0) + Number(allocation.quantity || 0)
+        );
+      });
+      return;
+    }
+
+    if (adjustment.batchId) {
+      adjustedByBatch.set(
+        adjustment.batchId,
+        (adjustedByBatch.get(adjustment.batchId) || 0) + Number(adjustment.baseQuantityAffected || adjustment.quantityAffected || 0)
+      );
+    }
+  });
+
   const receiptStock = state.stockReceipts.map((receipt) => {
     const originalQuantity = Number(receipt.quantityReceived || 0);
     const soldQuantity = soldByBatch.get(receipt.batchId) || 0;
+    const adjustedQuantity = adjustedByBatch.get(receipt.batchId) || 0;
 
     return {
       id: receipt.batchId,
       productId: receipt.productId,
       productName: receipt.product,
-      quantity: Math.max(originalQuantity - soldQuantity, 0),
+      quantity: Math.max(originalQuantity - soldQuantity - adjustedQuantity, 0),
       bulkUnitsReceived: receipt.bulkUnitsReceived || 0,
       baseUnitsReceived: receipt.baseUnitsReceived || 0,
       receivedBy: receipt.receivedBy || "",
@@ -280,6 +302,10 @@ function rebuildStockFromCloudReceipts() {
     }));
 
   state.stock = [...receiptStock, ...syntheticStock];
+
+  state.products.forEach((product) => {
+    product.quantity = getSellableStockQuantity(product.id);
+  });
 }
 
 function replaceStockReceipts(receipts = []) {
@@ -475,6 +501,7 @@ async function waitForInitialCloudSync() {
 const menuItems = [
   { page: "addProduct", icon: "➕", title: "Add Product", text: "Create product details" },
   { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
+  { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment", text: "Record damaged, lost, expired, or broken stock" },
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
   { page: "reports", icon: "📑", title: "Reports", text: "Open product and sales reports" },
@@ -542,6 +569,7 @@ function navigate(page) {
   if (page === "dashboard" || page === "reports") window.renderDashboard?.();
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
+  if (page === "stockAdjustment") window.renderStockAdjustment?.();
   if (page === "suppliers") window.renderSuppliers?.();
   if (page === "sales") window.renderSales?.();
   if (page === "inventory") window.renderInventory?.();
@@ -962,6 +990,11 @@ function ensureStockState() {
     changed = true;
   }
 
+  if (!Array.isArray(state.stockAdjustments)) {
+    state.stockAdjustments = [];
+    changed = true;
+  }
+
   state.products.forEach((product) => {
     const trackedQuantity = getBatchQuantityTotal(getBatchesByProductId(product.id));
 
@@ -1092,6 +1125,7 @@ window.app = {
   getExpiredStockQuantity,
   getSellableStockQuantity,
   syncProductQuantities,
+  allocateStockFromBatches,
   createStockBatchId,
   isBatchExpired,
   getCurrentDateTimeValue: window.getCurrentDateTimeValue,
@@ -1117,6 +1151,7 @@ window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
 
 await import("./pages/addProduct.js");
 await import("./pages/receiveStock.js");
+await import("./pages/stockAdjustment.js");
 await import("./pages/suppliers.js");
 await import("./pages/sales.js");
 await import("./pages/inventory.js");

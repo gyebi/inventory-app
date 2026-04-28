@@ -76,7 +76,7 @@ function renderStaff(error = "", values = {}, success = "") {
     </div>
 
     <div class="card">
-      Staff accounts must be created through the secure backend so Firebase Auth and Firestore stay in sync.
+      Create staff login accounts here. After creating an account, copy the setup message and send it to the staff member manually.
     </div>
 
     <h3>Staff Users</h3>
@@ -186,7 +186,7 @@ async function addStaffUser() {
     setStaffProcessing(true);
     const backendResult = await tryCreateStaffUserWithBackend(staffUser, tempPassword);
     const createdUser = normalizeCreatedStaffUser(staffUser, backendResult);
-    const successMessage = buildStaffCreationSuccessMessage(backendResult);
+    const successMessage = buildStaffCreationSuccessMessage(createdUser, backendResult, tempPassword);
 
     upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser);
     saveState();
@@ -251,17 +251,82 @@ function normalizeCreatedStaffUser(staffUser, backendResult) {
   };
 }
 
-function buildStaffCreationSuccessMessage(backendResult) {
+function buildStaffCreationSuccessMessage(createdUser, backendResult, tempPassword = "") {
+  const setupMessage = buildStaffSetupMessage(createdUser, backendResult, tempPassword);
   const setupMode = backendResult?.user?.credentialSetupMode;
   const setupLink = backendResult?.user?.passwordSetupLink;
+  const setupMessageId = `staffSetupMessage_${Date.now()}`;
+  const copyButtonId = `${setupMessageId}_copyButton`;
 
   if (setupMode === "setup_link" && setupLink) {
-    const escapedLink = escapeHtml(setupLink);
-
-    return `Staff account created securely. Share this password setup link with the staff member: <a href="${escapedLink}" target="_blank" rel="noopener noreferrer">Open setup link</a>`;
+    return `
+      Staff account created successfully.
+      <div class="staff-setup-card">
+        <p>Send this setup message to ${escapeHtml(createdUser.fullName || createdUser.email)}.</p>
+        <textarea id="${setupMessageId}" rows="7" readonly>${escapeHtml(setupMessage)}</textarea>
+        <button id="${copyButtonId}" type="button" onclick="copyStaffSetupMessage('${setupMessageId}', '${copyButtonId}')">Copy Setup Message</button>
+        <a href="${escapeHtml(setupLink)}" target="_blank" rel="noopener noreferrer">Open setup link</a>
+      </div>
+    `;
   }
 
-  return "Staff account created through the secure backend. The user must sign in with their email and temporary password, then change that password before using the app.";
+  return `
+    Staff account created successfully.
+    <div class="staff-setup-card">
+      <p>Send this login message to ${escapeHtml(createdUser.fullName || createdUser.email)}.</p>
+      <textarea id="${setupMessageId}" rows="7" readonly>${escapeHtml(setupMessage)}</textarea>
+      <button id="${copyButtonId}" type="button" onclick="copyStaffSetupMessage('${setupMessageId}', '${copyButtonId}')">Copy Setup Message</button>
+    </div>
+  `;
+}
+
+function buildStaffSetupMessage(createdUser, backendResult, tempPassword = "") {
+  const setupMode = backendResult?.user?.credentialSetupMode;
+  const setupLink = backendResult?.user?.passwordSetupLink;
+  const lines = [
+    `Hello ${createdUser.fullName || createdUser.email},`,
+    "",
+    "Your CALKRIS-DARF VENTURES inventory account has been created.",
+    `Login email: ${createdUser.email}`,
+    `Role: ${formatRole(createdUser.role)}`
+  ];
+
+  if (setupMode === "setup_link" && setupLink) {
+    lines.push("", "Use this link to set your password:", setupLink);
+  } else {
+    lines.push(
+      "",
+      `Temporary password: ${tempPassword || "Use the temporary password shared by your admin."}`,
+      "After signing in, you may be asked to change this password."
+    );
+  }
+
+  lines.push("", "Please keep your login details private.");
+
+  return lines.join("\n");
+}
+
+async function copyStaffSetupMessage(messageId, buttonId) {
+  const messageElement = document.getElementById(messageId);
+  const button = document.getElementById(buttonId);
+
+  if (!messageElement) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(messageElement.value);
+
+    if (button) {
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = "Copy Setup Message";
+      }, 1800);
+    }
+  } catch (error) {
+    messageElement.focus();
+    messageElement.select();
+  }
 }
 
 function upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUser) {
@@ -280,3 +345,4 @@ function upsertLocalStaffUser(createdUser, existingEmailUser, existingUsernameUs
 
 window.renderStaff = renderStaff;
 window.addStaffUser = addStaffUser;
+window.copyStaffSetupMessage = copyStaffSetupMessage;

@@ -30,6 +30,7 @@ const defaultState = {
   sales: [],
   suppliers: [],
   stockReceipts: [],
+  stockAdjustments: [],
 
   settings: {
     lowStockThreshold: 10,
@@ -60,6 +61,10 @@ if (!Array.isArray(state.stock)) {
 
 if (!state.stockReceipts) {
   state.stockReceipts = [];
+}
+
+if (!Array.isArray(state.stockAdjustments)) {
+  state.stockAdjustments = [];
 }
 
 if (!state.settings) {

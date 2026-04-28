@@ -1,16 +1,25 @@
 const {
   ensureStockState,
   formatReceiptCurrency,
-  formatStock,
   getCurrentPage,
   getExpiredStockQuantity,
-  getSellableBatches,
-  parseExpiryDate,
   openModal,
   renderPage,
   resetData,
   state
 } = window.app;
+
+const dateFilterReportTypes = new Set([
+  "salesByProduct",
+  "salesPeriods",
+  "profit",
+  "stockMovement",
+  "damagedLost",
+  "purchases"
+]);
+
+const reportDateFilters = {};
+const reportSalesPersonFilters = {};
 
 function renderDashboard() {
   ensureStockState();
@@ -68,12 +77,11 @@ function renderReportsPage() {
     </div>
 
     <div class="stats-grid">
-      ${renderReportCard("currentStock", "📋", "Current Stock Report", "Print all current stock balances")}
       ${renderReportCard("lowStock", "⚠️", "Low Stock Report", "See items below reorder level")}
       ${renderReportCard("reorder", "🔁", "Reorder Report", "Highlight products that need replenishment")}
       ${renderReportCard("salesByProduct", "🛒", "Sales by Product Report", "Summarize sales grouped by product")}
       ${renderReportCard("salesPeriods", "🗓️", "Daily/Weekly/Monthly Sales", "Compare sales across time periods")}
-      ${renderReportCard("profit", "💰", "Profit Report", "Review profit from completed sales")}
+      ${renderReportCard("profit", "💰", "Sales Report by Sales Person", "Review sales grouped by cashier")}
       ${renderReportCard("stockMovement", "📈", "Stock Movement Report", "Track stock in and stock out")}
       ${renderReportCard("damagedLost", "🧯", "Damaged/Lost Items Report", "Show adjustments for damaged or lost stock")}
       ${renderReportCard("purchases", "📥", "Purchase Report", "List stock receipts and supplier purchases")}
@@ -99,6 +107,8 @@ function showDashboardDetails(type) {
     <div class="dashboard-modal printable-report">
       <h3>${report.title}</h3>
       ${report.subtitle ? `<p class="report-subtitle">${report.subtitle}</p>` : ""}
+      ${renderReportDateFilters(type)}
+      ${renderSalesPersonFilter(type)}
       <div class="dashboard-detail-list">${report.body}</div>
       <div class="report-actions">
         <button type="button" onclick="printModalReport()">Print Report</button>
@@ -108,16 +118,63 @@ function showDashboardDetails(type) {
   `);
 }
 
-function buildReport(type) {
-  const generatedAt = `Generated ${new Date().toLocaleString()}`;
-
-  if (type === "currentStock") {
-    return {
-      title: "Current Stock Report",
-      subtitle: generatedAt,
-      body: buildCurrentStockReport()
-    };
+function renderReportDateFilters(type) {
+  if (!dateFilterReportTypes.has(type)) {
+    return "";
   }
+
+  const filters = getReportDateFilters(type);
+
+  return `
+    <div class="report-filter-row">
+      <label>
+        <span>From</span>
+        <input
+          type="date"
+          value="${filters.from}"
+          onchange="updateReportDateFilter('${type}', 'from', this.value)"
+        >
+      </label>
+      <label>
+        <span>To</span>
+        <input
+          type="date"
+          value="${filters.to}"
+          onchange="updateReportDateFilter('${type}', 'to', this.value)"
+        >
+      </label>
+      <button type="button" onclick="clearReportFilters('${type}')">Clear Filters</button>
+    </div>
+  `;
+}
+
+function renderSalesPersonFilter(type) {
+  if (type !== "profit") {
+    return "";
+  }
+
+  const selectedSalesPerson = getReportSalesPersonFilter(type);
+  const salesPeople = getSalesPeopleForFilter();
+
+  return `
+    <div class="report-filter-row">
+      <label>
+        <span>Sales Person</span>
+        <select onchange="updateReportSalesPersonFilter('${type}', this.value)">
+          <option value="">All Sales Persons</option>
+          ${salesPeople.map((person) => `
+            <option value="${escapeHtml(person.key)}" ${person.key === selectedSalesPerson ? "selected" : ""}>
+              ${escapeHtml(person.name)}
+            </option>
+          `).join("")}
+        </select>
+      </label>
+    </div>
+  `;
+}
+
+function buildReport(type) {
+  const generatedAt = `Generated ${new Date().toLocaleString()}${getReportFilterSummary(type)}`;
 
   if (type === "products") {
     return {
@@ -161,9 +218,9 @@ function buildReport(type) {
 
   if (type === "profit") {
     return {
-      title: "Profit Report",
+      title: "Sales Report by Sales Person",
       subtitle: generatedAt,
-      body: buildProfitReport()
+      body: buildSalesBySalesPersonReport()
     };
   }
 
@@ -204,44 +261,6 @@ function buildReport(type) {
     subtitle: generatedAt,
     body: `<div class="card">This report is not available yet.</div>`
   };
-}
-
-function buildCurrentStockReport() {
-  if (state.products.length === 0) {
-    return `<div class="card">No products added yet.</div>`;
-  }
-
-  return buildTableMarkup(
-    [
-      "Product Name",
-      "Product ID",
-      "Category",
-      "Quantity on Hand",
-      "Stock Value",
-      "Reorder Level",
-      "Stock Status",
-      "Expiry Date"
-    ],
-    state.products
-      .slice()
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((product) => {
-        const quantityOnHand = Number(product.quantity || 0);
-        const reorderLevel = getProductLowStockThreshold(product);
-        const stockValue = quantityOnHand * Number(product.costPrice || 0);
-
-        return [
-          product.name,
-          product.id || "N/A",
-          product.category || "N/A",
-          formatStock(product),
-          formatReceiptCurrency(stockValue),
-          `${reorderLevel} ${product.baseUnit}(s)`,
-          getStockStatus(product, quantityOnHand, reorderLevel),
-          getNextExpiryDate(product.id)
-        ];
-      })
-  );
 }
 
 function buildProductReport() {
@@ -311,7 +330,7 @@ function buildReorderReport() {
 }
 
 function buildSalesByProductReport() {
-  const groupedSales = getSalesGroupedByProduct();
+  const groupedSales = getSalesGroupedByProduct(getFilteredSales("salesByProduct"));
 
   if (groupedSales.length === 0) {
     return `<div class="card">No sales recorded yet.</div>`;
@@ -331,10 +350,11 @@ function buildSalesByProductReport() {
 
 function buildSalesPeriodReport() {
   const today = new Date();
+  const sales = getFilteredSales("salesPeriods");
   const periods = [
-    buildSalesPeriodSummary("Today", (saleDate) => isSameDay(saleDate, today)),
-    buildSalesPeriodSummary("This Week", (saleDate) => isInCurrentWeek(saleDate, today)),
-    buildSalesPeriodSummary("This Month", (saleDate) => isInCurrentMonth(saleDate, today))
+    buildSalesPeriodSummary(sales, "Today", (saleDate) => isSameDay(saleDate, today)),
+    buildSalesPeriodSummary(sales, "This Week", (saleDate) => isInCurrentWeek(saleDate, today)),
+    buildSalesPeriodSummary(sales, "This Month", (saleDate) => isInCurrentMonth(saleDate, today))
   ];
 
   return buildTableMarkup(
@@ -349,22 +369,24 @@ function buildSalesPeriodReport() {
   );
 }
 
-function buildProfitReport() {
-  if (state.sales.length === 0) {
-    return `<div class="card">No profit entries yet.</div>`;
+function buildSalesBySalesPersonReport() {
+  const sales = getFilteredSales("profit");
+
+  if (sales.length === 0) {
+    return `<div class="card">No sales recorded for the selected filters.</div>`;
   }
 
   return buildTableMarkup(
-    ["Date", "Products", "Amount", "Profit", "Cashier"],
-    state.sales
+    ["Date", "Sales Person", "Products", "Sales Amount", "Profit"],
+    sales
       .slice()
-      .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime())
+      .sort((left, right) => getReportTime(right.createdAt || right.date) - getReportTime(left.createdAt || left.date))
       .map((sale) => [
         getSaleTimestamp(sale),
+        getSalePersonName(sale),
         getSalePrimaryName(sale),
         formatReceiptCurrency(sale.totalAmount),
-        formatReceiptCurrency(getSaleProfit(sale)),
-        sale.createdBy?.fullName || sale.user || "Unknown"
+        formatReceiptCurrency(getSaleProfit(sale))
       ])
   );
 }
@@ -390,7 +412,8 @@ function buildStockMovementReport() {
       }))
     ))
   ]
-    .sort((left, right) => new Date(right.date || 0).getTime() - new Date(left.date || 0).getTime());
+    .filter((movement) => isWithinReportDateRange("stockMovement", movement.date))
+    .sort((left, right) => getReportTime(right.date) - getReportTime(left.date));
 
   if (movements.length === 0) {
     return `<div class="card">No stock movements recorded yet.</div>`;
@@ -410,24 +433,84 @@ function buildStockMovementReport() {
 }
 
 function buildDamagedLostReport() {
+  const adjustments = getDamagedLostAdjustments()
+    .filter((adjustment) => isWithinReportDateRange("damagedLost", getAdjustmentDate(adjustment)))
+    .sort((left, right) => getReportTime(getAdjustmentDate(right)) - getReportTime(getAdjustmentDate(left)));
+
+  const headers = [
+    "Date",
+    "Product Name",
+    "Product ID",
+    "Category",
+    "Quantity Affected",
+    "Unit",
+    "Adjustment Type",
+    "Reason / Notes",
+    "Cost Price",
+    "Total Loss Value",
+    "Batch Number",
+    "Expiry Date",
+    "Recorded By",
+    "Branch / Warehouse"
+  ];
+
+  const table = buildTableMarkup(
+    headers,
+    adjustments.map((adjustment) => {
+      const product = getProductById(adjustment.productId);
+      const quantityAffected = Number(adjustment.quantityAffected ?? adjustment.quantity ?? 0);
+      const unit = adjustment.unit || product?.baseUnit || "N/A";
+      const costPrice = Number(adjustment.costPrice ?? product?.costPrice ?? 0);
+      const totalLossValue = Number(adjustment.totalLossValue ?? adjustment.lossValue ?? (quantityAffected * costPrice));
+
+      return [
+        formatDateTime(getAdjustmentDate(adjustment)),
+        adjustment.productName || adjustment.product || product?.name || "Unknown product",
+        adjustment.productId || product?.id || "N/A",
+        adjustment.category || product?.category || "N/A",
+        String(quantityAffected),
+        unit,
+        adjustment.adjustmentType || adjustment.type || "N/A",
+        adjustment.reason || adjustment.notes || "N/A",
+        formatReceiptCurrency(costPrice),
+        formatReceiptCurrency(totalLossValue),
+        adjustment.batchNumber || adjustment.batchId || "N/A",
+        adjustment.expiryDate ? formatDate(adjustment.expiryDate) : "N/A",
+        getAdjustmentRecorder(adjustment),
+        adjustment.branch || adjustment.warehouse || adjustment.location || "N/A"
+      ];
+    })
+  );
+
+  if (adjustments.length > 0) {
+    return table;
+  }
+
   return `
     <div class="card">
       No damaged or lost stock adjustments have been recorded yet.
       Add a stock adjustment workflow to populate this report.
     </div>
+    ${table}
   `;
 }
 
 function buildPurchaseReport() {
-  if (state.stockReceipts.length === 0) {
+  const receipts = state.stockReceipts.filter((receipt) => (
+    isWithinReportDateRange("purchases", receipt.receivedAt || receipt.createdAt)
+  ));
+
+  if (receipts.length === 0) {
     return `<div class="card">No stock receipts recorded yet.</div>`;
   }
 
   return buildTableMarkup(
     ["Date", "Product", "Supplier", "Quantity Received", "Payment", "Invoice"],
-    state.stockReceipts
+    receipts
       .slice()
-      .sort((left, right) => new Date(right.receivedAt || right.createdAt || 0).getTime() - new Date(left.receivedAt || left.createdAt || 0).getTime())
+      .sort((left, right) => (
+        getReportTime(right.receivedAt || right.createdAt) - getReportTime(left.receivedAt || left.createdAt)
+      ))
       .map((receipt) => [
         formatDateTime(receipt.receivedAt || receipt.createdAt),
         receipt.product || getProductName(receipt.productId),
@@ -500,33 +583,6 @@ function getProductLowStockThreshold(product) {
   return Number(product.lowStockThreshold || state.settings?.lowStockThreshold || 10);
 }
 
-function getStockStatus(product, quantityOnHand = Number(product.quantity || 0), reorderLevel = getProductLowStockThreshold(product)) {
-  const expiredQuantity = getExpiredStockQuantity(product.id);
-
-  if (quantityOnHand <= 0) {
-    return "Out of stock";
-  }
-
-  if (quantityOnHand <= reorderLevel) {
-    return "Reorder";
-  }
-
-  if (expiredQuantity > 0) {
-    return "Has expired stock";
-  }
-
-  return "In stock";
-}
-
-function getNextExpiryDate(productId) {
-  const nextExpiry = getSellableBatches(productId)
-    .map((batch) => parseExpiryDate(batch.expiryDate))
-    .filter(Boolean)
-    .sort((left, right) => left.getTime() - right.getTime())[0];
-
-  return nextExpiry ? nextExpiry.toLocaleDateString() : "N/A";
-}
-
 function getProductById(productId) {
   return state.products.find((product) => product.id === productId);
 }
@@ -537,6 +593,44 @@ function getProductName(productId) {
 
 function getProductBaseUnit(productId) {
   return getProductById(productId)?.baseUnit || "base unit";
+}
+
+function getDamagedLostAdjustments() {
+  const adjustments = state.stockAdjustments || state.damagedLostAdjustments || state.adjustments || [];
+
+  if (!Array.isArray(adjustments)) {
+    return [];
+  }
+
+  return adjustments.filter((adjustment) => {
+    const type = String(adjustment.adjustmentType || adjustment.type || "").toLowerCase();
+
+    return [
+      "damaged",
+      "lost",
+      "expired",
+      "breakage",
+      "theft",
+      "leakage"
+    ].includes(type);
+  });
+}
+
+function getAdjustmentDate(adjustment) {
+  return adjustment.date || adjustment.adjustedAt || adjustment.recordedAt || adjustment.createdAt || "";
+}
+
+function getAdjustmentRecorder(adjustment) {
+  if (typeof adjustment.recordedBy === "string") {
+    return adjustment.recordedBy;
+  }
+
+  return adjustment.recordedBy?.fullName ||
+    adjustment.recordedBy?.username ||
+    adjustment.createdBy?.fullName ||
+    adjustment.createdBy?.username ||
+    adjustment.user ||
+    "Unknown";
 }
 
 function getLatestSupplierForProduct(productId) {
@@ -577,16 +671,16 @@ function getSalePrimaryName(sale) {
 
 function getSaleTimestamp(sale) {
   if (sale.createdAt) {
-    return new Date(sale.createdAt).toLocaleString();
+    return formatDateTime(sale.createdAt);
   }
 
   return sale.date || "N/A";
 }
 
-function getSalesGroupedByProduct() {
+function getSalesGroupedByProduct(sales = state.sales) {
   const grouped = new Map();
 
-  state.sales.forEach((sale) => {
+  sales.forEach((sale) => {
     getSaleItems(sale).forEach((item) => {
       const existing = grouped.get(item.productId) || {
         name: item.name,
@@ -605,7 +699,7 @@ function getSalesGroupedByProduct() {
     });
   });
 
-  state.sales.forEach((sale) => {
+  sales.forEach((sale) => {
     const saleItems = getSaleItems(sale);
     const totalUnits = saleItems.reduce((sum, item) => sum + Number(item.actualQtySold || item.quantity || 0), 0);
 
@@ -625,8 +719,8 @@ function getSalesGroupedByProduct() {
   return Array.from(grouped.values()).sort((left, right) => right.amount - left.amount);
 }
 
-function buildSalesPeriodSummary(label, matcher) {
-  return state.sales.reduce((summary, sale) => {
+function buildSalesPeriodSummary(sales, label, matcher) {
+  return sales.reduce((summary, sale) => {
     const saleDate = getSaleDate(sale);
 
     if (!saleDate || !matcher(saleDate)) {
@@ -647,11 +741,155 @@ function buildSalesPeriodSummary(label, matcher) {
   });
 }
 
+function getReportDateFilters(type) {
+  return {
+    from: reportDateFilters[type]?.from || "",
+    to: reportDateFilters[type]?.to || ""
+  };
+}
+
+function updateReportDateFilter(type, field, value) {
+  reportDateFilters[type] = {
+    ...getReportDateFilters(type),
+    [field]: value
+  };
+  showDashboardDetails(type);
+}
+
+function updateReportSalesPersonFilter(type, value) {
+  reportSalesPersonFilters[type] = value;
+  showDashboardDetails(type);
+}
+
+function clearReportFilters(type) {
+  reportDateFilters[type] = {
+    from: "",
+    to: ""
+  };
+  reportSalesPersonFilters[type] = "";
+  showDashboardDetails(type);
+}
+
+function getReportSalesPersonFilter(type) {
+  return reportSalesPersonFilters[type] || "";
+}
+
+function getReportFilterSummary(type) {
+  const summaries = [];
+
+  if (dateFilterReportTypes.has(type)) {
+    const { from, to } = getReportDateFilters(type);
+
+    if (from || to) {
+      summaries.push(`Date range: ${from || "Start"} to ${to || "Today"}`);
+    }
+  }
+
+  if (type === "profit") {
+    const selectedPerson = getReportSalesPersonFilter(type);
+    const selectedName = getSalesPeopleForFilter().find((person) => person.key === selectedPerson)?.name;
+
+    if (selectedName) {
+      summaries.push(`Sales person: ${selectedName}`);
+    }
+  }
+
+  return summaries.length > 0 ? ` | ${summaries.join(" | ")}` : "";
+}
+
+function getFilteredSales(type) {
+  return state.sales.filter((sale) => (
+    isWithinReportDateRange(type, sale.createdAt || sale.date) &&
+    isMatchingSalesPersonFilter(type, sale)
+  ));
+}
+
+function isMatchingSalesPersonFilter(type, sale) {
+  if (type !== "profit") {
+    return true;
+  }
+
+  const selectedPerson = getReportSalesPersonFilter(type);
+  return !selectedPerson || getSalePersonKey(sale) === selectedPerson;
+}
+
+function isWithinReportDateRange(type, value) {
+  if (!dateFilterReportTypes.has(type)) {
+    return true;
+  }
+
+  const date = parseReportRecordDate(value);
+
+  if (!date) {
+    return false;
+  }
+
+  const { from, to } = getReportDateFilters(type);
+  const fromDate = parseReportFilterDate(from, false);
+  const toDate = parseReportFilterDate(to, true);
+
+  if (fromDate && date < fromDate) {
+    return false;
+  }
+
+  if (toDate && date > toDate) {
+    return false;
+  }
+
+  return true;
+}
+
+function parseReportRecordDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = value.toDate?.() || new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getReportTime(value) {
+  return parseReportRecordDate(value)?.getTime() || 0;
+}
+
+function parseReportFilterDate(value, isEndOfDay) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(`${value}T${isEndOfDay ? "23:59:59.999" : "00:00:00.000"}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function getSaleDate(sale) {
   const value = sale.createdAt || sale.date;
-  const parsed = value ? new Date(value) : null;
+  return parseReportRecordDate(value);
+}
 
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+function getSalePersonName(sale) {
+  return sale.createdBy?.fullName || sale.createdBy?.username || sale.user || "Unknown";
+}
+
+function getSalePersonKey(sale) {
+  return sale.createdBy?.id || sale.createdBy?.username || getSalePersonName(sale);
+}
+
+function getSalesPeopleForFilter() {
+  const salesPeople = new Map();
+
+  state.sales.forEach((sale) => {
+    const key = getSalePersonKey(sale);
+
+    if (key && !salesPeople.has(key)) {
+      salesPeople.set(key, {
+        key,
+        name: getSalePersonName(sale)
+      });
+    }
+  });
+
+  return Array.from(salesPeople.values())
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function isSameDay(left, right) {
@@ -683,9 +921,26 @@ function formatDateTime(value) {
     return "N/A";
   }
 
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  const parsed = parseReportRecordDate(value);
+  return parsed ? parsed.toLocaleString() : value;
+}
+
+function formatDate(value) {
+  const parsed = parseReportRecordDate(value);
+  return parsed ? parsed.toLocaleDateString() : value;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 window.renderDashboard = renderDashboard;
 window.showDashboardDetails = showDashboardDetails;
+window.updateReportDateFilter = updateReportDateFilter;
+window.updateReportSalesPersonFilter = updateReportSalesPersonFilter;
+window.clearReportFilters = clearReportFilters;

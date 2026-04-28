@@ -360,6 +360,32 @@ button {
   margin-top: 16px;
 }
 
+.report-filter-row {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.report-filter-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.report-filter-row span {
+  color: var(--brand-muted);
+  font-size: 13px;
+}
+
+.report-filter-row input,
+.report-filter-row select {
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
 .report-card-button {
   min-height: 150px;
 }
@@ -483,6 +509,29 @@ button {
   width: 100%;
 }
 
+.staff-setup-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.staff-setup-card p {
+  margin: 0;
+}
+
+.staff-setup-card textarea {
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  box-sizing: border-box;
+  min-height: 150px;
+  padding: 10px;
+  width: 100%;
+}
+
+.staff-setup-card button {
+  justify-self: start;
+}
+
 .form-column {
   box-sizing: border-box;
   display: grid;
@@ -504,7 +553,8 @@ button {
 }
 
 .form-row input,
-.form-row select {
+.form-row select,
+.form-row textarea {
   border: 1px solid #b8cbb1;
   border-radius: 8px;
   box-sizing: border-box;
@@ -693,6 +743,7 @@ p {
   .form-row label,
   .form-row input,
   .form-row select,
+  .form-row textarea,
   .form-row .number-field {
     width: 100%;
     max-width: 100%;
