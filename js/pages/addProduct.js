@@ -55,6 +55,11 @@ function renderAddProduct(error = "") {
       </div>
 
       <div class="form-row">
+        <label for="lowStockThreshold">Reorder Level in Base Units</label>
+        <input id="lowStockThreshold" class="number-field" type="number" min="0" step="1" value="10">
+      </div>
+
+      <div class="form-row">
         <label for="costPrice">Cost Price Per Base Unit</label>
         <input id="costPrice" class="number-field" type="number" min="0" step="0.01">
       </div>
@@ -118,6 +123,7 @@ async function addProduct() {
   const baseUnit = document.getElementById("baseUnit").value.trim();
   const bulkUnit = document.getElementById("bulkUnit").value.trim();
   const unitsPerBulk = Number(document.getElementById("unitsPerBulk").value);
+  const lowStockThreshold = Number(document.getElementById("lowStockThreshold").value);
   const costPrice = Number(document.getElementById("costPrice").value);
   const sellingPrice = Number(document.getElementById("sellingPrice").value);
   const bulkCostPrice = Number(document.getElementById("bulkCostPrice").value);
@@ -148,6 +154,11 @@ async function addProduct() {
 
   if (!Number.isInteger(unitsPerBulk) || unitsPerBulk <= 0) {
     renderAddProduct("Units per bulk must be a whole number greater than zero.");
+    return;
+  }
+
+  if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) {
+    renderAddProduct("Reorder level must be a whole number of base units.");
     return;
   }
 
@@ -188,6 +199,7 @@ async function addProduct() {
     baseUnit,
     bulkUnit,
     unitsPerBulk,
+    lowStockThreshold,
     quantity: 0,
     costPrice,
     sellingPrice,

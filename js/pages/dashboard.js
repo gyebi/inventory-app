@@ -4,6 +4,8 @@ const {
   formatStock,
   getCurrentPage,
   getExpiredStockQuantity,
+  getSellableBatches,
+  parseExpiryDate,
   openModal,
   renderPage,
   resetData,
@@ -210,17 +212,35 @@ function buildCurrentStockReport() {
   }
 
   return buildTableMarkup(
-    ["Product", "Category", "Base Units", "Physical Stock", "Expired Stock"],
+    [
+      "Product Name",
+      "Product ID",
+      "Category",
+      "Quantity on Hand",
+      "Stock Value",
+      "Reorder Level",
+      "Stock Status",
+      "Expiry Date"
+    ],
     state.products
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
-      .map((product) => [
-        product.name,
-        product.category || "N/A",
-        `${product.quantity} ${product.baseUnit}(s)`,
-        formatStock(product),
-        `${getExpiredStockQuantity(product.id)} ${product.baseUnit}(s)`
-      ])
+      .map((product) => {
+        const quantityOnHand = Number(product.quantity || 0);
+        const reorderLevel = getProductLowStockThreshold(product);
+        const stockValue = quantityOnHand * Number(product.costPrice || 0);
+
+        return [
+          product.name,
+          product.id || "N/A",
+          product.category || "N/A",
+          formatStock(product),
+          formatReceiptCurrency(stockValue),
+          `${reorderLevel} ${product.baseUnit}(s)`,
+          getStockStatus(product, quantityOnHand, reorderLevel),
+          getNextExpiryDate(product.id)
+        ];
+      })
   );
 }
 
@@ -478,6 +498,33 @@ function getLowStockProducts() {
 
 function getProductLowStockThreshold(product) {
   return Number(product.lowStockThreshold || state.settings?.lowStockThreshold || 10);
+}
+
+function getStockStatus(product, quantityOnHand = Number(product.quantity || 0), reorderLevel = getProductLowStockThreshold(product)) {
+  const expiredQuantity = getExpiredStockQuantity(product.id);
+
+  if (quantityOnHand <= 0) {
+    return "Out of stock";
+  }
+
+  if (quantityOnHand <= reorderLevel) {
+    return "Reorder";
+  }
+
+  if (expiredQuantity > 0) {
+    return "Has expired stock";
+  }
+
+  return "In stock";
+}
+
+function getNextExpiryDate(productId) {
+  const nextExpiry = getSellableBatches(productId)
+    .map((batch) => parseExpiryDate(batch.expiryDate))
+    .filter(Boolean)
+    .sort((left, right) => left.getTime() - right.getTime())[0];
+
+  return nextExpiry ? nextExpiry.toLocaleDateString() : "N/A";
 }
 
 function getProductById(productId) {
