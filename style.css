@@ -343,8 +343,7 @@ button {
 .dashboard-detail-list {
   display: grid;
   gap: 12px;
-  max-height: min(60vh, 520px);
-  overflow-y: auto;
+  overflow-x: auto;
 }
 
 .dashboard-detail-card {
@@ -530,6 +529,35 @@ button {
 
 .staff-setup-card button {
   justify-self: start;
+}
+
+.purchase-form {
+  max-width: 760px;
+}
+
+.purchase-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.purchase-line {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.purchase-line-header,
+.purchase-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.purchase-line-header button,
+.purchase-actions button {
+  margin: 0;
 }
 
 .form-column {
@@ -764,15 +792,18 @@ p {
 /* Modal  styles */
 
 .modal {
+  align-items: flex-start;
+  background: rgba(0,0,0,0.5);
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  left: 0;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 28px 14px;
   position: fixed;
   top: 0;
-  left: 0;
   width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .hidden {
@@ -782,8 +813,10 @@ p {
 .modal-content {
   background: var(--brand-surface);
   box-sizing: border-box;
+  max-height: calc(100vh - 56px);
   padding: 20px;
   max-width: 640px;
+  overflow-y: auto;
   width: min(640px, calc(100vw - 28px));
   border-radius: 10px;
 }

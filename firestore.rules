@@ -64,6 +64,11 @@ service cloud.firestore {
       allow create, update, delete: if canManageStock();
     }
 
+    match /supplierPayments/{paymentId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageStock();
+    }
+
     match /sales/{saleId} {
       allow read: if signedIn();
       allow create: if canCreateSale();

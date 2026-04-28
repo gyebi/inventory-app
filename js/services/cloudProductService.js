@@ -102,6 +102,43 @@ export async function receiveStockInCloudTransaction({
   };
 }
 
+export async function receivePurchaseInCloudTransaction({ lines = [] }) {
+  const batch = writeBatch(db);
+  const savedLines = [];
+
+  lines.forEach((line) => {
+    const productRef = doc(db, "products", line.productId);
+    const receiptRef = doc(stockReceiptsCollection);
+    const receivedQuantity = Number(line.quantityReceived || 0);
+
+    batch.update(productRef, {
+      quantity: increment(receivedQuantity),
+      updatedAt: serverTimestamp()
+    });
+
+    batch.set(receiptRef, {
+      ...line.receipt,
+      id: receiptRef.id,
+      productId: line.productId,
+      quantityReceived: receivedQuantity,
+      createdAt: serverTimestamp()
+    });
+
+    savedLines.push({
+      productId: line.productId,
+      quantityReceived: receivedQuantity,
+      receiptId: receiptRef.id,
+      batchId: line.receipt?.batchId
+    });
+  });
+
+  await batch.commit();
+
+  return {
+    lines: savedLines
+  };
+}
+
 export async function submitSaleToCloudTransaction({
   sale,
   stockDeductions

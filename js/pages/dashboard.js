@@ -4,8 +4,8 @@ const {
   getCurrentPage,
   getExpiredStockQuantity,
   openModal,
+  refreshFromCloud,
   renderPage,
-  resetData,
   state
 } = window.app;
 
@@ -31,6 +31,8 @@ function renderDashboard() {
 
   const totalSales = state.sales.reduce((sum, sale) => sum + getTotalUnitsSold(sale), 0);
   const totalProfit = state.sales.reduce((sum, sale) => sum + getSaleProfit(sale), 0);
+  const totalStockValue = getTotalStockValue();
+  const supplierPayables = getSupplierPayablesSummary();
   const lowStockProducts = getLowStockProducts();
 
   renderPage(`
@@ -58,6 +60,18 @@ function renderDashboard() {
         <small>Total Profit</small>
       </button>
 
+      <button class="card stat-card stat-button" onclick="showDashboardDetails('inventoryValuation')">
+        <span>🏷️</span>
+        <strong>${formatReceiptCurrency(totalStockValue)}</strong>
+        <small>Total Amount in Stock Currently</small>
+      </button>
+
+      <button class="card stat-card stat-button" onclick="showDashboardDetails('supplierOwed')">
+        <span>🤝</span>
+        <strong>${formatReceiptCurrency(supplierPayables.totalBalance)}</strong>
+        <small>Total Amount Owed</small>
+      </button>
+
       <button class="card stat-card stat-button" onclick="showDashboardDetails('lowStock')">
         <span>⚠️</span>
         <strong>${lowStockProducts.length}</strong>
@@ -65,7 +79,7 @@ function renderDashboard() {
       </button>
     </div>
 
-    <button class="danger-button" onclick="resetData()">Reset Data</button>
+    <button type="button" onclick="refreshFromCloud()">Refresh From Cloud</button>
   `);
 }
 
@@ -253,6 +267,14 @@ function buildReport(type) {
       title: "Inventory Valuation Report",
       subtitle: generatedAt,
       body: buildInventoryValuationReport()
+    };
+  }
+
+  if (type === "supplierOwed") {
+    return {
+      title: "Supplier Amount Owed",
+      subtitle: generatedAt,
+      body: buildSupplierAmountOwedReport()
     };
   }
 
@@ -497,7 +519,7 @@ function buildDamagedLostReport() {
 
 function buildPurchaseReport() {
   const receipts = state.stockReceipts.filter((receipt) => (
-    isWithinReportDateRange("purchases", receipt.receivedAt || receipt.createdAt)
+    isWithinReportDateRange("purchases", receipt.purchaseDate || receipt.receivedAt || receipt.createdAt)
   ));
 
   if (receipts.length === 0) {
@@ -505,19 +527,39 @@ function buildPurchaseReport() {
   }
 
   return buildTableMarkup(
-    ["Date", "Product", "Supplier", "Quantity Received", "Payment", "Invoice"],
+    [
+      "Supplier",
+      "Invoice Number",
+      "Purchase Date",
+      "Due Date",
+      "Product",
+      "Bulk Units",
+      "Base Units",
+      "Quantity",
+      "Unit Cost",
+      "Total Amount",
+      "Payment Type",
+      "Notes"
+    ],
     receipts
       .slice()
       .sort((left, right) => (
-        getReportTime(right.receivedAt || right.createdAt) - getReportTime(left.receivedAt || left.createdAt)
+        getReportTime(right.purchaseDate || right.receivedAt || right.createdAt) -
+        getReportTime(left.purchaseDate || left.receivedAt || left.createdAt)
       ))
       .map((receipt) => [
-        formatDateTime(receipt.receivedAt || receipt.createdAt),
-        receipt.product || getProductName(receipt.productId),
         receipt.supplier || "N/A",
+        receipt.invoiceNumber || receipt.invoiceDetails || "N/A",
+        formatDateTime(receipt.purchaseDate || receipt.receivedAt || receipt.createdAt),
+        receipt.dueDate || "N/A",
+        receipt.product || getProductName(receipt.productId),
+        `${Number(receipt.bulkUnitsReceived || 0)} ${receipt.bulkUnit || getProductById(receipt.productId)?.bulkUnit || "bulk unit"}(s)`,
+        `${Number(receipt.baseUnitsReceived || 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
         `${Number(receipt.quantityReceived || 0)} ${getProductBaseUnit(receipt.productId)}(s)`,
+        formatReceiptCurrency(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0),
+        formatReceiptCurrency(receipt.lineTotal ?? (Number(receipt.quantityReceived || 0) * Number(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0))),
         receipt.paymentStatus || "N/A",
-        receipt.invoiceDetails || "N/A"
+        receipt.notes || "N/A"
       ])
   );
 }
@@ -554,6 +596,113 @@ function buildInventoryValuationReport() {
       <strong>Total Inventory Value:</strong> ${formatReceiptCurrency(totalValue)}
     </div>
   `;
+}
+
+function buildSupplierAmountOwedReport() {
+  const summary = getSupplierPayablesSummary();
+
+  if (summary.rows.length === 0) {
+    return `<div class="card">No credit purchases or supplier payments recorded yet.</div>`;
+  }
+
+  const table = buildTableMarkup(
+    [
+      "Supplier",
+      "Credit Purchases",
+      "Amount Paid",
+      "Discount Received",
+      "Penalty Charge",
+      "Amount Owed"
+    ],
+    summary.rows.map((row) => [
+      row.supplier,
+      formatReceiptCurrency(row.creditPurchases),
+      formatReceiptCurrency(row.amountPaid),
+      formatReceiptCurrency(row.discountReceived),
+      formatReceiptCurrency(row.penaltyCharge),
+      formatReceiptCurrency(row.balance)
+    ])
+  );
+
+  return `
+    ${table}
+    <div class="card report-total-card">
+      <strong>Total Amount Owed:</strong> ${formatReceiptCurrency(summary.totalBalance)}
+    </div>
+  `;
+}
+
+function getTotalStockValue() {
+  return state.products.reduce(
+    (sum, product) => sum + (Number(product.quantity || 0) * Number(product.costPrice || 0)),
+    0
+  );
+}
+
+function getSupplierPayablesSummary() {
+  const grouped = new Map();
+
+  getCreditPurchaseReceipts().forEach((receipt) => {
+    const supplier = getSupplierName(receipt.supplier);
+    const entry = getSupplierPayableEntry(grouped, supplier);
+    entry.creditPurchases += getReceiptPurchaseTotal(receipt);
+  });
+
+  (state.supplierPayments || []).forEach((payment) => {
+    const supplier = getSupplierName(payment.supplier);
+    const entry = getSupplierPayableEntry(grouped, supplier);
+    entry.amountPaid += Number(payment.amountPaid || 0);
+    entry.discountReceived += Number(payment.discountReceived || 0);
+    entry.penaltyCharge += Number(payment.penaltyCharge || 0);
+  });
+
+  const rows = Array.from(grouped.values())
+    .map((entry) => ({
+      ...entry,
+      balance: Math.max(
+        entry.creditPurchases - entry.amountPaid - entry.discountReceived + entry.penaltyCharge,
+        0
+      )
+    }))
+    .sort((left, right) => right.balance - left.balance || left.supplier.localeCompare(right.supplier));
+
+  return {
+    rows,
+    totalBalance: rows.reduce((sum, row) => sum + row.balance, 0)
+  };
+}
+
+function getSupplierPayableEntry(grouped, supplier) {
+  if (!grouped.has(supplier)) {
+    grouped.set(supplier, {
+      supplier,
+      creditPurchases: 0,
+      amountPaid: 0,
+      discountReceived: 0,
+      penaltyCharge: 0
+    });
+  }
+
+  return grouped.get(supplier);
+}
+
+function getCreditPurchaseReceipts() {
+  return (state.stockReceipts || []).filter((receipt) => isCreditPurchaseReceipt(receipt));
+}
+
+function isCreditPurchaseReceipt(receipt) {
+  return String(receipt.paymentStatus || receipt.paymentType || "").toLowerCase() === "credit";
+}
+
+function getReceiptPurchaseTotal(receipt) {
+  const quantity = Number(receipt.quantityReceived || 0);
+  const unitCost = Number(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0);
+
+  return Number(receipt.lineTotal ?? receipt.totalAmount ?? (quantity * unitCost));
+}
+
+function getSupplierName(supplier) {
+  return supplier || "Unknown Supplier";
 }
 
 function buildTableMarkup(headers, rows) {

@@ -14,12 +14,16 @@ import {
   fetchSalesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
-import { fetchSuppliersFromCloud } from "./services/cloudSupplierService.js";
+import {
+  fetchSupplierPaymentsFromCloud,
+  fetchSuppliersFromCloud
+} from "./services/cloudSupplierService.js";
 import { fetchUsersFromCloud } from "./services/cloudUserService.js";
 import {
   listenToProducts,
   listenToSales,
   listenToStockReceipts,
+  listenToSupplierPayments,
   listenToSuppliers,
   listenToUsers
 } from "./services/productListenerService.js";
@@ -45,6 +49,7 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   stockAdjustments: [],
+  supplierPayments: [],
   settings: {
     lowStockThreshold: 10,
     salesSyncEndpoint: null,
@@ -60,6 +65,7 @@ let stopStockReceiptsListener = null;
 let stopSalesListener = null;
 let stopUsersListener = null;
 let stopSuppliersListener = null;
+let stopSupplierPaymentsListener = null;
 let cloudSyncPromise = null;
 let currentPage = "home";
 let cloudStatus = {
@@ -344,6 +350,12 @@ function replaceSuppliers(suppliers = []) {
   saveState();
 }
 
+function replaceSupplierPayments(payments = []) {
+  state.supplierPayments = Array.isArray(payments) ? payments : [];
+  markCloudUpdated("Supplier payments synced");
+  saveState();
+}
+
 function stopCloudListeners() {
   if (stopProductsListener) {
     stopProductsListener();
@@ -369,23 +381,29 @@ function stopCloudListeners() {
     stopSuppliersListener();
     stopSuppliersListener = null;
   }
+
+  if (stopSupplierPaymentsListener) {
+    stopSupplierPaymentsListener();
+    stopSupplierPaymentsListener = null;
+  }
 }
 
-async function startCloudProductSync() {
+async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   await migrateLocalProductsToCloudOnce();
   await migrateLocalSuppliersToCloudOnce();
 
   const syncUsers = canSyncAllUsers();
 
-  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers] = await Promise.all([
+  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
     fetchProductsFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
     syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
-    fetchSuppliersFromCloud()
+    fetchSuppliersFromCloud(),
+    fetchSupplierPaymentsFromCloud()
   ]);
 
-  if (cloudProducts.length > 0) {
+  if (cloudProducts.length > 0 || forceReplaceProducts) {
     replaceProducts(cloudProducts);
   }
 
@@ -398,6 +416,7 @@ async function startCloudProductSync() {
     saveState();
   }
   replaceSuppliers(cloudSuppliers);
+  replaceSupplierPayments(cloudSupplierPayments);
 
   stopCloudListeners();
 
@@ -452,6 +471,16 @@ async function startCloudProductSync() {
       console.error("Supplier listener failed:", error);
     }
   );
+
+  stopSupplierPaymentsListener = listenToSupplierPayments(
+    (payments) => {
+      replaceSupplierPayments(payments);
+    },
+    (error) => {
+      setCloudStatus({ connected: false, message: "Supplier payment sync error" });
+      console.error("Supplier payment listener failed:", error);
+    }
+  );
 }
 
 function isReadyForProtectedCloudSync() {
@@ -501,6 +530,7 @@ async function waitForInitialCloudSync() {
 const menuItems = [
   { page: "addProduct", icon: "➕", title: "Add Product", text: "Create product details" },
   { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
+  { page: "supplierPayment", icon: "🧾", title: "Supplier Payment", text: "Record payments against supplier invoices" },
   { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment", text: "Record damaged, lost, expired, or broken stock" },
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
@@ -569,6 +599,7 @@ function navigate(page) {
   if (page === "dashboard" || page === "reports") window.renderDashboard?.();
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
+  if (page === "supplierPayment") window.renderSupplierPayment?.();
   if (page === "stockAdjustment") window.renderStockAdjustment?.();
   if (page === "suppliers") window.renderSuppliers?.();
   if (page === "sales") window.renderSales?.();
@@ -995,6 +1026,11 @@ function ensureStockState() {
     changed = true;
   }
 
+  if (!Array.isArray(state.supplierPayments)) {
+    state.supplierPayments = [];
+    changed = true;
+  }
+
   state.products.forEach((product) => {
     const trackedQuantity = getBatchQuantityTotal(getBatchesByProductId(product.id));
 
@@ -1069,11 +1105,27 @@ function allocateStockFromBatches(productId, quantityNeeded) {
   return allocations;
 }
 
-function resetData() {
-  localStorage.removeItem("inventoryState");
-  localStorage.removeItem("inventory_app");
-  localStorage.removeItem("inventoryLoggedIn");
-  location.reload();
+async function refreshFromCloud() {
+  if (!isReadyForProtectedCloudSync()) {
+    setCloudStatus({ connected: false, message: "Sign in to refresh data" });
+    navigate("login");
+    return false;
+  }
+
+  const pageToRefresh = currentPage;
+
+  try {
+    setCloudStatus({ connected: false, message: "Refreshing from Firestore" });
+    await startCloudProductSync({ forceReplaceProducts: true });
+    markCloudUpdated("Cloud data refreshed");
+    navigate(pageToRefresh);
+    return true;
+  } catch (error) {
+    setCloudStatus({ connected: false, message: "Cloud refresh failed" });
+    console.error("Cloud refresh failed:", error);
+    alert("Unable to refresh from Firebase right now. Please check your connection and try again.");
+    return false;
+  }
 }
 
 function printReceipt() {
@@ -1131,7 +1183,7 @@ window.app = {
   getCurrentDateTimeValue: window.getCurrentDateTimeValue,
   openModal,
   closeModal,
-  resetData
+  refreshFromCloud
   ,
   getCurrentPage: () => currentPage
 };
@@ -1142,7 +1194,7 @@ window.completeRequiredPasswordChange = completeRequiredPasswordChange;
 window.closeModal = closeModal;
 window.printReceipt = printReceipt;
 window.printModalReport = printModalReport;
-window.resetData = resetData;
+window.refreshFromCloud = refreshFromCloud;
 
 renderSplash();
 
@@ -1151,6 +1203,7 @@ window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
 
 await import("./pages/addProduct.js");
 await import("./pages/receiveStock.js");
+await import("./pages/supplierPayment.js");
 await import("./pages/stockAdjustment.js");
 await import("./pages/suppliers.js");
 await import("./pages/sales.js");
