@@ -1,4 +1,5 @@
 import { getState, setState } from "../state.js";
+import { createAppError, ERROR_FLAGS, toUserMessage } from "../utils/errorUtils.js";
 
 const SALE_SYNC_PENDING = "pending";
 const SALE_SYNC_SYNCED = "synced";
@@ -39,7 +40,10 @@ const markSaleSyncState = (saleId, updates) => {
 
 const syncSaleToCloud = async (sale, endpoint) => {
   if (!endpoint) {
-    throw new Error("Sales sync endpoint is not configured.");
+    throw createAppError("Sales sync is not configured. Add the sync endpoint before retrying.", {
+      code: "sync/missing-endpoint",
+      source: ERROR_FLAGS.SOURCE_SYNC
+    });
   }
 
   const response = await fetch(endpoint, {
@@ -51,7 +55,11 @@ const syncSaleToCloud = async (sale, endpoint) => {
   });
 
   if (!response.ok) {
-    throw new Error(`Cloud sync failed with status ${response.status}.`);
+    throw createAppError("Cloud sales sync failed. Retry once the connection or endpoint is healthy.", {
+      code: `sync/http-${response.status}`,
+      source: ERROR_FLAGS.SOURCE_SYNC,
+      retryable: response.status >= 500
+    });
   }
 
   return response;
@@ -120,7 +128,7 @@ export const attemptSaleSync = async (saleId) => {
   } catch (error) {
     return markSaleSyncState(saleId, {
       syncStatus: SALE_SYNC_FAILED,
-      lastSyncError: error.message || "Unable to sync sale."
+      lastSyncError: toUserMessage(error, "Unable to sync sale.")
     });
   }
 };

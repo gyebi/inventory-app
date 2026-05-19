@@ -1,3 +1,5 @@
+import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
+
 const {
   ensureStockState,
   formatReceiptCurrency,
@@ -316,7 +318,10 @@ function deductAdjustedStock(productId, quantityNeeded, selectedBatchId = "") {
   }
 
   if (remaining > 0) {
-    throw new Error("Not enough stock available for this adjustment.");
+    throw createAppError("Not enough stock is available for this adjustment. Reduce the quantity or choose another batch.", {
+      code: "inventory/insufficient-adjustment-stock",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   return allocations;

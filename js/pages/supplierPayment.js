@@ -1,4 +1,5 @@
 import { saveSupplierPaymentToCloud } from "../services/cloudSupplierService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 12000;
 
@@ -230,7 +231,8 @@ async function saveSupplierPayment() {
     );
   } catch (error) {
     setSupplierPaymentProcessing(false);
-    renderSupplierPayment(error.message || "Unable to save supplier payment.", values);
+    logAppError("Supplier payment save failed", error);
+    renderSupplierPayment(toUserMessage(error, "Unable to save supplier payment. Check your connection and try again."), values);
     return;
   }
 
@@ -318,7 +320,11 @@ function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
 
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = setTimeout(() => reject(createAppError(message, {
+      code: "firestore/save-timeout",
+      source: ERROR_FLAGS.SOURCE_FIRESTORE,
+      retryable: true
+    })), timeoutMs);
   });
 
   return Promise.race([

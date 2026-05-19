@@ -1,6 +1,7 @@
 import { getState, setState } from "../state.js";
 import { submitSaleToCloudTransaction } from "./cloudProductService.js";
 import { getDisplayUnit, toBaseUnit } from "../utils/unitConverter.js";
+import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
 import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 
@@ -68,7 +69,10 @@ const allocateBatchStock = (sellableBatches, quantityToSell) => {
   }
 
   if (remaining > 0) {
-    throw new Error("Not enough sellable stock available in unexpired batches.");
+    throw createAppError("Not enough sellable stock is available in unexpired batches. Receive fresh stock or reduce the sale quantity.", {
+      code: "inventory/insufficient-unexpired-stock",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
   return batchAllocations;
 };
@@ -97,7 +101,10 @@ const previewBatchAllocations = (sellableBatches, quantityToSell) => {
   }
 
   if (remaining > 0) {
-    throw new Error("Not enough sellable stock available in unexpired batches.");
+    throw createAppError("Not enough sellable stock is available in unexpired batches. Receive fresh stock or reduce the sale quantity.", {
+      code: "inventory/insufficient-unexpired-stock",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   return batchAllocations;
@@ -126,7 +133,10 @@ const resolveSaleUnitType = (product, unit) => {
     return "base";
   }
 
-  throw new Error(`Invalid unit: ${unit}`);
+  throw createAppError("The selected sale unit is not valid for this product. Choose base or bulk unit and try again.", {
+    code: "sale/invalid-unit",
+    source: ERROR_FLAGS.SOURCE_VALIDATION
+  });
 };
 
 export const createSale = (cartItems = []) => {
@@ -138,7 +148,10 @@ export const createSale = (cartItems = []) => {
   let profit = 0;
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
-    throw new Error("Add at least one item before recording a sale.");
+    throw createAppError("Add at least one item before recording a sale.", {
+      code: "sale/empty-cart",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   for (const cartItem of cartItems) {
@@ -146,11 +159,17 @@ export const createSale = (cartItems = []) => {
     const product = state.products.find((item) => item.id === productId);
 
     if (!product) {
-      throw new Error(`Product not found: ${productId}`);
+      throw createAppError("One of the selected products could not be found. Refresh inventory and try again.", {
+        code: "sale/product-not-found",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
     }
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
-      throw new Error("Quantity must be a whole number greater than zero.");
+      throw createAppError("Quantity must be a whole number greater than zero.", {
+        code: "sale/invalid-quantity",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
     }
 
     const normalizedSaleUnit = resolveSaleUnitType(product, unit);
@@ -161,7 +180,10 @@ export const createSale = (cartItems = []) => {
     const sellableQuantity = sellableBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
 
     if (actualQtySold > sellableQuantity) {
-      throw new Error(`Not enough sellable stock available for ${product.name}. Current sellable stock is ${sellableQuantity} ${product.baseUnit}(s).`);
+      throw createAppError(`Not enough sellable stock available for ${product.name}. Current sellable stock is ${sellableQuantity} ${product.baseUnit}(s).`, {
+        code: "inventory/insufficient-stock",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
     }
 
     const itemTotal = unitSellingPrice * quantity;

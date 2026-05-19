@@ -1,4 +1,5 @@
 import { saveProductToCloud } from "../services/cloudProductService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
@@ -133,7 +134,7 @@ async function addProduct() {
   );
 
   if (!name) {
-    renderAddProduct("Product name is required.");
+    renderAddProduct("Enter the product name before saving.");
     return;
   }
 
@@ -143,12 +144,12 @@ async function addProduct() {
   }
 
   if (!baseUnit) {
-    renderAddProduct("Base unit is required.");
+    renderAddProduct("Choose the base unit used for single-item stock counts.");
     return;
   }
 
   if (!bulkUnit) {
-    renderAddProduct("Bulk unit is required.");
+    renderAddProduct("Choose the bulk unit used when receiving grouped stock.");
     return;
   }
 
@@ -216,7 +217,8 @@ async function addProduct() {
     );
   } catch (error) {
     setAddProductProcessing(false);
-    renderAddProduct(error.message || "Unable to save product to Firestore.");
+    logAppError("Product save failed", error);
+    renderAddProduct(toUserMessage(error, "Unable to save product to Firestore. Check your connection and try again."));
     return;
   }
 
@@ -239,7 +241,11 @@ function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
 
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = setTimeout(() => reject(createAppError(message, {
+      code: "firestore/save-timeout",
+      source: ERROR_FLAGS.SOURCE_FIRESTORE,
+      retryable: true
+    })), timeoutMs);
   });
 
   return Promise.race([

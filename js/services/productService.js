@@ -1,4 +1,5 @@
 import { getState, setState } from "../state.js";
+import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
 
 export const createProductId = () => {
   return `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
@@ -17,7 +18,10 @@ export const addProduct = (product) => {
   );
 
   if (exists) {
-    throw new Error("Product already exists");
+    throw createAppError("A product with this name already exists.", {
+      code: "product/duplicate-name",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   state.products.push({

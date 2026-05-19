@@ -7,6 +7,11 @@ import {
   updatePassword
 } from "firebase/auth";
 import { auth } from "../firebase.js";
+import {
+  createAppError,
+  ERROR_FLAGS,
+  normalizeFirebaseError
+} from "../utils/errorUtils.js";
 
 
 const rolePermissions = {
@@ -21,22 +26,6 @@ const rolePermissions = {
 
 function isKnownRole(role) {
   return Object.prototype.hasOwnProperty.call(rolePermissions, role);
-}
-
-function extractFirebaseErrorMessage(error, fallbackMessage) {
-  if (!error) {
-    return fallbackMessage;
-  }
-
-  if (typeof error.message === "string" && error.message.trim()) {
-    return error.message;
-  }
-
-  if (typeof error.code === "string" && error.code.trim()) {
-    return error.code;
-  }
-
-  return fallbackMessage;
 }
 
 export const login = async (email, password) => {
@@ -82,21 +71,33 @@ export const hasPermission = (action) => {
 
 export const requireRole = (roles = []) => {
   if (!isAuthenticated()) {
-    throw new Error("Login required");
+    throw createAppError("Sign in before opening this page.", {
+      code: "auth/login-required",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   if (!hasAnyRole(Array.isArray(roles) ? roles : [roles])) {
-    throw new Error("Access denied");
+    throw createAppError("You do not have permission to open this page.", {
+      code: "auth/access-denied",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 };
 
 export const requirePermission = (action) => {
   if (!isAuthenticated()) {
-    throw new Error("Login required");
+    throw createAppError("Sign in before opening this page.", {
+      code: "auth/login-required",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   if (!hasPermission(action)) {
-    throw new Error("Access denied");
+    throw createAppError("You do not have permission to complete this action.", {
+      code: "auth/access-denied",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 };
 
@@ -107,7 +108,9 @@ export async function loginWithEmail(email, password) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return userCredential.user;
   } catch (error) {
-    throw new Error(extractFirebaseErrorMessage(error, "Unable to sign in with email and password."));
+    throw normalizeFirebaseError(error, "Unable to sign in. Check the email and password, then try again.", {
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 }
 
@@ -121,17 +124,18 @@ export function observeAuthState(callback) {
 
 export async function updateCurrentUserPassword(newPassword) {
   if (!auth.currentUser) {
-    throw new Error("No authenticated user is available for password change.");
+    throw createAppError("Sign in again before changing your password.", {
+      code: "auth/no-current-user",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   try {
     await updatePassword(auth.currentUser, newPassword);
   } catch (error) {
-    if (error?.code === "auth/requires-recent-login") {
-      throw new Error("Please sign out and sign back in before changing your password.");
-    }
-
-    throw new Error(extractFirebaseErrorMessage(error, "Unable to update the password."));
+    throw normalizeFirebaseError(error, "Unable to update the password. Check the new password and try again.", {
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 }
 
@@ -163,15 +167,24 @@ export function validateSessionProfile(profile) {
   const normalizedProfile = normalizeUserProfile(profile);
 
   if (!normalizedProfile?.uid) {
-    throw new Error("User profile is incomplete.");
+    throw createAppError("Your staff profile is incomplete. Ask an administrator to review your account.", {
+      code: "auth/profile-incomplete",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   if (!normalizedProfile.active) {
-    throw new Error("This account has been deactivated");
+    throw createAppError("This account has been deactivated. Contact an administrator.", {
+      code: "auth/account-deactivated",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   if (!isKnownRole(normalizedProfile.role)) {
-    throw new Error("This account does not have a valid role assigned.");
+    throw createAppError("This account does not have a valid role assigned. Ask an administrator to update it.", {
+      code: "auth/invalid-role",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
   }
 
   return normalizedProfile;

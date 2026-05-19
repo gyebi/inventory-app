@@ -1,5 +1,6 @@
 import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
+import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const { ensureStockState, renderPage, state } = window.app;
 let saleCart = [];
@@ -275,7 +276,7 @@ function addSaleCartItem() {
   const existingBaseQuantity = getCartProductBaseQuantity(product);
 
   if (requestedBaseQuantity + existingBaseQuantity > Number(product.quantity || 0)) {
-    renderSales(`Not enough stock available for ${product.name}.`);
+    renderSales(`Not enough stock available for ${product.name}. Reduce the quantity or refresh inventory before trying again.`);
     return;
   }
 
@@ -320,7 +321,8 @@ async function recordSale() {
     renderReceiptPage(sale);
   } catch (error) {
     setSaleProcessing(false);
-    renderSales(error.message || "Unable to complete the sale.");
+    logAppError("Sale completion failed", error);
+    renderSales(toUserMessage(error, "Unable to complete the sale. Check stock availability and try again."));
   }
 }
 

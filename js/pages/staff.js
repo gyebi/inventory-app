@@ -1,4 +1,5 @@
 import { createStaffUserAccount } from "../services/staffAccountService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
@@ -193,7 +194,8 @@ async function addStaffUser() {
     renderStaff("", {}, successMessage);
   } catch (error) {
     setStaffProcessing(false);
-    renderStaff(error.message || "Unable to create the staff account securely.", values);
+    logAppError("Staff account creation failed", error);
+    renderStaff(toUserMessage(error, "Unable to create the staff account securely. Check the details and try again."), values);
     return;
   }
 }
@@ -206,7 +208,11 @@ function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
 
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = setTimeout(() => reject(createAppError(message, {
+      code: "functions/staff-create-timeout",
+      source: ERROR_FLAGS.SOURCE_FUNCTIONS,
+      retryable: true
+    })), timeoutMs);
   });
 
   return Promise.race([
@@ -232,7 +238,10 @@ async function tryCreateStaffUserWithBackend(staffUser, tempPassword = "") {
   );
 
   if (!result?.ok || !result?.user?.uid) {
-    throw new Error("Secure staff account creation did not complete successfully.");
+    throw createAppError("Secure staff account creation did not complete successfully. Try again or contact support.", {
+      code: "functions/staff-create-incomplete",
+      source: ERROR_FLAGS.SOURCE_FUNCTIONS
+    });
   }
 
   return result;

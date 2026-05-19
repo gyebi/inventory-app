@@ -1,4 +1,5 @@
 import { saveSupplierToCloud } from "../services/cloudSupplierService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
@@ -151,7 +152,8 @@ async function addSupplier() {
     );
   } catch (error) {
     setSupplierProcessing(false);
-    renderSuppliers(error.message || "Unable to save supplier to Firestore.", values);
+    logAppError("Supplier save failed", error);
+    renderSuppliers(toUserMessage(error, "Unable to save supplier to Firestore. Check your connection and try again."), values);
     return;
   }
 
@@ -167,7 +169,11 @@ function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
 
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = setTimeout(() => reject(createAppError(message, {
+      code: "firestore/save-timeout",
+      source: ERROR_FLAGS.SOURCE_FIRESTORE,
+      retryable: true
+    })), timeoutMs);
   });
 
   return Promise.race([

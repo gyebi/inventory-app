@@ -1,4 +1,5 @@
 import { receivePurchaseInCloudTransaction } from "../services/cloudProductService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 12000;
 
@@ -374,7 +375,8 @@ async function receiveStock() {
 
     applyPurchaseLocally({ receipts, cloudLines: cloudResult?.lines || [] });
   } catch (error) {
-    renderReceiveStock(error.message || "Unable to save purchase to Firestore.", { ...values, lines });
+    logAppError("Purchase save failed", error);
+    renderReceiveStock(toUserMessage(error, "Unable to save purchase to Firestore. Check your connection and try again."), { ...values, lines });
     return;
   } finally {
     setReceiveStockProcessing(false);
@@ -513,7 +515,11 @@ function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
 
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = setTimeout(() => reject(createAppError(message, {
+      code: "firestore/save-timeout",
+      source: ERROR_FLAGS.SOURCE_FIRESTORE,
+      retryable: true
+    })), timeoutMs);
   });
 
   return Promise.race([

@@ -1,29 +1,11 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase.js";
+import {
+  ERROR_FLAGS,
+  normalizeFirebaseError
+} from "../utils/errorUtils.js";
 
 const CREATE_STAFF_USER_FUNCTION = "createStaffUser";
-
-function extractCallableErrorMessage(error) {
-  if (!error) {
-    return "Unable to create the staff account.";
-  }
-
-  const callableMessage = error.details?.message || error.details?.error?.message;
-
-  if (typeof callableMessage === "string" && callableMessage.trim()) {
-    return callableMessage;
-  }
-
-  if (typeof error.message === "string" && error.message.trim()) {
-    return error.message;
-  }
-
-  if (typeof error.code === "string" && error.code.trim()) {
-    return error.code;
-  }
-
-  return "Unable to create the staff account.";
-}
 
 export async function createStaffUserAccount(payload) {
   try {
@@ -32,6 +14,8 @@ export async function createStaffUserAccount(payload) {
 
     return result?.data || null;
   } catch (error) {
-    throw new Error(extractCallableErrorMessage(error));
+    throw normalizeFirebaseError(error, "Unable to create the staff account. Check the details and try again.", {
+      source: ERROR_FLAGS.SOURCE_FUNCTIONS
+    });
   }
 }

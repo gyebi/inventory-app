@@ -31,6 +31,7 @@ import { migrateLocalProductsToCloudOnce } from "./services/productMigrationServ
 import { migrateLocalSuppliersToCloudOnce } from "./services/supplierMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
 import { clearRequiredPasswordChange, getUserProfile } from "./services/userProfileService.js";
+import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "./utils/errorUtils.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
 const app = document.getElementById("app");
@@ -120,6 +121,7 @@ function loadAppState() {
         : []
     };
   } catch (error) {
+    logAppError("Saved app state could not be loaded", error);
     return structuredClone(defaultState);
   }
 }
@@ -167,6 +169,11 @@ function markCloudUpdated(message = "Firestore connected") {
     message,
     lastUpdatedAt: new Date().toISOString()
   });
+}
+
+function handleCloudListenerError(label, error) {
+  setCloudStatus({ connected: false, message: `${label} sync needs attention` });
+  logAppError(`${label} listener failed`, error);
 }
 
 function replaceProducts(products = []) {
@@ -425,8 +432,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       replaceProducts(products);
     },
     (error) => {
-      setCloudStatus({ connected: false, message: "Product sync error" });
-      console.error("Product listener failed:", error);
+      handleCloudListenerError("Product", error);
     }
   );
 
@@ -435,8 +441,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       replaceStockReceipts(receipts);
     },
     (error) => {
-      setCloudStatus({ connected: false, message: "Stock sync error" });
-      console.error("Stock receipt listener failed:", error);
+      handleCloudListenerError("Stock receipt", error);
     }
   );
 
@@ -445,8 +450,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       replaceSales(sales);
     },
     (error) => {
-      setCloudStatus({ connected: false, message: "Sales sync error" });
-      console.error("Sales listener failed:", error);
+      handleCloudListenerError("Sales", error);
     }
   );
 
@@ -456,8 +460,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
         replaceUsers(users);
       },
       (error) => {
-        setCloudStatus({ connected: false, message: "User sync error" });
-        console.error("User listener failed:", error);
+        handleCloudListenerError("User", error);
       }
     );
   }
@@ -467,8 +470,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       replaceSuppliers(suppliers);
     },
     (error) => {
-      setCloudStatus({ connected: false, message: "Supplier sync error" });
-      console.error("Supplier listener failed:", error);
+      handleCloudListenerError("Supplier", error);
     }
   );
 
@@ -477,8 +479,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       replaceSupplierPayments(payments);
     },
     (error) => {
-      setCloudStatus({ connected: false, message: "Supplier payment sync error" });
-      console.error("Supplier payment listener failed:", error);
+      handleCloudListenerError("Supplier payment", error);
     }
   );
 }
@@ -501,8 +502,8 @@ async function ensureAuthenticatedCloudSync() {
         await startCloudProductSync();
         return true;
       } catch (error) {
-        setCloudStatus({ connected: false, message: "Cloud sync unavailable" });
-        console.error("Cloud startup sync failed:", error);
+        setCloudStatus({ connected: false, message: "Cloud sync needs attention" });
+        logAppError("Cloud startup sync failed", error);
         return false;
       } finally {
         cloudSyncPromise = null;
@@ -742,8 +743,8 @@ async function login() {
     await waitForInitialCloudSync();
     navigate("home");
   } catch (error) {
-    console.error("Login failed:", error);
-    renderLogin(error.message || "Login failed.");
+    logAppError("Login failed", error);
+    renderLogin(toUserMessage(error, "Unable to sign in. Check the email and password, then try again."));
   }
 }
 
@@ -765,7 +766,10 @@ async function authenticateUser(identifier, password) {
   const normalizedIdentifier = identifier.trim().toLowerCase();
 
   if (!normalizedIdentifier.includes("@")) {
-    throw new Error("Use the staff email address to sign in.");
+    throw createAppError("Use the staff email address to sign in.", {
+      code: "auth/email-required",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   try {
@@ -786,7 +790,7 @@ async function logout() {
   try {
     await logoutUser();
   } catch (error) {
-    console.error("Logout failed:", error);
+    logAppError("Logout failed", error);
   }
 
   stopCloudListeners();
@@ -862,8 +866,8 @@ async function completeRequiredPasswordChange() {
     saveState();
     navigate("home");
   } catch (error) {
-    console.error("Required password change failed:", error);
-    renderRequiredPasswordChange(error.message || "Unable to change the password.");
+    logAppError("Required password change failed", error);
+    renderRequiredPasswordChange(toUserMessage(error, "Unable to change the password. Check the new password and try again."));
   }
 }
 
@@ -1097,7 +1101,10 @@ function allocateStockFromBatches(productId, quantityNeeded) {
   }
 
   if (remaining > 0) {
-    throw new Error("Not enough sellable stock available in unexpired batches.");
+    throw createAppError("Not enough sellable stock is available in unexpired batches. Receive fresh stock or reduce the sale quantity.", {
+      code: "inventory/insufficient-unexpired-stock",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
   }
 
   syncProductQuantities();
@@ -1121,9 +1128,9 @@ async function refreshFromCloud() {
     navigate(pageToRefresh);
     return true;
   } catch (error) {
-    setCloudStatus({ connected: false, message: "Cloud refresh failed" });
-    console.error("Cloud refresh failed:", error);
-    alert("Unable to refresh from Firebase right now. Please check your connection and try again.");
+    setCloudStatus({ connected: false, message: "Cloud refresh needs attention" });
+    logAppError("Cloud refresh failed", error);
+    alert(toUserMessage(error, "Unable to refresh from Firebase right now. Please check your connection and try again."));
     return false;
   }
 }
@@ -1239,7 +1246,7 @@ observeAuthState(async (firebaseUser) => {
     await syncAuthenticatedUser(firebaseUser.uid);
     void ensureAuthenticatedCloudSync();
   } catch (error) {
-    console.error("Auth state sync failed:", error);
+    logAppError("Auth state sync failed", error);
     stopCloudListeners();
     state.user = null;
     state.sessionUser = null;

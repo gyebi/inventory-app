@@ -9,6 +9,7 @@ import {
   setDoc,
   writeBatch
 } from "firebase/firestore";
+import { createAppError, ERROR_FLAGS, normalizeFirebaseError } from "../utils/errorUtils.js";
 
 const productsCollection = collection(db, "products");
 const salesCollection = collection(db, "sales");
@@ -37,37 +38,53 @@ const fromCloudProduct = (snapshot) => ({
 export async function saveProductToCloud(product) {
   const productRef = doc(db, "products", product.id);
 
-  await setDoc(
-    productRef,
-    {
-      ...toCloudProduct(product),
-      createdAt: product.createdAt || serverTimestamp()
-    },
-    { merge: true }
-  );
+  try {
+    await setDoc(
+      productRef,
+      {
+        ...toCloudProduct(product),
+        createdAt: product.createdAt || serverTimestamp()
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to save the product to Firestore. Check your connection and try again.");
+  }
 
   return productRef;
 }
 
 export async function fetchProductsFromCloud() {
-  const snapshot = await getDocs(productsCollection);
-  return snapshot.docs.map(fromCloudProduct);
+  try {
+    const snapshot = await getDocs(productsCollection);
+    return snapshot.docs.map(fromCloudProduct);
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load products from Firestore. Check your connection and try again.");
+  }
 }
 
 export async function fetchStockReceiptsFromCloud() {
-  const snapshot = await getDocs(stockReceiptsCollection);
-  return snapshot.docs.map((entry) => ({
-    id: entry.id,
-    ...entry.data()
-  }));
+  try {
+    const snapshot = await getDocs(stockReceiptsCollection);
+    return snapshot.docs.map((entry) => ({
+      id: entry.id,
+      ...entry.data()
+    }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load stock receipts from Firestore. Check your connection and try again.");
+  }
 }
 
 export async function fetchSalesFromCloud() {
-  const snapshot = await getDocs(salesCollection);
-  return snapshot.docs.map((entry) => ({
-    id: entry.id,
-    ...entry.data()
-  }));
+  try {
+    const snapshot = await getDocs(salesCollection);
+    return snapshot.docs.map((entry) => ({
+      id: entry.id,
+      ...entry.data()
+    }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load sales from Firestore. Check your connection and try again.");
+  }
 }
 
 export async function receiveStockInCloudTransaction({
@@ -93,7 +110,11 @@ export async function receiveStockInCloudTransaction({
     createdAt: serverTimestamp()
   });
 
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to save the stock receipt to Firestore. Check your connection and try again.");
+  }
 
   return {
     id: productId,
@@ -132,7 +153,11 @@ export async function receivePurchaseInCloudTransaction({ lines = [] }) {
     });
   });
 
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to save the purchase to Firestore. Check your connection and try again.");
+  }
 
   return {
     lines: savedLines
@@ -152,41 +177,51 @@ export async function submitSaleToCloudTransaction({
     return map;
   }, new Map());
 
-  return runTransaction(db, async (transaction) => {
-    const productSnapshots = [];
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const productSnapshots = [];
 
-    for (const [productId, quantity] of deductionsByProduct.entries()) {
-      const productRef = doc(db, "products", productId);
-      const productSnapshot = await transaction.get(productRef);
+      for (const [productId, quantity] of deductionsByProduct.entries()) {
+        const productRef = doc(db, "products", productId);
+        const productSnapshot = await transaction.get(productRef);
 
-      if (!productSnapshot.exists()) {
-        throw new Error(`Product not found in Firestore: ${productId}`);
+        if (!productSnapshot.exists()) {
+          throw createAppError("This product could not be found in Firestore. Refresh inventory and try again.", {
+            code: "firestore/product-not-found",
+            source: ERROR_FLAGS.SOURCE_FIRESTORE
+          });
+        }
+
+        const productData = productSnapshot.data();
+        const currentQuantity = Number(productData.quantity || 0);
+
+        if (currentQuantity < quantity) {
+          throw createAppError(`Not enough stock for ${productData.name || "this product"}. Refresh inventory and try again.`, {
+            code: "inventory/insufficient-cloud-stock",
+            source: ERROR_FLAGS.SOURCE_FIRESTORE
+          });
+        }
+
+        productSnapshots.push({
+          productRef,
+          productData,
+          quantity
+        });
       }
 
-      const productData = productSnapshot.data();
-      const currentQuantity = Number(productData.quantity || 0);
-
-      if (currentQuantity < quantity) {
-        throw new Error(`Not enough stock for ${productData.name || "product"}.`);
+      for (const { productRef, productData, quantity } of productSnapshots) {
+        transaction.update(productRef, {
+          quantity: Number(productData.quantity || 0) - quantity,
+          updatedAt: serverTimestamp()
+        });
       }
 
-      productSnapshots.push({
-        productRef,
-        productData,
-        quantity
+      transaction.set(saleRef, {
+        ...sale,
+        cloudSyncedAt: serverTimestamp()
       });
-    }
-
-    for (const { productRef, productData, quantity } of productSnapshots) {
-      transaction.update(productRef, {
-        quantity: Number(productData.quantity || 0) - quantity,
-        updatedAt: serverTimestamp()
-      });
-    }
-
-    transaction.set(saleRef, {
-      ...sale,
-      cloudSyncedAt: serverTimestamp()
     });
-  });
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to complete the sale in Firestore. Check stock availability and try again.");
+  }
 }
