@@ -130,11 +130,6 @@ function renderPurchaseLine(index, line = {}) {
       </div>
 
       <div class="form-row">
-        <label for="lineUnitCost_${index}">Unit Cost</label>
-        <input id="lineUnitCost_${index}" class="number-field line-unit-cost" type="number" min="0" step="0.01" value="${line.unitCost ?? selectedProduct?.costPrice ?? 0}" oninput="updatePurchaseSummary()">
-      </div>
-
-      <div class="form-row">
         <label for="lineExpiry_${index}">Expiry Date</label>
         <input id="lineExpiry_${index}" class="line-expiry" type="date" value="${line.expiryDate || ""}">
       </div>
@@ -174,13 +169,6 @@ function removePurchaseLine(indexToRemove) {
 
 function handlePurchaseLineProductChange(index) {
   const line = document.querySelector(`[data-line-index="${index}"]`);
-  const product = getProductById(line?.querySelector(".line-product")?.value);
-  const unitCostInput = line?.querySelector(".line-unit-cost");
-
-  if (product && unitCostInput) {
-    unitCostInput.value = Number(product.costPrice || 0);
-  }
-
   updatePurchaseSummary();
 }
 
@@ -205,7 +193,8 @@ function updatePurchaseSummary() {
   lines.forEach((line, index) => {
     const product = getProductById(line.productId);
     const quantityReceived = product ? getLineQuantity(product, line) : 0;
-    const lineTotal = quantityReceived * Number(line.unitCost || 0);
+    const unitCost = Number(product?.costPrice || 0);
+    const lineTotal = quantityReceived * unitCost;
     const preview = document.querySelector(`[data-line-index="${index}"] .line-preview`);
 
     totalAmount += lineTotal;
@@ -272,7 +261,6 @@ function renderStockSaved(receipts, totalAmount, purchaseId) {
           <div><strong>Bulk Units:</strong> ${receipt.bulkUnitsReceived}</div>
           <div><strong>Base Units:</strong> ${receipt.baseUnitsReceived}</div>
           <div><strong>Total Quantity:</strong> ${receipt.quantityReceived} ${escapeHtml(receipt.baseUnit || "base unit")}(s)</div>
-          <div><strong>Unit Cost:</strong> ${formatCurrency(receipt.unitCost)}</div>
           <div><strong>Line Total:</strong> ${formatCurrency(receipt.lineTotal)}</div>
         </div>
       `).join("")}
@@ -388,7 +376,7 @@ async function receiveStock() {
 function buildReceiptFromLine(values, line, purchaseId) {
   const product = getProductById(line.productId);
   const quantityReceived = getLineQuantity(product, line);
-  const unitCost = Number(line.unitCost || 0);
+  const unitCost = Number(product?.costPrice || 0);
   const lineTotal = quantityReceived * unitCost;
   const batchId = createStockBatchId();
 
@@ -444,10 +432,6 @@ function validatePurchaseLines(lines) {
       return `Enter bulk units, base units, or both for line ${lineNumber}.`;
     }
 
-    if (!Number.isFinite(Number(line.unitCost)) || Number(line.unitCost) < 0) {
-      return `Unit cost on line ${lineNumber} must be zero or more.`;
-    }
-
     if (line.expiryDate && isBatchExpired(line.expiryDate)) {
       return `Expiry date on line ${lineNumber} cannot be in the past.`;
     }
@@ -473,7 +457,6 @@ function collectPurchaseLines() {
     productId: line.querySelector(".line-product")?.value || "",
     bulkUnitsReceived: line.querySelector(".line-bulk")?.value || "",
     baseUnitsReceived: line.querySelector(".line-base")?.value || "",
-    unitCost: line.querySelector(".line-unit-cost")?.value || "0",
     expiryDate: line.querySelector(".line-expiry")?.value || ""
   }));
 }
@@ -483,7 +466,6 @@ function createEmptyLine() {
     productId: state.products[0]?.id || "",
     bulkUnitsReceived: "",
     baseUnitsReceived: "",
-    unitCost: state.products[0]?.costPrice ?? 0,
     expiryDate: ""
   };
 }

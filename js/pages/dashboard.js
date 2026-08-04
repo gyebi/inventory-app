@@ -359,10 +359,11 @@ function buildSalesByProductReport() {
   }
 
   return buildTableMarkup(
-    ["Product", "Base Units Sold", "Sales Amount", "Profit", "Transactions"],
+    ["Product", "Base Units Sold", "Bulk Units Sold", "Sales Amount", "Profit", "Transactions"],
     groupedSales.map((entry) => [
       entry.name,
       `${entry.baseUnits} ${entry.baseUnit}(s)`,
+      `${entry.bulkUnits} ${entry.bulkUnit}(s)`,
       formatReceiptCurrency(entry.amount),
       formatReceiptCurrency(entry.profit),
       String(entry.transactions)
@@ -744,6 +745,10 @@ function getProductBaseUnit(productId) {
   return getProductById(productId)?.baseUnit || "base unit";
 }
 
+function getProductBulkUnit(productId) {
+  return getProductById(productId)?.bulkUnit || "bulk unit";
+}
+
 function getDamagedLostAdjustments() {
   const adjustments = state.stockAdjustments || state.damagedLostAdjustments || state.adjustments || [];
 
@@ -835,13 +840,22 @@ function getSalesGroupedByProduct(sales = state.sales) {
         name: item.name,
         productId: item.productId,
         baseUnit: getProductBaseUnit(item.productId),
+        bulkUnit: getProductBulkUnit(item.productId),
         baseUnits: 0,
+        bulkUnits: 0,
         amount: 0,
         profit: 0,
         transactions: 0
       };
 
-      existing.baseUnits += Number(item.actualQtySold || item.quantity || 0);
+      const saleQuantity = Number(item.quantity || 0);
+
+      if ((item.saleUnit || "").toLowerCase() === "bulk") {
+        existing.bulkUnits += saleQuantity;
+      } else {
+        existing.baseUnits += Number(item.actualQtySold || item.quantity || 0);
+      }
+
       existing.amount += Number(item.total || 0);
       existing.transactions += 1;
       grouped.set(item.productId, existing);

@@ -8,13 +8,14 @@ const { state, renderPage, saveState, navigate } = window.app;
 function getCategoryOptions() {
   const categories = Array.isArray(state.settings?.categories) && state.settings.categories.length > 0
     ? state.settings.categories
-    : ["Water", "Soft Drink", "Juice", "Energy Drink"];
+    : ["Water", "Soft Drink", "Juice", "Energy Drink", "Tissues"];
 
   return categories;
 }
 
 function renderAddProduct(error = "") {
   const categoryOptions = getCategoryOptions();
+  const canEditCategory = state.user?.role === "admin";
 
   renderPage(`
     <div class="page-title">
@@ -32,7 +33,13 @@ function renderAddProduct(error = "") {
 
       <div class="form-row">
         <label for="category">Category</label>
-        <input id="category" list="category-list" placeholder="Select or type a category">
+        <input
+          id="category"
+          list="category-list"
+          placeholder="${canEditCategory ? "Select or type a category" : "Category is read only"}"
+          ${canEditCategory ? "" : "readonly"}
+        >
+        ${canEditCategory ? "" : `<small class="field-hint">Only admin can edit the category field.</small>`}
         <datalist id="category-list">
           ${categoryOptions.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("")}
         </datalist>
@@ -40,26 +47,16 @@ function renderAddProduct(error = "") {
 
       <div class="form-row">
         <label for="baseUnit">Base Unit e.g. Bottle, Sachet</label>
-        <select id="baseUnit">
-          <option>Bottle</option>
-          <option>Sachet</option>
-          <option>Can</option>
-          <option>Piece</option>
-        </select>
+        <input id="baseUnit" placeholder="Type a base unit">
       </div>
 
       <div class="form-row">
         <label for="bulkUnit">Bulk Unit e.g. Crate, Carton</label>
-        <select id="bulkUnit">
-          <option>Crate</option>
-          <option>Carton</option>
-          <option>Pack</option>
-          <option>Bag</option>
-        </select>
+        <input id="bulkUnit" placeholder="Type a bulk unit">
       </div>
 
       <div class="form-row">
-        <label for="unitsPerBulk">How many Base Units in Bulk Unit</label>
+        <label for="unitsPerBulk">Base Units in Bulk Unit</label>
         <input id="unitsPerBulk" class="number-field" type="number" min="1" step="1">
       </div>
 
