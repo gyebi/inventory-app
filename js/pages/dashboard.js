@@ -381,11 +381,12 @@ function buildSalesPeriodReport() {
   ];
 
   return buildTableMarkup(
-    ["Period", "Transactions", "Base Units Sold", "Sales Amount", "Profit"],
+    ["Period", "Transactions", "Base Units Sold", "Bulk Units Sold", "Sales Amount", "Profit"],
     periods.map((period) => [
       period.label,
       String(period.transactions),
       String(period.units),
+      String(period.bulkUnits),
       formatReceiptCurrency(period.amount),
       formatReceiptCurrency(period.profit)
     ])
@@ -809,6 +810,26 @@ function getTotalUnitsSold(sale) {
   return sale.actualQtySold || sale.qty || 0;
 }
 
+function getSaleBaseUnitsSold(sale) {
+  return getSaleItems(sale).reduce((sum, item) => {
+    if ((item.saleUnit || "").toLowerCase() === "bulk") {
+      return sum;
+    }
+
+    return sum + Number(item.actualQtySold || item.quantity || 0);
+  }, 0);
+}
+
+function getSaleBulkUnitsSold(sale) {
+  return getSaleItems(sale).reduce((sum, item) => {
+    if ((item.saleUnit || "").toLowerCase() !== "bulk") {
+      return sum;
+    }
+
+    return sum + Number(item.quantity || 0);
+  }, 0);
+}
+
 function getSaleProfit(sale) {
   return sale.profit ?? sale.totalProfit ?? 0;
 }
@@ -891,7 +912,8 @@ function buildSalesPeriodSummary(sales, label, matcher) {
     }
 
     summary.transactions += 1;
-    summary.units += getTotalUnitsSold(sale);
+    summary.units += getSaleBaseUnitsSold(sale);
+    summary.bulkUnits += getSaleBulkUnitsSold(sale);
     summary.amount += Number(sale.totalAmount || 0);
     summary.profit += Number(getSaleProfit(sale) || 0);
     return summary;
@@ -899,6 +921,7 @@ function buildSalesPeriodSummary(sales, label, matcher) {
     label,
     transactions: 0,
     units: 0,
+    bulkUnits: 0,
     amount: 0,
     profit: 0
   });
