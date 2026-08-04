@@ -37,11 +37,29 @@ service cloud.firestore {
       );
     }
 
+    function canManageSettings() {
+      return hasUserProfile() && (
+        currentUserRole() == "admin" ||
+        currentUserRole() == "manager"
+      );
+    }
+
     function canCreateSale() {
       return hasUserProfile() && (
         currentUserRole() == "admin" ||
         currentUserRole() == "sales"
       );
+    }
+
+    function canUpdateProductStockForSale() {
+      return canCreateSale() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            "quantity",
+            "stock",
+            "updatedAt",
+            "updatedBy"
+          ]);
     }
 
     match /users/{userId} {
@@ -51,7 +69,9 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if signedIn();
-      allow create, update, delete: if canManageStock();
+      allow create, delete: if canManageStock();
+      allow update: if canManageStock()
+        || canUpdateProductStockForSale();
     }
 
     match /stockReceipts/{receiptId} {
@@ -73,6 +93,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if canCreateSale();
       allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageSettings();
     }
   }
 }

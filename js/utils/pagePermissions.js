@@ -10,6 +10,7 @@ export const pagePermissions = {
   help: null,
   home: null,
   logout: null,
+  taxSettings: "manage_settings",
   stock: "manage_stock",
   products: "add_product",
   reports: "view_reports",

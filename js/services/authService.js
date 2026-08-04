@@ -21,7 +21,7 @@ const rolePermissions = {
     "add_product",
     "manage_stock"
   ],
-  manager: ["view_dashboard", "view_reports", "manage_stock"]
+  manager: ["view_dashboard", "view_reports", "manage_stock", "manage_settings"]
 };
 
 function isKnownRole(role) {

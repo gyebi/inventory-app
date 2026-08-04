@@ -30,7 +30,9 @@ import {
 import { migrateLocalProductsToCloudOnce } from "./services/productMigrationService.js";
 import { migrateLocalSuppliersToCloudOnce } from "./services/supplierMigrationService.js";
 import { ensureSalesSyncMetadata, retryPendingSalesSync } from "./services/syncService.js";
+import { fetchCategorySettingsFromCloud } from "./services/categorySettingsService.js";
 import { clearRequiredPasswordChange, getUserProfile } from "./services/userProfileService.js";
+import { fetchTaxSettingsFromCloud } from "./services/taxSettingsService.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "./utils/errorUtils.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
@@ -51,11 +53,21 @@ const defaultState = {
   stockReceipts: [],
   stockAdjustments: [],
   supplierPayments: [],
-  settings: {
-    lowStockThreshold: 10,
-    salesSyncEndpoint: null,
-    salesSyncIntervalMs: 30000,
-    useCloudProducts: true
+    settings: {
+      lowStockThreshold: 10,
+      salesSyncEndpoint: null,
+      salesSyncIntervalMs: 30000,
+      useCloudProducts: true,
+      categories: ["Water", "Soft Drink", "Juice", "Energy Drink"],
+      tax: {
+      enabled: true,
+      vatRate: 15,
+      nhilRate: 2.5,
+      getfundRate: 2.5,
+      withholdingVatRate: 7,
+      effectiveDate: null,
+      taxMode: "standard"
+    }
   }
 };
 
@@ -537,6 +549,8 @@ const menuItems = [
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
   { page: "reports", icon: "📑", title: "Reports", text: "Open product and sales reports" },
   { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
+  { page: "categorySettings", icon: "🏷️", title: "Categories", text: "Manage product categories" },
+  { page: "taxSettings", icon: "🧾", title: "Tax Settings", text: "Manage VAT and levy rates" },
   { page: "staff", icon: "👤", title: "Staff", text: "Add staff and assign roles" },
   { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
   { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" },
@@ -603,6 +617,8 @@ function navigate(page) {
   if (page === "supplierPayment") window.renderSupplierPayment?.();
   if (page === "stockAdjustment") window.renderStockAdjustment?.();
   if (page === "suppliers") window.renderSuppliers?.();
+  if (page === "categorySettings") window.renderCategorySettings?.();
+  if (page === "taxSettings") window.renderTaxSettings?.();
   if (page === "sales") window.renderSales?.();
   if (page === "inventory") window.renderInventory?.();
   if (page === "staff") window.renderStaff?.();
@@ -655,7 +671,7 @@ function renderLogin(error = "") {
 
         ${error ? `<div class="message error">${error}</div>` : ""}
 
-        <div class="form-column">
+        <form class="form-column" onsubmit="login(event)">
           <div class="form-row">
             <label for="identifier">Email</label>
             <input id="identifier" type="email" autocomplete="email">
@@ -666,8 +682,8 @@ function renderLogin(error = "") {
             <input id="password" type="password" autocomplete="current-password">
           </div>
 
-          <button onclick="login()">Login</button>
-        </div>
+          <button type="submit">Login</button>
+        </form>
       </div>
     </section>
   `;
@@ -690,7 +706,7 @@ function renderRequiredPasswordChange(error = "") {
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <div class="form-column panel">
+    <form class="form-column panel" onsubmit="completeRequiredPasswordChange(event)">
       <div class="form-row">
         <label for="newPassword">New Password</label>
         <input id="newPassword" type="password" autocomplete="new-password">
@@ -701,9 +717,9 @@ function renderRequiredPasswordChange(error = "") {
         <input id="confirmPassword" type="password" autocomplete="new-password">
       </div>
 
-      <button id="completePasswordChangeButton" onclick="completeRequiredPasswordChange()">Save New Password</button>
+      <button id="completePasswordChangeButton" type="submit">Save New Password</button>
       <button type="button" onclick="navigate('logout')">Sign Out</button>
-    </div>
+    </form>
   `);
 }
 
@@ -720,7 +736,8 @@ function setPasswordChangeProcessing(isProcessing) {
     : "Save New Password";
 }
 
-async function login() {
+async function login(event) {
+  event?.preventDefault?.();
   const identifier = document.getElementById("identifier").value.trim();
   const password = document.getElementById("password").value.trim();
 
@@ -824,6 +841,16 @@ async function syncAuthenticatedUser(uid) {
   }
 
   const profile = await loadValidatedSessionProfile(uid);
+  try {
+    state.settings = {
+      ...(state.settings || {}),
+      categories: await fetchCategorySettingsFromCloud(),
+      tax: await fetchTaxSettingsFromCloud()
+    };
+    saveState();
+  } catch (error) {
+    logAppError("Tax settings sync failed", error);
+  }
 
   const sessionUser = buildSessionUser(profile);
   state.user = sessionUser;
@@ -832,7 +859,8 @@ async function syncAuthenticatedUser(uid) {
   return true;
 }
 
-async function completeRequiredPasswordChange() {
+async function completeRequiredPasswordChange(event) {
+  event?.preventDefault?.();
   const newPassword = document.getElementById("newPassword")?.value.trim() || "";
   const confirmPassword = document.getElementById("confirmPassword")?.value.trim() || "";
 
@@ -1213,6 +1241,8 @@ await import("./pages/receiveStock.js");
 await import("./pages/supplierPayment.js");
 await import("./pages/stockAdjustment.js");
 await import("./pages/suppliers.js");
+await import("./pages/categorySettings.js");
+await import("./pages/taxSettings.js");
 await import("./pages/sales.js");
 await import("./pages/inventory.js");
 await import("./pages/dashboard.js");

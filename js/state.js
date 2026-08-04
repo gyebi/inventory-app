@@ -37,7 +37,16 @@ const defaultState = {
     lowStockThreshold: 10,
     salesSyncEndpoint: null,
     salesSyncIntervalMs: 30000,
-    useCloudProducts: true
+    useCloudProducts: true,
+    tax: {
+      enabled: true,
+      vatRate: 15,
+      nhilRate: 2.5,
+      getfundRate: 2.5,
+      withholdingVatRate: 7,
+      effectiveDate: null,
+      taxMode: "standard"
+    }
   }
 };
 
@@ -74,4 +83,8 @@ if (!Array.isArray(state.supplierPayments)) {
 
 if (!state.settings) {
   state.settings = defaultState.settings;
+}
+
+if (!state.settings.tax) {
+  state.settings.tax = defaultState.settings.tax;
 }

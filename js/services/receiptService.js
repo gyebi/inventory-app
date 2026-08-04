@@ -23,12 +23,35 @@ function getReceiptCashierName(sale) {
   return sale.createdBy?.fullName || sale.createdBy?.username || sale.user || "Unknown";
 }
 
+function formatTaxRate(value) {
+  const rate = Number(value) || 0;
+  return `${rate.toFixed(1)}%`;
+}
+
+function getTaxBreakdown(sale) {
+  const breakdown = sale.taxBreakdown || {};
+
+  return {
+    subtotal: Number(sale.subtotalAmount ?? breakdown.subtotal ?? sale.totalAmount ?? 0),
+    vatRate: Number(breakdown.vatRate ?? sale.taxSettingsSnapshot?.vatRate ?? 0),
+    nhilRate: Number(breakdown.nhilRate ?? sale.taxSettingsSnapshot?.nhilRate ?? 0),
+    getfundRate: Number(breakdown.getfundRate ?? sale.taxSettingsSnapshot?.getfundRate ?? 0),
+    vatAmount: Number(breakdown.vatAmount ?? 0),
+    nhilAmount: Number(breakdown.nhilAmount ?? 0),
+    getfundAmount: Number(breakdown.getfundAmount ?? 0),
+    taxAmount: Number(breakdown.taxAmount ?? 0),
+    totalAmount: Number(breakdown.totalAmount ?? sale.totalAmount ?? 0),
+    enabled: breakdown.enabled !== false
+  };
+}
+
 function formatReceiptItemLine(item) {
   return `${item.name} x${item.quantity} ${item.unit}`;
 }
 
 export const generateReceiptText = (sale) => {
   const lines = [];
+  const tax = getTaxBreakdown(sale);
 
   lines.push(RECEIPT_BUSINESS_NAME);
   lines.push("----------------------------");
@@ -39,6 +62,12 @@ export const generateReceiptText = (sale) => {
   });
 
   lines.push("----------------------------");
+  if (tax.enabled) {
+    lines.push(`SUBTOTAL: ${formatReceiptCurrency(tax.subtotal)}`);
+    lines.push(`NHIL (${formatTaxRate(tax.nhilRate)}): ${formatReceiptCurrency(tax.nhilAmount)}`);
+    lines.push(`GETFund (${formatTaxRate(tax.getfundRate)}): ${formatReceiptCurrency(tax.getfundAmount)}`);
+    lines.push(`VAT (${formatTaxRate(tax.vatRate)}): ${formatReceiptCurrency(tax.vatAmount)}`);
+  }
   lines.push(`TOTAL: ${formatReceiptCurrency(sale.totalAmount)}`);
   lines.push(`DATE: ${formatReceiptDateTime(sale.createdAt)}`);
   lines.push(`RECEIPT ID: ${sale.id}`);
@@ -66,6 +95,7 @@ function getReceiptItemsMarkup(items = []) {
 }
 
 function buildReceiptMarkup(sale) {
+  const tax = getTaxBreakdown(sale);
   return `
     <div class="receipt-page">
       <div class="page-title">
@@ -93,6 +123,13 @@ function buildReceiptMarkup(sale) {
           </tbody>
         </table>
         <hr>
+        ${tax.enabled ? `
+          <strong>Subtotal:</strong> ${formatReceiptCurrency(tax.subtotal)}<br>
+          <strong>NHIL (${formatTaxRate(tax.nhilRate)}):</strong> ${formatReceiptCurrency(tax.nhilAmount)}<br>
+          <strong>GETFund (${formatTaxRate(tax.getfundRate)}):</strong> ${formatReceiptCurrency(tax.getfundAmount)}<br>
+          <strong>VAT (${formatTaxRate(tax.vatRate)}):</strong> ${formatReceiptCurrency(tax.vatAmount)}<br>
+          <strong>Total Tax:</strong> ${formatReceiptCurrency(tax.taxAmount)}<br>
+        ` : ""}
         <strong>Total:</strong> ${formatReceiptCurrency(sale.totalAmount)}
       </div>
 

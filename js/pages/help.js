@@ -75,7 +75,7 @@ function renderHelp() {
 
       <div class="card">
         <strong>Developer Support</strong><br>
-        To reach the developer, WhatsApp: +1 332 323 0435
+        To reach the developer, WhatsApp: +233 553121821
       </div>
     </div>
   `);

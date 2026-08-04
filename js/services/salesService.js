@@ -124,6 +124,82 @@ const getUnitPrices = (product, saleUnitType) => {
   };
 };
 
+const getTaxDefaults = () => ({
+  enabled: true,
+  vatRate: 15,
+  nhilRate: 2.5,
+  getfundRate: 2.5,
+  withholdingVatRate: 7,
+  effectiveDate: null,
+  taxMode: "standard"
+});
+
+const normalizeTaxSettings = (taxSettings = {}) => {
+  const defaults = getTaxDefaults();
+
+  return {
+    ...defaults,
+    ...taxSettings,
+    enabled: taxSettings.enabled !== false,
+    vatRate: Number(taxSettings.vatRate ?? defaults.vatRate),
+    nhilRate: Number(taxSettings.nhilRate ?? defaults.nhilRate),
+    getfundRate: Number(taxSettings.getfundRate ?? defaults.getfundRate),
+    withholdingVatRate: Number(taxSettings.withholdingVatRate ?? defaults.withholdingVatRate),
+    taxMode: String(taxSettings.taxMode || defaults.taxMode),
+    effectiveDate: taxSettings.effectiveDate || null
+  };
+};
+
+const calculateTaxBreakdown = (subtotal, taxSettings = {}) => {
+  const settings = normalizeTaxSettings(taxSettings);
+  const baseAmount = Number(subtotal || 0);
+
+  if (!settings.enabled || settings.taxMode === "exempt") {
+    return {
+      subtotal: baseAmount,
+      vatRate: settings.vatRate,
+      nhilRate: settings.nhilRate,
+      getfundRate: settings.getfundRate,
+      withholdingVatRate: settings.withholdingVatRate,
+      vatAmount: 0,
+      nhilAmount: 0,
+      getfundAmount: 0,
+      withholdingVatAmount: 0,
+      taxAmount: 0,
+      totalAmount: baseAmount,
+      taxMode: settings.taxMode,
+      enabled: false,
+      effectiveDate: settings.effectiveDate
+    };
+  }
+
+  const chargeableVatRate = settings.taxMode === "zeroRated" ? 0 : settings.vatRate;
+  const chargeableNhilRate = settings.taxMode === "zeroRated" ? 0 : settings.nhilRate;
+  const chargeableGetfundRate = settings.taxMode === "zeroRated" ? 0 : settings.getfundRate;
+  const vatAmount = baseAmount * (chargeableVatRate / 100);
+  const nhilAmount = baseAmount * (chargeableNhilRate / 100);
+  const getfundAmount = baseAmount * (chargeableGetfundRate / 100);
+  const withholdingVatAmount = baseAmount * (settings.withholdingVatRate / 100);
+  const taxAmount = vatAmount + nhilAmount + getfundAmount;
+
+  return {
+    subtotal: baseAmount,
+    vatRate: settings.vatRate,
+    nhilRate: settings.nhilRate,
+    getfundRate: settings.getfundRate,
+    withholdingVatRate: settings.withholdingVatRate,
+    vatAmount,
+    nhilAmount,
+    getfundAmount,
+    withholdingVatAmount,
+    taxAmount,
+    totalAmount: baseAmount + taxAmount,
+    taxMode: settings.taxMode,
+    enabled: true,
+    effectiveDate: settings.effectiveDate
+  };
+};
+
 const resolveSaleUnitType = (product, unit) => {
   if (unit === "bulk" || unit === product.bulkUnit) {
     return "bulk";
@@ -143,6 +219,7 @@ export const createSale = (cartItems = []) => {
   const state = getState();
   const currentUser = getCurrentUser();
   const stockBatches = Array.isArray(state.stock) ? state.stock : [];
+  const taxSettings = normalizeTaxSettings(state.settings?.tax);
   const saleDrafts = [];
   let totalAmount = 0;
   let profit = 0;
@@ -207,6 +284,8 @@ export const createSale = (cartItems = []) => {
     profit += itemProfit;
   }
 
+  const taxBreakdown = calculateTaxBreakdown(totalAmount, taxSettings);
+
   const sale = {
     id: createSaleId(),
     items: saleDrafts.map((item) => ({
@@ -220,7 +299,9 @@ export const createSale = (cartItems = []) => {
       actualQtySold: item.actualQtySold,
       batchAllocations: item.batchAllocations
     })),
-    totalAmount,
+    subtotalAmount: totalAmount,
+    taxBreakdown,
+    totalAmount: taxBreakdown.totalAmount,
     profit,
     createdAt: new Date().toISOString(),
     createdBy: currentUser
@@ -232,6 +313,7 @@ export const createSale = (cartItems = []) => {
         }
       : null,
     user: currentUser?.fullName || currentUser?.username || "unknown",
+    taxSettingsSnapshot: taxSettings,
     ...buildSaleSyncMetadata()
   };
 

@@ -5,7 +5,17 @@ const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
 const { state, renderPage, saveState, navigate } = window.app;
 
+function getCategoryOptions() {
+  const categories = Array.isArray(state.settings?.categories) && state.settings.categories.length > 0
+    ? state.settings.categories
+    : ["Water", "Soft Drink", "Juice", "Energy Drink"];
+
+  return categories;
+}
+
 function renderAddProduct(error = "") {
+  const categoryOptions = getCategoryOptions();
+
   renderPage(`
     <div class="page-title">
       <h2>➕ Add Product</h2>
@@ -22,12 +32,10 @@ function renderAddProduct(error = "") {
 
       <div class="form-row">
         <label for="category">Category</label>
-        <select id="category">
-          <option>Water</option>
-          <option>Soft Drink</option>
-          <option>Juice</option>
-          <option>Energy Drink</option>
-        </select>
+        <input id="category" list="category-list" placeholder="Select or type a category">
+        <datalist id="category-list">
+          ${categoryOptions.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("")}
+        </datalist>
       </div>
 
       <div class="form-row">
@@ -235,6 +243,15 @@ function formatStock(product) {
   const remainder = product.quantity % product.unitsPerBulk;
 
   return `${fullBulk} ${product.bulkUnit}(s) and ${remainder} ${product.baseUnit}(s)`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function withTimeout(promise, timeoutMs, message) {
