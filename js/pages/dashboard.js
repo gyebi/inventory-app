@@ -765,7 +765,8 @@ function getCreditPurchaseReceipts() {
 }
 
 function isCreditPurchaseReceipt(receipt) {
-  return String(receipt.paymentStatus || receipt.paymentType || "").toLowerCase() === "credit";
+  const paymentStatus = String(receipt.paymentStatus || receipt.paymentType || "").toLowerCase();
+  return paymentStatus === "credit" || paymentStatus === "part payment";
 }
 
 function getReceiptPurchaseTotal(receipt) {

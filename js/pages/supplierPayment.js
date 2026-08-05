@@ -268,7 +268,10 @@ function getInvoiceReferencesForSupplier(supplier = "") {
 
   state.stockReceipts
     .filter((receipt) => !normalizedSupplier || (receipt.supplier || "").toLowerCase() === normalizedSupplier)
-    .filter((receipt) => !receipt.paymentStatus || receipt.paymentStatus === "Credit")
+    .filter((receipt) => {
+      const paymentStatus = String(receipt.paymentStatus || receipt.paymentType || "").toLowerCase();
+      return !paymentStatus || paymentStatus === "credit" || paymentStatus === "part payment";
+    })
     .forEach((receipt) => {
       const reference = receipt.invoiceNumber || receipt.invoiceDetails || receipt.purchaseId || receipt.id;
 
