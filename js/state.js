@@ -31,6 +31,7 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   stockAdjustments: [],
+  priceChanges: [],
   supplierPayments: [],
 
   settings: {
@@ -75,6 +76,10 @@ if (!state.stockReceipts) {
 
 if (!Array.isArray(state.stockAdjustments)) {
   state.stockAdjustments = [];
+}
+
+if (!Array.isArray(state.priceChanges)) {
+  state.priceChanges = [];
 }
 
 if (!Array.isArray(state.supplierPayments)) {

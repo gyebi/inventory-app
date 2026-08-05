@@ -11,6 +11,7 @@ import {
 } from "./services/authService.js";
 import {
   fetchProductsFromCloud,
+  fetchPriceChangesFromCloud,
   fetchSalesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
@@ -21,6 +22,7 @@ import {
 import { fetchUsersFromCloud } from "./services/cloudUserService.js";
 import {
   listenToProducts,
+  listenToPriceChanges,
   listenToSales,
   listenToStockReceipts,
   listenToSupplierPayments,
@@ -52,6 +54,7 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   stockAdjustments: [],
+  priceChanges: [],
   supplierPayments: [],
     settings: {
       lowStockThreshold: 10,
@@ -74,6 +77,7 @@ const defaultState = {
 let state = loadAppState();
 setSharedState(state);
 let stopProductsListener = null;
+let stopPriceChangesListener = null;
 let stopStockReceiptsListener = null;
 let stopSalesListener = null;
 let stopUsersListener = null;
@@ -340,6 +344,12 @@ function replaceStockReceipts(receipts = []) {
   saveState();
 }
 
+function replacePriceChanges(priceChanges = []) {
+  state.priceChanges = Array.isArray(priceChanges) ? priceChanges : [];
+  markCloudUpdated("Price changes synced");
+  saveState();
+}
+
 function replaceSales(sales = []) {
   state.sales = sales;
   rebuildStockFromCloudReceipts();
@@ -381,6 +391,11 @@ function stopCloudListeners() {
     stopProductsListener = null;
   }
 
+  if (stopPriceChangesListener) {
+    stopPriceChangesListener();
+    stopPriceChangesListener = null;
+  }
+
   if (stopStockReceiptsListener) {
     stopStockReceiptsListener();
     stopStockReceiptsListener = null;
@@ -413,8 +428,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
 
   const syncUsers = canSyncAllUsers();
 
-  const [cloudProducts, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
+  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
     fetchProductsFromCloud(),
+    fetchPriceChangesFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
     syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
@@ -426,6 +442,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     replaceProducts(cloudProducts);
   }
 
+  replacePriceChanges(cloudPriceChanges);
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
   if (syncUsers) {
@@ -445,6 +462,15 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     },
     (error) => {
       handleCloudListenerError("Product", error);
+    }
+  );
+
+  stopPriceChangesListener = listenToPriceChanges(
+    (priceChanges) => {
+      replacePriceChanges(priceChanges);
+    },
+    (error) => {
+      handleCloudListenerError("Price change", error);
     }
   );
 
@@ -544,6 +570,7 @@ const menuItems = [
   { page: "addProduct", icon: "➕", title: "Add Product", text: "Create product details" },
   { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
   { page: "supplierPayment", icon: "🧾", title: "Supplier Payment", text: "Record payments against supplier invoices" },
+  { page: "priceChanges", icon: "₵", title: "Price Changes", text: "Update selling prices and track batch history" },
   { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment", text: "Record damaged, lost, expired, or broken stock" },
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
@@ -615,6 +642,7 @@ function navigate(page) {
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "supplierPayment") window.renderSupplierPayment?.();
+  if (page === "priceChanges") window.renderSellingPriceChanges?.();
   if (page === "stockAdjustment") window.renderStockAdjustment?.();
   if (page === "suppliers") window.renderSuppliers?.();
   if (page === "categorySettings") window.renderCategorySettings?.();
@@ -1239,6 +1267,7 @@ window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
 await import("./pages/addProduct.js");
 await import("./pages/receiveStock.js");
 await import("./pages/supplierPayment.js");
+await import("./pages/sellingPriceChanges.js");
 await import("./pages/stockAdjustment.js");
 await import("./pages/suppliers.js");
 await import("./pages/categorySettings.js");

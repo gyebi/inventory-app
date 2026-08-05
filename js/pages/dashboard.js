@@ -97,6 +97,7 @@ function renderReportsPage() {
       ${renderReportCard("salesPeriods", "🗓️", "Daily/Weekly/Monthly Sales", "Compare sales across time periods")}
       ${renderReportCard("profit", "💰", "Sales Report by Sales Person", "Review sales grouped by cashier")}
       ${renderReportCard("stockMovement", "📈", "Stock Movement Report", "Track stock in and stock out")}
+      ${renderReportCard("batchStock", "🧺", "Batch Stock Report", "Review every batch with cost and remaining stock")}
       ${renderReportCard("damagedLost", "🧯", "Damaged/Lost Items Report", "Show adjustments for damaged or lost stock")}
       ${renderReportCard("purchases", "📥", "Purchase Report", "List stock receipts and supplier purchases")}
       ${renderReportCard("inventoryValuation", "🏷️", "Inventory Valuation Report", "Estimate stock value using cost price")}
@@ -246,6 +247,14 @@ function buildReport(type) {
     };
   }
 
+  if (type === "batchStock") {
+    return {
+      title: "Batch Stock Report",
+      subtitle: generatedAt,
+      body: buildBatchStockReport()
+    };
+  }
+
   if (type === "damagedLost") {
     return {
       title: "Damaged/Lost Items Report",
@@ -298,8 +307,8 @@ function buildProductReport() {
       .map((product) => [
         product.name,
         product.category || "N/A",
-        formatReceiptCurrency(product.sellingPrice),
-        formatReceiptCurrency(product.bulkSellingPrice ?? 0),
+        formatOptionalCurrency(product.sellingPrice),
+        formatOptionalCurrency(product.bulkSellingPrice),
         `${product.unitsPerBulk || 1} ${product.baseUnit}(s)`
       ])
   );
@@ -456,6 +465,71 @@ function buildStockMovementReport() {
   );
 }
 
+function buildBatchStockReport() {
+  const batches = (state.stock || [])
+    .slice()
+    .sort((left, right) => {
+      const leftReceived = getReportTime(left.receivedAt || left.purchaseDate || left.createdAt);
+      const rightReceived = getReportTime(right.receivedAt || right.purchaseDate || right.createdAt);
+      return rightReceived - leftReceived;
+    });
+
+  if (batches.length === 0) {
+    return `<div class="card">No batches recorded yet.</div>`;
+  }
+
+  const headers = [
+    "Batch Number",
+    "Product",
+    "Supplier",
+    "Date Received",
+    "Expiry Date",
+    "Original Quantity",
+    "Remaining Quantity",
+    "Total Landed Cost",
+    "Unit Cost",
+    "Selling Price",
+    "Remaining Stock Value"
+  ];
+
+  const rows = batches.map((batch) => {
+    const receipt = getReceiptByBatchId(batch.id);
+    const originalQuantity = Number(receipt?.quantityReceived ?? batch.quantity ?? 0);
+    const remainingQuantity = Number(batch.quantity || 0);
+    const unitCost = Number(batch.unitCost ?? receipt?.unitCost ?? 0);
+    const sellingPrice = Number(batch.unitSellingPrice ?? receipt?.unitSellingPrice ?? 0);
+    const landedCost = Number(batch.totalLandedCost ?? receipt?.totalLandedCost ?? receipt?.lineTotal ?? (originalQuantity * unitCost));
+
+    return [
+      batch.id || receipt?.batchId || "N/A",
+      batch.productName || receipt?.product || getProductName(batch.productId),
+      batch.supplier || receipt?.supplier || "N/A",
+      formatDateTime(batch.receivedAt || batch.purchaseDate || receipt?.receivedAt || receipt?.purchaseDate || ""),
+      batch.expiryDate ? formatDate(batch.expiryDate) : "N/A",
+      String(originalQuantity),
+      String(remainingQuantity),
+      formatReceiptCurrency(landedCost),
+      formatReceiptCurrency(unitCost),
+      formatReceiptCurrency(sellingPrice),
+      formatReceiptCurrency(remainingQuantity * unitCost)
+    ];
+  });
+
+  const totalRemainingValue = batches.reduce((sum, batch) => {
+    const receipt = getReceiptByBatchId(batch.id);
+    const remainingQuantity = Number(batch.quantity || 0);
+    const unitCost = Number(batch.unitCost ?? receipt?.unitCost ?? 0);
+    return sum + (remainingQuantity * unitCost);
+  }, 0);
+
+  return `
+    ${buildTableMarkup(headers, rows)}
+    <div class="card report-total-card">
+      <strong>Total Remaining Batch Value:</strong> ${formatReceiptCurrency(totalRemainingValue)}
+    </div>
+  `;
+}
+
 function buildDamagedLostReport() {
   const adjustments = getDamagedLostAdjustments()
     .filter((adjustment) => isWithinReportDateRange("damagedLost", getAdjustmentDate(adjustment)))
@@ -555,11 +629,11 @@ function buildPurchaseReport() {
         formatDateTime(receipt.purchaseDate || receipt.receivedAt || receipt.createdAt),
         receipt.dueDate || "N/A",
         receipt.product || getProductName(receipt.productId),
-        `${Number(receipt.bulkUnitsReceived || 0)} ${receipt.bulkUnit || getProductById(receipt.productId)?.bulkUnit || "bulk unit"}(s)`,
-        `${Number(receipt.baseUnitsReceived || 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
+        `${Number(receipt.bulkQuantityReceived ?? receipt.bulkUnitsReceived ?? 0)} ${receipt.bulkUnit || getProductBulkUnit(receipt.productId)}(s)`,
+        `${Number(receipt.quantityReceived || 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
         `${Number(receipt.quantityReceived || 0)} ${getProductBaseUnit(receipt.productId)}(s)`,
-        formatReceiptCurrency(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0),
-        formatReceiptCurrency(receipt.lineTotal ?? (Number(receipt.quantityReceived || 0) * Number(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0))),
+        formatReceiptCurrency(getReceiptUnitCost(receipt)),
+        formatReceiptCurrency(getReceiptLandedCost(receipt)),
         receipt.paymentStatus || "N/A",
         receipt.notes || "N/A"
       ])
@@ -575,20 +649,18 @@ function buildInventoryValuationReport() {
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((product) => {
-      const quantity = Number(product.quantity || 0);
-      const unitCost = Number(product.costPrice || 0);
-      const stockValue = quantity * unitCost;
+      const batchSummary = getInventoryValueSummary(product.id);
 
       return [
         product.name,
-        `${quantity} ${product.baseUnit}(s)`,
-        formatReceiptCurrency(unitCost),
-        formatReceiptCurrency(stockValue)
+        `${batchSummary.quantity} ${product.baseUnit}(s)`,
+        formatReceiptCurrency(batchSummary.unitCost),
+        formatReceiptCurrency(batchSummary.stockValue)
       ];
     });
 
   const totalValue = state.products.reduce(
-    (sum, product) => sum + (Number(product.quantity || 0) * Number(product.costPrice || 0)),
+    (sum, product) => sum + getInventoryValueSummary(product.id).stockValue,
     0
   );
 
@@ -698,9 +770,9 @@ function isCreditPurchaseReceipt(receipt) {
 
 function getReceiptPurchaseTotal(receipt) {
   const quantity = Number(receipt.quantityReceived || 0);
-  const unitCost = Number(receipt.unitCost ?? getProductById(receipt.productId)?.costPrice ?? 0);
+  const unitCost = Number(receipt.unitCost ?? 0);
 
-  return Number(receipt.lineTotal ?? receipt.totalAmount ?? (quantity * unitCost));
+  return Number(receipt.totalLandedCost ?? receipt.lineTotal ?? receipt.totalAmount ?? (quantity * unitCost));
 }
 
 function getSupplierName(supplier) {
@@ -746,8 +818,59 @@ function getProductBaseUnit(productId) {
   return getProductById(productId)?.baseUnit || "base unit";
 }
 
+function formatOptionalCurrency(value) {
+  return Number.isFinite(Number(value)) ? formatReceiptCurrency(Number(value)) : "N/A";
+}
+
 function getProductBulkUnit(productId) {
   return getProductById(productId)?.bulkUnit || "bulk unit";
+}
+
+function getReceiptUnitCost(receipt) {
+  const quantity = Number(receipt.quantityReceived || 0);
+  if (quantity <= 0) {
+    return Number(receipt.unitCost || 0);
+  }
+
+  const landedCost = Number(receipt.totalLandedCost ?? receipt.lineTotal ?? receipt.totalAmount ?? 0);
+  return Number(receipt.unitCost ?? (landedCost / quantity));
+}
+
+function getReceiptLandedCost(receipt) {
+  if (Number.isFinite(Number(receipt.totalLandedCost))) {
+    return Number(receipt.totalLandedCost);
+  }
+
+  if (Number.isFinite(Number(receipt.lineTotal))) {
+    return Number(receipt.lineTotal);
+  }
+
+  if (Number.isFinite(Number(receipt.totalAmount))) {
+    return Number(receipt.totalAmount);
+  }
+
+  return Number(receipt.quantityReceived || 0) * getReceiptUnitCost(receipt);
+}
+
+function getInventoryValueSummary(productId) {
+  const batches = (state.stock || []).filter((batch) => batch.productId === productId);
+
+  return batches.reduce((summary, batch) => {
+    const quantity = Number(batch.quantity || 0);
+    const unitCost = Number(batch.unitCost ?? getReceiptUnitCost(getReceiptByBatchId(batch.id)));
+    summary.quantity += quantity;
+    summary.stockValue += quantity * unitCost;
+    summary.unitCost = unitCost;
+    return summary;
+  }, {
+    quantity: 0,
+    unitCost: 0,
+    stockValue: 0
+  });
+}
+
+function getReceiptByBatchId(batchId) {
+  return (state.stockReceipts || []).find((receipt) => receipt.batchId === batchId);
 }
 
 function getDamagedLostAdjustments() {

@@ -14,6 +14,7 @@ import { createAppError, ERROR_FLAGS, normalizeFirebaseError } from "../utils/er
 const productsCollection = collection(db, "products");
 const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
+const priceChangesCollection = collection(db, "priceChanges");
 
 const toCloudProduct = (product) => ({
   name: product.name,
@@ -22,10 +23,6 @@ const toCloudProduct = (product) => ({
   bulkUnit: product.bulkUnit || "Carton",
   unitsPerBulk: Number(product.unitsPerBulk || 1),
   quantity: Number(product.quantity || 0),
-  costPrice: Number(product.costPrice || 0),
-  sellingPrice: Number(product.sellingPrice || 0),
-  bulkCostPrice: Number(product.bulkCostPrice || 0),
-  bulkSellingPrice: Number(product.bulkSellingPrice || 0),
   lowStockThreshold: Number(product.lowStockThreshold || 10),
   updatedAt: serverTimestamp()
 });
@@ -85,6 +82,37 @@ export async function fetchSalesFromCloud() {
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to load sales from Firestore. Check your connection and try again.");
   }
+}
+
+export async function fetchPriceChangesFromCloud() {
+  try {
+    const snapshot = await getDocs(priceChangesCollection);
+    return snapshot.docs.map((entry) => ({
+      id: entry.id,
+      ...entry.data()
+    }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load price changes from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function savePriceChangeToCloud(priceChange) {
+  const priceChangeRef = doc(db, "priceChanges", priceChange.id);
+
+  try {
+    await setDoc(
+      priceChangeRef,
+      {
+        ...priceChange,
+        createdAt: priceChange.createdAt || serverTimestamp()
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to save the price change to Firestore. Check your connection and try again.");
+  }
+
+  return priceChangeRef;
 }
 
 export async function receiveStockInCloudTransaction({

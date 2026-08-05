@@ -96,10 +96,10 @@ function renderInventory() {
         <div><strong>Active Batches:</strong> ${activeBatches.length}</div>
         <div><strong>Expired Batches:</strong> ${expiredBatches.length}</div>
         <div><strong>Next Expiry:</strong> ${nextExpiry ? nextExpiry.toLocaleDateString() : "N/A"}</div>
-        <div><strong>Base Cost:</strong> ${formatReceiptCurrency(p.costPrice)}</div>
-        <div><strong>Base Selling:</strong> ${formatReceiptCurrency(p.sellingPrice)}</div>
-        <div><strong>Bulk Cost:</strong> ${formatReceiptCurrency(p.bulkCostPrice ?? 0)}</div>
-        <div><strong>Bulk Selling:</strong> ${formatReceiptCurrency(p.bulkSellingPrice ?? 0)}</div>
+        <div><strong>Base Cost:</strong> ${formatOptionalCurrency(p.costPrice)}</div>
+        <div><strong>Base Selling:</strong> ${formatOptionalCurrency(p.sellingPrice)}</div>
+        <div><strong>Bulk Cost:</strong> ${formatOptionalCurrency(p.bulkCostPrice)}</div>
+        <div><strong>Bulk Selling:</strong> ${formatOptionalCurrency(p.bulkSellingPrice)}</div>
       </div>
     `;
   });
@@ -123,6 +123,10 @@ function formatProductStock(product) {
   const baseUnit = product.baseUnit || "base unit";
 
   return `${physicalStock.fullBulk} ${bulkUnit}(s) and ${physicalStock.remainder} ${baseUnit}(s)`;
+}
+
+function formatOptionalCurrency(value) {
+  return Number.isFinite(Number(value)) ? formatReceiptCurrency(Number(value)) : "N/A";
 }
 
 function getPhysicalStock(product) {

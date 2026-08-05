@@ -40,3 +40,7 @@ export function listenToSuppliers(onChange, onError) {
 export function listenToSupplierPayments(onChange, onError) {
   return listenToCollection("supplierPayments", onChange, onError);
 }
+
+export function listenToPriceChanges(onChange, onError) {
+  return listenToCollection("priceChanges", onChange, onError);
+}

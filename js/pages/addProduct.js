@@ -65,26 +65,6 @@ function renderAddProduct(error = "") {
         <input id="lowStockThreshold" class="number-field" type="number" min="0" step="1" value="10">
       </div>
 
-      <div class="form-row">
-        <label for="costPrice">Cost Price Per Base Unit</label>
-        <input id="costPrice" class="number-field" type="number" min="0" step="0.01">
-      </div>
-
-      <div class="form-row">
-        <label for="sellingPrice">Selling Price Per Base Unit</label>
-        <input id="sellingPrice" class="number-field" type="number" min="0.01" step="0.01">
-      </div>
-
-      <div class="form-row">
-        <label for="bulkCostPrice">Cost Price Per Bulk Unit</label>
-        <input id="bulkCostPrice" class="number-field" type="number" min="0" step="0.01">
-      </div>
-
-      <div class="form-row">
-        <label for="bulkSellingPrice">Selling Price Per Bulk Unit</label>
-        <input id="bulkSellingPrice" class="number-field" type="number" min="0.01" step="0.01">
-      </div>
-
       <button id="addProductButton" onclick="addProduct()">Add Product</button>
     </div>
   `);
@@ -130,10 +110,6 @@ async function addProduct() {
   const bulkUnit = document.getElementById("bulkUnit").value.trim();
   const unitsPerBulk = Number(document.getElementById("unitsPerBulk").value);
   const lowStockThreshold = Number(document.getElementById("lowStockThreshold").value);
-  const costPrice = Number(document.getElementById("costPrice").value);
-  const sellingPrice = Number(document.getElementById("sellingPrice").value);
-  const bulkCostPrice = Number(document.getElementById("bulkCostPrice").value);
-  const bulkSellingPrice = Number(document.getElementById("bulkSellingPrice").value);
   const duplicateProduct = state.products.some(
     (product) => product.name.toLowerCase() === name.toLowerCase()
   );
@@ -168,36 +144,6 @@ async function addProduct() {
     return;
   }
 
-  if (!Number.isFinite(costPrice) || costPrice < 0) {
-    renderAddProduct("Cost price must be zero or more.");
-    return;
-  }
-
-  if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
-    renderAddProduct("Selling price must be greater than zero.");
-    return;
-  }
-
-  if (!Number.isFinite(bulkCostPrice) || bulkCostPrice < 0) {
-    renderAddProduct("Bulk cost price must be zero or more.");
-    return;
-  }
-
-  if (!Number.isFinite(bulkSellingPrice) || bulkSellingPrice <= 0) {
-    renderAddProduct("Bulk selling price must be greater than zero.");
-    return;
-  }
-
-  if (sellingPrice < costPrice) {
-    renderAddProduct("Selling price should not be less than cost price.");
-    return;
-  }
-
-  if (bulkSellingPrice < bulkCostPrice) {
-    renderAddProduct("Bulk selling price should not be less than bulk cost price.");
-    return;
-  }
-
   const product = {
     id: createNewProductId(),
     name,
@@ -206,11 +152,7 @@ async function addProduct() {
     bulkUnit,
     unitsPerBulk,
     lowStockThreshold,
-    quantity: 0,
-    costPrice,
-    sellingPrice,
-    bulkCostPrice,
-    bulkSellingPrice
+    quantity: 0
   };
 
   try {

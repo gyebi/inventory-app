@@ -99,5 +99,10 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update, delete: if canManageSettings();
     }
+
+    match /priceChanges/{priceChangeId} {
+      allow read: if signedIn();
+      allow create, update, delete: if canManageSettings();
+    }
   }
 }
