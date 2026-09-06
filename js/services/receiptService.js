@@ -75,6 +75,7 @@ export const generateReceiptText = (sale) => {
 
   return lines.join("\n");
 };
+
 function getReceiptItemsMarkup(items = []) {
   if (items.length === 0) {
     return `

@@ -2,6 +2,8 @@ import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 
+import { renderMptReceiptPage } from "../services/mptReceiptService.js";
+
 const { ensureStockState, renderPage, state } = window.app;
 let saleCart = [];
 let selectedProductId = "";
@@ -28,6 +30,12 @@ function getProductUnitLabel(product, saleUnit = "bulk") {
 function getSaleUnitPrice(product, saleUnit = "bulk") {
   if (!product) {
     return 0;
+  }
+
+  const resolveCurrentSellingPrice = window.app?.resolveCurrentSellingPrice;
+
+  if (typeof resolveCurrentSellingPrice === "function") {
+    return Number(resolveCurrentSellingPrice(product, saleUnit) || 0);
   }
 
   if (saleUnit === "base") {
@@ -318,12 +326,27 @@ async function recordSale() {
 
     window.app.saveState();
     saleCart = [];
-    renderReceiptPage(sale);
+
+    window.app.saveState();
+    saleCart = [];
+
+    const printerType = getSelectedPrinterType();
+
+    if (printerType === "mpt58") {
+      renderMptReceiptPage(sale);
+    } else {
+      renderReceiptPage(sale);
+    }
+
   } catch (error) {
     setSaleProcessing(false);
     logAppError("Sale completion failed", error);
     renderSales(toUserMessage(error, "Unable to complete the sale. Check stock availability and try again."));
   }
+}
+
+function getSelectedPrinterType() {
+  return localStorage.getItem("receiptPrinterType") || "browser";
 }
 
 window.renderSales = renderSales;

@@ -310,6 +310,8 @@ function renderStockSaved(receipts, totalAmount, purchaseId) {
 }
 
 function applyPurchaseLocally({ receipts, cloudLines = [] }) {
+  const productsWithInitialPrice = new Set();
+
   receipts.forEach((receipt, index) => {
     const product = getProductById(receipt.productId);
     const receiptId = cloudLines[index]?.receiptId || receipt.id;
@@ -344,10 +346,22 @@ function applyPurchaseLocally({ receipts, cloudLines = [] }) {
 
     if (product) {
       product.quantity = Number(product.quantity || 0) + Number(receipt.quantityReceived || 0);
+
+      const unitSellingPrice = Number(receipt.unitSellingPrice || 0);
+
+      if (unitSellingPrice > 0 && Number(product.sellingPrice || 0) <= 0) {
+        product.sellingPrice = unitSellingPrice;
+        product.bulkSellingPrice = unitSellingPrice * getUnitsPerBulk(product);
+        product.sellingPriceEffectiveDate = receipt.purchaseDate || receipt.receivedAt || new Date().toISOString();
+        product.sellingPriceUpdatedAt = receipt.receivedAt || receipt.purchaseDate || new Date().toISOString();
+        productsWithInitialPrice.add(product.id);
+      }
     }
   });
 
   saveState();
+
+  return Array.from(productsWithInitialPrice);
 }
 
 async function receiveStock() {

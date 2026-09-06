@@ -1,4 +1,4 @@
-import { savePriceChangeToCloud } from "../services/cloudProductService.js";
+import { savePriceChangeAndProductToCloud } from "../services/cloudProductService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const { renderPage, saveState, state } = window.app;
@@ -93,11 +93,13 @@ function previewPriceChangeBatches() {
   }
 
   const affectedBatches = getAffectedBatches(productId);
+  const currentSellingPrice = window.app?.resolveCurrentSellingPrice?.(product, "base") || Number(product.sellingPrice || 0);
+  const currentBulkSellingPrice = window.app?.resolveCurrentSellingPrice?.(product, "bulk") || Number(product.bulkSellingPrice || 0);
 
   preview.innerHTML = `
     <strong>${escapeHtml(product.name)}</strong><br>
-    Current selling price: ${formatCurrency(product.sellingPrice)}<br>
-    Current bulk selling price: ${formatCurrency(product.bulkSellingPrice)}<br>
+    Current selling price: ${formatCurrency(currentSellingPrice)}<br>
+    Current bulk selling price: ${formatCurrency(currentBulkSellingPrice)}<br>
     Active batches affected: ${affectedBatches.length}<br>
     ${affectedBatches.length > 0 ? affectedBatches.map((batch) => `
       Batch ${escapeHtml(batch.id)} at ${formatCurrency(batch.unitSellingPrice)}<br>
@@ -130,7 +132,7 @@ async function saveSellingPriceChange(event) {
   }
 
   const affectedBatches = getAffectedBatches(productId, effectiveDate);
-  const oldSellingPrice = Number(product.sellingPrice || 0);
+  const oldSellingPrice = Number(window.app?.resolveCurrentSellingPrice?.(product, "base") || product.sellingPrice || 0);
   const bulkSellingPrice = newSellingPrice * Number(product.unitsPerBulk || 1);
   const changeId = `price_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -167,7 +169,7 @@ async function saveSellingPriceChange(event) {
   });
 
   try {
-    await savePriceChangeToCloud(priceChange);
+    await savePriceChangeAndProductToCloud(priceChange, product);
   } catch (error) {
     logAppError("Price change save failed", error);
     renderSellingPriceChanges(
