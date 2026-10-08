@@ -22,12 +22,18 @@ function getOrigin(req) {
 }
 
 function getConfiguredOrigins() {
-  const configured = String(process.env.INVENTORY_ALLOWED_ORIGINS || "")
+  return String(process.env.INVENTORY_ALLOWED_ORIGINS || "")
     .split(",")
     .map((value) => value.trim())
-    .filter(Boolean);
-
-  return configured;
+    .filter((value) => {
+      try {
+        // A configured origin must be an exact URL origin, not a path or a
+        // prefix. Invalid deployment configuration fails closed.
+        return new URL(value).origin === value;
+      } catch (error) {
+        return false;
+      }
+    });
 }
 
 function isLocalhostOrigin(origin) {
@@ -35,7 +41,8 @@ function isLocalhostOrigin(origin) {
     const parsed = new URL(origin);
     return parsed.protocol === "http:" && (
       parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1"
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "[::1]"
     );
   } catch (error) {
     return false;
@@ -43,13 +50,7 @@ function isLocalhostOrigin(origin) {
 }
 
 function isAllowedOrigin(origin) {
-  if (!origin) {
-    return true;
-  }
-
-  if (origin === "null") {
-    return true;
-  }
+  if (!origin || origin === "null") return false;
 
   const configuredOrigins = getConfiguredOrigins();
 
@@ -60,15 +61,31 @@ function isAllowedOrigin(origin) {
   return isLocalhostOrigin(origin);
 }
 
+function isLoopbackAddress(address) {
+  if (!address) return false;
+  const normalized = address.replace(/^::ffff:/, "");
+  return normalized === "127.0.0.1" || normalized === "::1";
+}
+
+function isAuthorizedRequest(req, origin) {
+  // Requests with no Origin are useful for local health checks and curl. They
+  // are accepted only from loopback, never from a proxied/network connection.
+  return origin ? isAllowedOrigin(origin) : isLoopbackAddress(req.socket.remoteAddress);
+}
+
 function buildCorsHeaders(origin) {
   const headers = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Vary": "Origin, Access-Control-Request-Private-Network",
   };
 
   if (origin && isAllowedOrigin(origin)) {
     headers["Access-Control-Allow-Origin"] = origin === "null" ? "null" : origin;
+    // Supports Chromium's Private Network Access preflight where it is
+    // enforced. The origin remains explicitly allow-listed above.
+    headers["Access-Control-Allow-Private-Network"] = "true";
   }
 
   return headers;
@@ -253,7 +270,7 @@ async function handleRequest(req, res) {
   const requestUrl = new URL(req.url, "http://127.0.0.1");
   const pathname = requestUrl.pathname;
 
-  if (origin && !isAllowedOrigin(origin)) {
+  if (!isAuthorizedRequest(req, origin)) {
     return sendJson(res, 403, {
       ok: false,
       error: "Origin not allowed",
@@ -341,12 +358,29 @@ async function handleRequest(req, res) {
   }
 }
 
-const server = http.createServer((req, res) => {
-  void handleRequest(req, res);
-});
+function startServer() {
+  const server = http.createServer((req, res) => {
+    void handleRequest(req, res);
+  });
 
-server.listen(runtimeConfig.port || bridgeConfig.port, "127.0.0.1", () => {
-  console.log(
-    `Inventory Print Service running on http://127.0.0.1:${runtimeConfig.port || bridgeConfig.port}`
-  );
-});
+  // Loopback-only is intentional: this bridge is not a network print service.
+  server.listen(runtimeConfig.port || bridgeConfig.port, "127.0.0.1", () => {
+    console.log(
+      `Inventory Print Service running on http://127.0.0.1:${runtimeConfig.port || bridgeConfig.port}`
+    );
+  });
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  buildCorsHeaders,
+  getConfiguredOrigins,
+  isAllowedOrigin,
+  isAuthorizedRequest,
+  isLoopbackAddress,
+  startServer,
+};

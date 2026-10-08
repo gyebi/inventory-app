@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CONFIG="/etc/inventory-printer/printer.conf"; RFCOMM_BIN="/usr/bin/rfcomm"
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ -f "$CONFIG" ]] || die "Printer configuration not found."
+# Treat config as data; never source it.
+MAC=""; CHANNEL=""; DEVICE=""
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  if [[ "$line" =~ ^(PRINTER_MAC|RFCOMM_CHANNEL|RFCOMM_DEVICE)=([^[:space:]#]+)$ ]]; then
+    case "${BASH_REMATCH[1]}" in
+      PRINTER_MAC) [[ -z "$MAC" ]] || die "Duplicate PRINTER_MAC"; MAC="${BASH_REMATCH[2]}";;
+      RFCOMM_CHANNEL) [[ -z "$CHANNEL" ]] || die "Duplicate RFCOMM_CHANNEL"; CHANNEL="${BASH_REMATCH[2]}";;
+      RFCOMM_DEVICE) [[ -z "$DEVICE" ]] || die "Duplicate RFCOMM_DEVICE"; DEVICE="${BASH_REMATCH[2]}";;
+    esac
+  else die "Unsafe or unsupported configuration line."; fi
+done < "$CONFIG"
+[[ "$MAC" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]] || die "Invalid Bluetooth MAC address."
+[[ "$CHANNEL" =~ ^[1-9][0-9]*$ ]] && ((${#CHANNEL} <= 2)) && ((10#$CHANNEL <= 30)) || die "Invalid RFCOMM channel."
+[[ "$DEVICE" == 0 ]] || die "Only RFCOMM device 0 is supported."
+[[ -x "$RFCOMM_BIN" ]] || die "rfcomm tool not found at $RFCOMM_BIN."
+CURRENT="$($RFCOMM_BIN show "$DEVICE" 2>/dev/null || true)"
+if [[ -n "$CURRENT" ]]; then
+  if [[ "${CURRENT,,}" == *"${MAC,,}"* && "$CURRENT" =~ channel[[:space:]]+$CHANNEL([[:space:]]|$) ]]; then echo "Correct RFCOMM binding already exists."; exit 0; fi
+  echo "ERROR: RFCOMM device already bound to another configuration."; echo "$CURRENT"; exit 1
+fi
+echo "Binding RFCOMM device $DEVICE to $MAC on channel $CHANNEL"
+"$RFCOMM_BIN" bind "$DEVICE" "$MAC" "$CHANNEL"
+echo "RFCOMM binding established successfully."
