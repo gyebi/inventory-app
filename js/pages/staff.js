@@ -295,7 +295,7 @@ function buildStaffSetupMessage(createdUser, backendResult, tempPassword = "") {
   const lines = [
     `Hello ${createdUser.fullName || createdUser.email},`,
     "",
-    "Your CALKRIS-DARF VENTURES inventory account has been created.",
+    "Your Kay-Flo Enterprise inventory account has been created.",
     `Login email: ${createdUser.email}`,
     `Role: ${formatRole(createdUser.role)}`
   ];

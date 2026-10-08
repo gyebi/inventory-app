@@ -1,0 +1,14 @@
+
+[Unit]
+Description=Inventory MPT-II Bluetooth RFCOMM Binding
+Requires=bluetooth.service
+After=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/inventory-rfcomm-bind
+RemainAfterExit=yes
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -827,6 +827,76 @@ p {
   font-size: 20px;
 }
 
+/* ================================
+   MPT-II 58mm Receipt
+================================ */
+
+.mpt-receipt-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mpt-receipt {
+  width: 320px;
+  background: #fff;
+  color: #000;
+  padding: 16px;
+  font-family: "Courier New", Courier, monospace;
+}
+
+.mpt-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.mpt-header strong {
+  display: block;
+  font-size: 16px;
+}
+
+.mpt-divider {
+  border-top: 1px dashed #000;
+  margin: 8px 0;
+}
+
+.mpt-meta > div,
+.mpt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mpt-meta > div {
+  margin-bottom: 4px;
+}
+
+.mpt-item {
+  margin-bottom: 8px;
+}
+
+.mpt-item-name {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.mpt-total {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.mpt-footer {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.mpt-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
 @media print {
   body {
     background: #ffffff;
@@ -893,4 +963,89 @@ p {
     padding: 6px 0;
     text-align: left;
   }
+
+  body.printing-mpt-receipt #app {
+  width: 58mm !important;
+  max-width: 58mm !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.printing-mpt-receipt .mpt-receipt-page {
+  width: 58mm !important;
+  max-width: 58mm !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.printing-mpt-receipt .mpt-receipt {
+  width: 48mm !important;
+  max-width: 48mm !important;
+  margin: 0 auto !important;
+  padding: 2mm !important;
+  font-family: "Courier New", Courier, monospace !important;
+  font-size: 8pt !important;
+  line-height: 1.25 !important;
+  background: #fff !important;
+  color: #000 !important;
+}
+
+body.printing-mpt-receipt .mpt-actions,
+body.printing-mpt-receipt .app-header,
+body.printing-mpt-receipt .page-title {
+  display: none !important;
+}
+
+body.printing-mpt-receipt .mpt-header strong {
+  font-size: 10pt !important;
+}
+
+body.printing-mpt-receipt .mpt-meta > div {
+  display: block !important;
+  margin-bottom: 1mm !important;
+}
+
+body.printing-mpt-receipt .mpt-meta span {
+  display: block;
+}
+
+body.printing-mpt-receipt .mpt-item {
+  margin-bottom: 2mm !important;
+  page-break-inside: avoid;
+}
+
+body.printing-mpt-receipt .mpt-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 2mm !important;
+}
+
+body.printing-mpt-receipt .mpt-total {
+  font-size: 10pt !important;
+  font-weight: bold !important;
+}
+
+body.printing-mpt-receipt .mpt-footer {
+  font-size: 8pt !important;
+}
+}
+
+.mpt-printer-status {
+  width: 320px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.mpt-printer-status > div {
+  margin-bottom: 6px;
+}
+
+.mpt-printer-status button {
+  margin-top: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
 }

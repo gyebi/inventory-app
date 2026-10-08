@@ -74,10 +74,17 @@ function renderReceiveStock(error = "", values = {}) {
 
       <div class="form-row">
         <label for="paymentStatus">Payment Type</label>
-        <select id="paymentStatus">
-          <option value="Credit" ${values.paymentStatus !== "Paid" ? "selected" : ""}>Credit</option>
-          <option value="Paid" ${values.paymentStatus === "Paid" ? "selected" : ""}>Paid</option>
+        <select id="paymentStatus" onchange="toggleReceiptDueDate()">
+          <option value="Credit" ${values.paymentStatus === "Credit" ? "selected" : ""}>Credit</option>
+          <option value="Part Payment" ${values.paymentStatus === "Part Payment" ? "selected" : ""}>Part Payment</option>
+          <option value="Paid in Full" ${values.paymentStatus === "Paid in Full" ? "selected" : ""}>Paid in Full</option>
         </select>
+      </div>
+
+      <div class="form-row" id="dueDateRow">
+        <label for="dueDate">Due Date</label>
+        <input id="dueDate" type="date" value="${escapeHtml(values.dueDate || "")}">
+        <small class="field-hint">Required for Credit and Part Payment purchases.</small>
       </div>
 
       <div class="form-row">
@@ -281,6 +288,7 @@ function renderStockSaved(receipts, totalAmount, purchaseId) {
           <div><strong>Batch Number:</strong> ${escapeHtml(receipt.batchId || receipt.id || "N/A")}</div>
           <div><strong>Date Received:</strong> ${formatReceiptTime(receipt.purchaseDate || receipt.receivedAt)}</div>
           <div><strong>Payment:</strong> ${escapeHtml(receipt.paymentStatus)}</div>
+          <div><strong>Due Date:</strong> ${receipt.dueDate || "N/A"}</div>
           <div><strong>Quantity Received:</strong> ${receipt.quantityReceived} ${escapeHtml(receipt.baseUnit || "base unit")}(s)</div>
           <div><strong>Total Bulk Cost:</strong> ${formatCurrency(receipt.totalBulkCost)}</div>
           <div><strong>Additional Expenses:</strong> ${formatCurrency(receipt.additionalExpenses)}</div>
@@ -302,6 +310,8 @@ function renderStockSaved(receipts, totalAmount, purchaseId) {
 }
 
 function applyPurchaseLocally({ receipts, cloudLines = [] }) {
+  const productsWithInitialPrice = new Set();
+
   receipts.forEach((receipt, index) => {
     const product = getProductById(receipt.productId);
     const receiptId = cloudLines[index]?.receiptId || receipt.id;
@@ -325,6 +335,8 @@ function applyPurchaseLocally({ receipts, cloudLines = [] }) {
       receivedAt: receipt.receivedAt,
       expiryDate: receipt.expiryDate,
       paymentStatus: receipt.paymentStatus
+      ,
+      dueDate: receipt.dueDate
     });
 
     state.stockReceipts.push({
@@ -334,10 +346,22 @@ function applyPurchaseLocally({ receipts, cloudLines = [] }) {
 
     if (product) {
       product.quantity = Number(product.quantity || 0) + Number(receipt.quantityReceived || 0);
+
+      const unitSellingPrice = Number(receipt.unitSellingPrice || 0);
+
+      if (unitSellingPrice > 0 && Number(product.sellingPrice || 0) <= 0) {
+        product.sellingPrice = unitSellingPrice;
+        product.bulkSellingPrice = unitSellingPrice * getUnitsPerBulk(product);
+        product.sellingPriceEffectiveDate = receipt.purchaseDate || receipt.receivedAt || new Date().toISOString();
+        product.sellingPriceUpdatedAt = receipt.receivedAt || receipt.purchaseDate || new Date().toISOString();
+        productsWithInitialPrice.add(product.id);
+      }
     }
   });
 
   saveState();
+
+  return Array.from(productsWithInitialPrice);
 }
 
 async function receiveStock() {
@@ -363,6 +387,11 @@ async function receiveStock() {
 
   if (!values.receivedBy) {
     renderReceiveStock("Enter who received the stock.", { ...values, lines });
+    return;
+  }
+
+  if (isCreditLikePayment(values.paymentStatus) && !values.dueDate) {
+    renderReceiveStock("Enter a due date for Credit or Part Payment purchases.", { ...values, lines });
     return;
   }
 
@@ -426,6 +455,7 @@ function buildReceiptFromLine(values, line, purchaseId) {
     invoiceDetails: values.invoiceNumber,
     purchaseDate: values.purchaseDate,
     paymentStatus: values.paymentStatus,
+    dueDate: values.dueDate,
     notes: values.notes,
     receivedBy: values.receivedBy,
     receivedAt: values.purchaseDate,
@@ -485,6 +515,7 @@ function collectPurchaseValues() {
     invoiceNumber: document.getElementById("invoiceNumber")?.value.trim() || "",
     purchaseDate: document.getElementById("purchaseDate")?.value || "",
     paymentStatus: document.getElementById("paymentStatus")?.value || "Credit",
+    dueDate: document.getElementById("dueDate")?.value || "",
     receivedBy: document.getElementById("receivedBy")?.value.trim() || "",
     notes: document.getElementById("purchaseNotes")?.value.trim() || ""
   };
@@ -516,8 +547,24 @@ function createEmptyLine() {
   };
 }
 
+function toggleReceiptDueDate() {
+  const dueDateRow = document.getElementById("dueDateRow");
+  const paymentStatus = document.getElementById("paymentStatus")?.value || "";
+
+  if (!dueDateRow) {
+    return;
+  }
+
+  dueDateRow.style.display = isCreditLikePayment(paymentStatus) ? "block" : "none";
+}
+
 function getProductById(productId) {
   return state.products.find((product) => product.id === productId);
+}
+
+function isCreditLikePayment(paymentStatus = "") {
+  const normalized = String(paymentStatus || "").toLowerCase();
+  return normalized === "credit" || normalized === "part payment";
 }
 
 function getUnitsPerBulk(product) {
@@ -588,4 +635,5 @@ window.addPurchaseLine = addPurchaseLine;
 window.removePurchaseLine = removePurchaseLine;
 window.handlePurchaseLineProductChange = handlePurchaseLineProductChange;
 window.updatePurchaseSummary = updatePurchaseSummary;
+window.toggleReceiptDueDate = toggleReceiptDueDate;
 window.getCurrentDateTimeValue = getCurrentDateTimeValue;

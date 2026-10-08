@@ -16,6 +16,11 @@ const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
 const priceChangesCollection = collection(db, "priceChanges");
 
+const toOptionalPositiveNumber = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+};
+
 const toCloudProduct = (product) => ({
   name: product.name,
   category: product.category || "",
@@ -24,6 +29,12 @@ const toCloudProduct = (product) => ({
   unitsPerBulk: Number(product.unitsPerBulk || 1),
   quantity: Number(product.quantity || 0),
   lowStockThreshold: Number(product.lowStockThreshold || 10),
+  ...(toOptionalPositiveNumber(product.costPrice) !== undefined ? { costPrice: toOptionalPositiveNumber(product.costPrice) } : {}),
+  ...(toOptionalPositiveNumber(product.bulkCostPrice) !== undefined ? { bulkCostPrice: toOptionalPositiveNumber(product.bulkCostPrice) } : {}),
+  ...(toOptionalPositiveNumber(product.sellingPrice) !== undefined ? { sellingPrice: toOptionalPositiveNumber(product.sellingPrice) } : {}),
+  ...(toOptionalPositiveNumber(product.bulkSellingPrice) !== undefined ? { bulkSellingPrice: toOptionalPositiveNumber(product.bulkSellingPrice) } : {}),
+  ...(product.sellingPriceEffectiveDate ? { sellingPriceEffectiveDate: product.sellingPriceEffectiveDate } : {}),
+  ...(product.sellingPriceUpdatedAt ? { sellingPriceUpdatedAt: product.sellingPriceUpdatedAt } : {}),
   updatedAt: serverTimestamp()
 });
 
@@ -113,6 +124,41 @@ export async function savePriceChangeToCloud(priceChange) {
   }
 
   return priceChangeRef;
+}
+
+export async function savePriceChangeAndProductToCloud(priceChange, product) {
+  const priceChangeRef = doc(db, "priceChanges", priceChange.id);
+  const productRef = doc(db, "products", product.id);
+  const batch = writeBatch(db);
+
+  batch.set(
+    priceChangeRef,
+    {
+      ...priceChange,
+      createdAt: priceChange.createdAt || serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  batch.set(
+    productRef,
+    {
+      ...toCloudProduct(product),
+      createdAt: product.createdAt || serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to save the price change to Firestore. Check your connection and try again.");
+  }
+
+  return {
+    priceChangeRef,
+    productRef
+  };
 }
 
 export async function receiveStockInCloudTransaction({

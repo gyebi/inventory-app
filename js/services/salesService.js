@@ -111,16 +111,22 @@ const previewBatchAllocations = (sellableBatches, quantityToSell) => {
 };
 
 const getUnitPrices = (product, saleUnitType) => {
+  const resolveCurrentSellingPrice = window.app?.resolveCurrentSellingPrice;
+
   if (saleUnitType === "bulk") {
     return {
-      unitCostPrice: product.bulkCostPrice ?? (product.costPrice * product.unitsPerBulk),
-      unitSellingPrice: product.bulkSellingPrice ?? (product.sellingPrice * product.unitsPerBulk)
+      unitCostPrice: Number(product.bulkCostPrice ?? (Number(product.costPrice || 0) * Number(product.unitsPerBulk || 1))),
+      unitSellingPrice: typeof resolveCurrentSellingPrice === "function"
+        ? resolveCurrentSellingPrice(product, "bulk")
+        : Number(product.bulkSellingPrice ?? ((product.sellingPrice || 0) * (product.unitsPerBulk || 1)))
     };
   }
 
   return {
-    unitCostPrice: product.costPrice,
-    unitSellingPrice: product.sellingPrice
+    unitCostPrice: Number(product.costPrice || 0),
+    unitSellingPrice: typeof resolveCurrentSellingPrice === "function"
+      ? resolveCurrentSellingPrice(product, "base")
+      : Number(product.sellingPrice || 0)
   };
 };
 

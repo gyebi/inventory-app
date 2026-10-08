@@ -6,3 +6,4 @@ firebase-debug.log*
 .env
 .env.*
 !.env.example
+printer-bridge/printer-config.json

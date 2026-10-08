@@ -1,0 +1,17 @@
+
+[Unit]
+Description=Inventory MPT-II Printer Bridge
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__NODE_PATH__ printer-bridge/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment="INVENTORY_ALLOWED_ORIGINS=__ALLOWED_ORIGINS__"
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

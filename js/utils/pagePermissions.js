@@ -5,6 +5,7 @@ export const pagePermissions = {
   stockAdjustment: "manage_stock",
   supplierPayment: "manage_stock",
   priceChanges: "manage_settings",
+  printerSettings: "manage_settings",
   inventory: "manage_stock",
   suppliers: "manage_stock",
   addProduct: "add_product",

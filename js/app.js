@@ -38,6 +38,7 @@ import { fetchTaxSettingsFromCloud } from "./services/taxSettingsService.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "./utils/errorUtils.js";
 import { getPagePermission } from "./utils/pagePermissions.js";
 
+
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
 const modalBody = document.getElementById("modal-body");
@@ -197,7 +198,14 @@ function replaceProducts(products = []) {
     quantity: 0,
     ...product
   }));
+  const changed = Array.isArray(state.stock) && state.stock.length > 0
+    ? syncProductSellingPricesFromStock()
+    : false;
   markCloudUpdated("Products synced");
+  if (changed) {
+    saveState();
+    return;
+  }
   saveState();
 }
 
@@ -300,14 +308,19 @@ function rebuildStockFromCloudReceipts() {
       productId: receipt.productId,
       productName: receipt.product,
       quantity: Math.max(originalQuantity - soldQuantity - adjustedQuantity, 0),
-      bulkUnitsReceived: receipt.bulkUnitsReceived || 0,
-      baseUnitsReceived: receipt.baseUnitsReceived || 0,
+      bulkQuantityReceived: Number(receipt.bulkQuantityReceived ?? receipt.bulkUnitsReceived ?? 0),
+      bulkUnitsReceived: Number(receipt.bulkUnitsReceived ?? receipt.bulkQuantityReceived ?? 0),
+      baseUnitsReceived: Number(receipt.baseUnitsReceived ?? receipt.quantityReceived ?? 0),
       receivedBy: receipt.receivedBy || "",
       supplier: receipt.supplier || "",
       invoiceDetails: receipt.invoiceDetails || "",
       receivedAt: receipt.receivedAt || null,
       expiryDate: receipt.expiryDate || "",
-      paymentStatus: receipt.paymentStatus || ""
+      paymentStatus: receipt.paymentStatus || "",
+      unitCost: Number(receipt.unitCost || 0),
+      unitSellingPrice: Number(receipt.unitSellingPrice || 0),
+      bulkSellingPrice: Number(receipt.bulkSellingPrice || 0),
+      totalLandedCost: Number(receipt.totalLandedCost || receipt.lineTotal || 0)
     };
   });
 
@@ -327,14 +340,156 @@ function rebuildStockFromCloudReceipts() {
       receivedAt: null,
       expiryDate: "",
       paymentStatus: "",
+      unitCost: Number(product.costPrice || 0),
+      unitSellingPrice: Number(product.sellingPrice || 0),
+      bulkSellingPrice: Number(product.bulkSellingPrice || 0),
+      totalLandedCost: 0,
       isCloudInitial: true
     }));
 
   state.stock = [...receiptStock, ...syntheticStock];
+  applyPriceChangeHistoryToStock();
+  syncProductSellingPricesFromStock();
 
   state.products.forEach((product) => {
     product.quantity = getSellableStockQuantity(product.id);
   });
+}
+
+function getPriceReferenceTime(entry) {
+  const rawValue = entry?.sellingPriceEffectiveDate || entry?.effectiveDate || entry?.sellingPriceUpdatedAt || entry?.receivedAt || entry?.purchaseDate || entry?.createdAt || 0;
+  const parsed = new Date(rawValue);
+
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function applyPriceChangeHistoryToStock() {
+  if (!Array.isArray(state.stock) || state.stock.length === 0) {
+    return false;
+  }
+
+  const priceChanges = Array.isArray(state.priceChanges) ? state.priceChanges : [];
+
+  if (priceChanges.length === 0) {
+    return false;
+  }
+
+  const batchesById = new Map(state.stock.map((batch) => [batch.id, batch]));
+  let changed = false;
+
+  priceChanges
+    .slice()
+    .sort((left, right) => getPriceReferenceTime(left) - getPriceReferenceTime(right))
+    .forEach((change) => {
+      const newSellingPrice = Number(change.newSellingPrice || 0);
+
+      if (!Number.isFinite(newSellingPrice) || newSellingPrice <= 0) {
+        return;
+      }
+
+      const affectedBatchIds = Array.isArray(change.affectedBatchIds) ? change.affectedBatchIds : [];
+
+      affectedBatchIds.forEach((batchId) => {
+        const batch = batchesById.get(batchId);
+
+        if (!batch) {
+          return;
+        }
+
+        const product = state.products.find((item) => item.id === batch.productId);
+        const unitsPerBulk = Number(product?.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk || 1) : 1;
+        const bulkSellingPrice = newSellingPrice * unitsPerBulk;
+
+        if (batch.unitSellingPrice !== newSellingPrice) {
+          batch.unitSellingPrice = newSellingPrice;
+          changed = true;
+        }
+
+        if (batch.bulkSellingPrice !== bulkSellingPrice) {
+          batch.bulkSellingPrice = bulkSellingPrice;
+          changed = true;
+        }
+
+        if (change.effectiveDate && batch.sellingPriceEffectiveDate !== change.effectiveDate) {
+          batch.sellingPriceEffectiveDate = change.effectiveDate;
+          changed = true;
+        }
+
+        if (batch.sellingPriceChangeId !== change.id) {
+          batch.sellingPriceChangeId = change.id;
+          changed = true;
+        }
+      });
+    });
+
+  return changed;
+}
+
+function resolveCurrentSellingPrice(productOrProductId, saleUnit = "base") {
+  const product = typeof productOrProductId === "string"
+    ? state.products.find((item) => item.id === productOrProductId)
+    : productOrProductId;
+
+  if (!product) {
+    return 0;
+  }
+
+  const unitsPerBulk = Number(product.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk || 1) : 1;
+  const sellableBatches = getSellableBatches(product.id)
+    .slice()
+    .sort((left, right) => getPriceReferenceTime(right) - getPriceReferenceTime(left));
+
+  for (const batch of sellableBatches) {
+    const unitPrice = Number(batch.unitSellingPrice || 0);
+
+    if (Number.isFinite(unitPrice) && unitPrice > 0) {
+      return saleUnit === "bulk" ? unitPrice * unitsPerBulk : unitPrice;
+    }
+
+    const bulkPrice = Number(batch.bulkSellingPrice || 0);
+
+    if (Number.isFinite(bulkPrice) && bulkPrice > 0) {
+      return saleUnit === "bulk" ? bulkPrice : bulkPrice / unitsPerBulk;
+    }
+  }
+
+  const productUnitPrice = Number(product.sellingPrice || 0);
+
+  if (Number.isFinite(productUnitPrice) && productUnitPrice > 0) {
+    return saleUnit === "bulk" ? productUnitPrice * unitsPerBulk : productUnitPrice;
+  }
+
+  const productBulkPrice = Number(product.bulkSellingPrice || 0);
+
+  if (Number.isFinite(productBulkPrice) && productBulkPrice > 0) {
+    return saleUnit === "bulk" ? productBulkPrice : productBulkPrice / unitsPerBulk;
+  }
+
+  return 0;
+}
+
+function syncProductSellingPricesFromStock() {
+  let changed = false;
+
+  state.products.forEach((product) => {
+    const unitPrice = resolveCurrentSellingPrice(product, "base");
+
+    if (unitPrice > 0) {
+      const bulkPrice = unitPrice * (Number(product.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk || 1) : 1);
+
+      if (product.sellingPrice !== unitPrice) {
+        product.sellingPrice = unitPrice;
+        changed = true;
+      }
+
+      if (product.bulkSellingPrice !== bulkPrice) {
+        product.bulkSellingPrice = bulkPrice;
+        changed = true;
+      }
+    }
+  });
+
+  return changed;
 }
 
 function replaceStockReceipts(receipts = []) {
@@ -346,7 +501,12 @@ function replaceStockReceipts(receipts = []) {
 
 function replacePriceChanges(priceChanges = []) {
   state.priceChanges = Array.isArray(priceChanges) ? priceChanges : [];
+  const changed = applyPriceChangeHistoryToStock() || syncProductSellingPricesFromStock();
   markCloudUpdated("Price changes synced");
+  if (changed) {
+    saveState();
+    return;
+  }
   saveState();
 }
 
@@ -571,6 +731,7 @@ const menuItems = [
   { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
   { page: "supplierPayment", icon: "🧾", title: "Supplier Payment", text: "Record payments against supplier invoices" },
   { page: "priceChanges", icon: "₵", title: "Price Changes", text: "Update selling prices and track batch history" },
+  { page: "printerSettings", icon: "🖨", title: "Printer", text: "Configure the receipt printer" },
   { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment", text: "Record damaged, lost, expired, or broken stock" },
   { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
   { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
@@ -643,6 +804,7 @@ function navigate(page) {
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "supplierPayment") window.renderSupplierPayment?.();
   if (page === "priceChanges") window.renderSellingPriceChanges?.();
+  if (page === "printerSettings") window.refreshPrinterSettings?.();
   if (page === "stockAdjustment") window.renderStockAdjustment?.();
   if (page === "suppliers") window.renderSuppliers?.();
   if (page === "categorySettings") window.renderCategorySettings?.();
@@ -664,7 +826,7 @@ function renderSplash() {
   app.innerHTML = `
     <section class="splash-page">
       <div>
-        <img class="splash-logo" src="/logo.png" alt="Calkris-Darf Ventures">
+        <img class="splash-logo" src="/Kay-Flo.png" alt="Kay-Flo Enterprise">
         <div class="splash-loader" aria-hidden="true"><span></span></div>
       </div>
     </section>
@@ -694,7 +856,7 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <section class="login-page">
       <div class="login-panel">
-        <h1>CALKRIS-DARF VENTURES</h1>
+        <h1>Kay-Flo Enterprise</h1>
         <h2>Login</h2>
 
         ${error ? `<div class="message error">${error}</div>` : ""}
@@ -931,7 +1093,7 @@ function renderShell() {
   app.innerHTML = `
     <header class="app-header">
       <div>
-        <h1>CALKRIS-DARF VENTURES</h1>
+        <h1>Kay-Flo Enterprise</h1>
         <p>Stock control, sales, and receipts in one place.</p>
       </div>
       <div id="statusBar" class="status-bar"></div>
@@ -1195,6 +1357,16 @@ function printReceipt() {
   window.print();
 }
 
+function printMptReceipt() {
+  document.body.classList.add("printing-mpt-receipt");
+
+  window.print();
+
+  setTimeout(() => {
+    document.body.classList.remove("printing-mpt-receipt");
+  }, 500);
+}
+
 function printModalReport() {
   if (isPrintingModal) {
     return;
@@ -1248,7 +1420,9 @@ window.app = {
   closeModal,
   refreshFromCloud
   ,
-  getCurrentPage: () => currentPage
+  getCurrentPage: () => currentPage,
+  resolveCurrentSellingPrice,
+  syncProductSellingPricesFromStock
 };
 
 window.navigate = navigate;
@@ -1256,6 +1430,7 @@ window.login = login;
 window.completeRequiredPasswordChange = completeRequiredPasswordChange;
 window.closeModal = closeModal;
 window.printReceipt = printReceipt;
+window.printMptReceipt = printMptReceipt;
 window.printModalReport = printModalReport;
 window.refreshFromCloud = refreshFromCloud;
 
@@ -1268,6 +1443,7 @@ await import("./pages/addProduct.js");
 await import("./pages/receiveStock.js");
 await import("./pages/supplierPayment.js");
 await import("./pages/sellingPriceChanges.js");
+await import("./pages/printerSettings.js");
 await import("./pages/stockAdjustment.js");
 await import("./pages/suppliers.js");
 await import("./pages/categorySettings.js");
