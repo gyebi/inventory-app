@@ -54,7 +54,7 @@ function buildReceipt(receipt) {
   const lineWidth = getLineWidth(receipt.paperWidthMm);
 
   lines.push(
-    center(receipt.businessName || "CALKRIS-DARF VENTURES", lineWidth)
+    center(receipt.businessName || "Kay-Flo Enterprise", lineWidth)
   );
 
   if (receipt.businessAddress) {

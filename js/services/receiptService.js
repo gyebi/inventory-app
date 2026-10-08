@@ -1,4 +1,4 @@
-export const RECEIPT_BUSINESS_NAME = "CALKRIS-DARF VENTURES";
+export const RECEIPT_BUSINESS_NAME = "Kay-Flo Enterprise";
 
 export function formatReceiptCurrency(value) {
   const amount = Number(value) || 0;

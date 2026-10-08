@@ -34,7 +34,7 @@ The project is now running as a browser-based inventory and sales app with:
   - date/time
   - purchased items
   - totals
-- Updated branding to `CALKRIS-DARF VENTURES`
+- Updated branding to `Kay-Flo Enterprise`
 - Added `Ghs` formatting to receipts, inventory, and dashboard
 - Added Vite tooling with:
   - `npm run dev`

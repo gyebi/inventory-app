@@ -132,7 +132,7 @@ async function getPrinterStatus() {
 
 function createTestReceipt() {
   return {
-    businessName: "CALKRIS-DARF VENTURES",
+    businessName: "Kay-Flo Enterprise",
     businessAddress: "P. O. Box ...",
     businessPhone: "+233-000-000-0000",
     businessEmail: "carlkrisventures@gmail.com",

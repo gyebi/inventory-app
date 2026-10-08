@@ -826,7 +826,7 @@ function renderSplash() {
   app.innerHTML = `
     <section class="splash-page">
       <div>
-        <img class="splash-logo" src="/logo.png" alt="Calkris-Darf Ventures">
+        <img class="splash-logo" src="/Kay-Flo.png" alt="Kay-Flo Enterprise">
         <div class="splash-loader" aria-hidden="true"><span></span></div>
       </div>
     </section>
@@ -856,7 +856,7 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <section class="login-page">
       <div class="login-panel">
-        <h1>CALKRIS-DARF VENTURES</h1>
+        <h1>Kay-Flo Enterprise</h1>
         <h2>Login</h2>
 
         ${error ? `<div class="message error">${error}</div>` : ""}
@@ -1093,7 +1093,7 @@ function renderShell() {
   app.innerHTML = `
     <header class="app-header">
       <div>
-        <h1>CALKRIS-DARF VENTURES</h1>
+        <h1>Kay-Flo Enterprise</h1>
         <p>Stock control, sales, and receipts in one place.</p>
       </div>
       <div id="statusBar" class="status-bar"></div>
