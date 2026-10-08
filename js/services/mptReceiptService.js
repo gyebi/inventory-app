@@ -109,7 +109,7 @@ async function sendReceiptToMptPrinter(sale) {
 
     businessAddress: "P. O. Box ...",
     businessPhone: "+233-000-000-0000",
-    businessEmail: "carlkrisventures@gmail.com",
+    businessEmail: "kay-flowent@gmail.com",
 
     receiptId: sale.id,
     date: formatReceiptDateTime(sale.createdAt),

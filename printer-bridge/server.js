@@ -135,7 +135,7 @@ function createTestReceipt() {
     businessName: "Kay-Flo Enterprise",
     businessAddress: "P. O. Box ...",
     businessPhone: "+233-000-000-0000",
-    businessEmail: "carlkrisventures@gmail.com",
+    businessEmail: "kay-flowent@gmail.com",
     receiptId: "TEST-001",
     date: new Date().toLocaleString(),
     cashier: "Test",
