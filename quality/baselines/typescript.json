@@ -1,0 +1,1616 @@
+{
+  "version": 1,
+  "description": "Jyaano V1.5 accepted legacy TypeScript diagnostics",
+  "diagnostics": [
+    {
+      "file": "js/app.js",
+      "line": 803,
+      "column": 37,
+      "code": "TS2339",
+      "message": "Property 'renderAddProduct' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 804,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property 'renderReceiveStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 805,
+      "column": 42,
+      "code": "TS2339",
+      "message": "Property 'renderSupplierPayment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 806,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property 'renderSellingPriceChanges' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 807,
+      "column": 42,
+      "code": "TS2339",
+      "message": "Property 'refreshPrinterSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 808,
+      "column": 42,
+      "code": "TS2339",
+      "message": "Property 'renderStockAdjustment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 809,
+      "column": 36,
+      "code": "TS2339",
+      "message": "Property 'renderSuppliers' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 810,
+      "column": 43,
+      "code": "TS2339",
+      "message": "Property 'renderCategorySettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 811,
+      "column": 38,
+      "code": "TS2339",
+      "message": "Property 'renderTaxSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 812,
+      "column": 32,
+      "code": "TS2339",
+      "message": "Property 'renderSales' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 814,
+      "column": 32,
+      "code": "TS2339",
+      "message": "Property 'renderStaff' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 923,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 931,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 932,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1054,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1055,
+      "column": 71,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1401,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1407,
+      "column": 23,
+      "code": "TS2339",
+      "message": "Property 'formatStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1418,
+      "column": 35,
+      "code": "TS2339",
+      "message": "Property 'getCurrentDateTimeValue' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1428,
+      "column": 8,
+      "code": "TS2551",
+      "message": "Property 'navigate' does not exist on type 'Window & typeof globalThis'. Did you mean 'navigator'?"
+    },
+    {
+      "file": "js/app.js",
+      "line": 1429,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'login' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1430,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'completeRequiredPasswordChange' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1431,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'closeModal' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1432,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'printReceipt' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1433,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'printMptReceipt' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1434,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'printModalReport' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1435,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'refreshFromCloud' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1440,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1452,
+      "column": 14,
+      "code": "TS2306",
+      "message": "File '/home/kwasi/Documents/dev-files/Projects/inventory/inventory-app/js/pages/inventory.js' is not a module."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1453,
+      "column": 14,
+      "code": "TS2306",
+      "message": "File '/home/kwasi/Documents/dev-files/Projects/inventory/inventory-app/js/pages/dashboard.js' is not a module."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1455,
+      "column": 14,
+      "code": "TS2306",
+      "message": "File '/home/kwasi/Documents/dev-files/Projects/inventory/inventory-app/js/pages/help.js' is not a module."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1457,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1457,
+      "column": 33,
+      "code": "TS2339",
+      "message": "Property 'formatStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1458,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1458,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'getCurrentDateTimeValue' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/app.js",
+      "line": 1459,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 6,
+      "column": 59,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 84,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 107,
+      "column": 48,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 108,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 109,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 110,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 111,
+      "column": 71,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 112,
+      "column": 81,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 213,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderAddProduct' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 214,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addProduct' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "line": 215,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'formatStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 3,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 55,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 97,
+      "column": 57,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 132,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderCategorySettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 133,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addCategory' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 134,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'removeCategory' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/categorySettings.js",
+      "line": 135,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saveCategoryList' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 2,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'ensureStockState'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 3,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'formatReceiptCurrency'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 5,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'getExpiredStockQuantity'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 8,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'renderPage'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 9,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'state'."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "line": 10,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/help.js",
+      "line": 1,
+      "column": 9,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'renderPage'."
+    },
+    {
+      "file": "js/pages/help.js",
+      "line": 1,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 2,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'ensureStockState'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 5,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'getExpiredStockQuantity'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 8,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'renderPage'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 9,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'state'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 10,
+      "column": 3,
+      "code": "TS2451",
+      "message": "Cannot redeclare block-scoped variable 'formatReceiptCurrency'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 11,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/inventory.js",
+      "line": 151,
+      "column": 17,
+      "code": "TS2339",
+      "message": "Property 'setSelectionRange' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 8,
+      "column": 31,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 206,
+      "column": 14,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 219,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 228,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 244,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 252,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 253,
+      "column": 77,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 254,
+      "column": 72,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 255,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 256,
+      "column": 65,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 308,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderPrinterSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 309,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'refreshPrinterSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 310,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'savePrinterSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 311,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'testPrinterSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 312,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'togglePrinterServicePanel' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/printerSettings.js",
+      "line": 313,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'togglePrinterTypeFields' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 15,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 205,
+      "column": 20,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 264,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 514,
+      "column": 57,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 515,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 516,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 517,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 518,
+      "column": 50,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 519,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 520,
+      "column": 54,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 526,
+      "column": 53,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 527,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 528,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 529,
+      "column": 66,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 530,
+      "column": 65,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 531,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 532,
+      "column": 53,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 533,
+      "column": 71,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 552,
+      "column": 67,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 632,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderReceiveStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 633,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'receiveStock' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 634,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addPurchaseLine' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 635,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'removePurchaseLine' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 636,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'handlePurchaseLineProductChange' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 637,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'updatePurchaseSummary' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 638,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'toggleReceiptDueDate' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "line": 639,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'getCurrentDateTimeValue' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 7,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 13,
+      "column": 17,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 35,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 124,
+      "column": 26,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 206,
+      "column": 26,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 224,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 231,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 232,
+      "column": 57,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 264,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 265,
+      "column": 57,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 266,
+      "column": 59,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 306,
+      "column": 19,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 327,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 330,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 352,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderSales' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 353,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'updateSalePreview' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 354,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addSaleCartItem' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 355,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'removeSaleCartItem' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "line": 356,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'recordSale' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 4,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 66,
+      "column": 32,
+      "code": "TS2362",
+      "message": "The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 66,
+      "column": 88,
+      "code": "TS2363",
+      "message": "The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 82,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 96,
+      "column": 38,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 97,
+      "column": 42,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 113,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 114,
+      "column": 67,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 115,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 116,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 135,
+      "column": 41,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 256,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderSellingPriceChanges' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 257,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'previewPriceChangeBatches' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/sellingPriceChanges.js",
+      "line": 258,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saveSellingPriceChange' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 6,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 108,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 115,
+      "column": 61,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 116,
+      "column": 55,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 117,
+      "column": 61,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 118,
+      "column": 69,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 119,
+      "column": 53,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 120,
+      "column": 57,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 327,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 337,
+      "column": 20,
+      "code": "TS2551",
+      "message": "Property 'select' does not exist on type 'HTMLElement'. Did you mean 'onselect'?"
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 355,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderStaff' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 356,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addStaffUser' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "line": 357,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'copyStaffSetupMessage' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 11,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 133,
+      "column": 64,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 134,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 135,
+      "column": 64,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 136,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 137,
+      "column": 54,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 138,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 139,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 140,
+      "column": 54,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 431,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderStockAdjustment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 432,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'collectStockAdjustmentValues' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 433,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'recordStockAdjustment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "line": 434,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'updateStockAdjustmentPreview' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 12,
+      "column": 12,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 145,
+      "column": 64,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 162,
+      "column": 68,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 163,
+      "column": 80,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 164,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 253,
+      "column": 59,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 254,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 255,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 256,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 257,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 258,
+      "column": 66,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 259,
+      "column": 75,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 260,
+      "column": 69,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 261,
+      "column": 53,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 293,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 348,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderSupplierPayment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 349,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saveSupplierPayment' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 350,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'updateSupplierPaymentInvoiceOptions' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "line": 351,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'updateSupplierPaymentPreview' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 6,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 86,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 93,
+      "column": 56,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 94,
+      "column": 66,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 95,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 96,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 97,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 98,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 185,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderSuppliers' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/suppliers.js",
+      "line": 186,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'addSupplier' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 3,
+      "column": 49,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 88,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 89,
+      "column": 55,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 90,
+      "column": 62,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 91,
+      "column": 64,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 92,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 93,
+      "column": 84,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 94,
+      "column": 67,
+      "code": "TS2339",
+      "message": "Property 'value' does not exist on type 'HTMLElement'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 123,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'renderTaxSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/pages/taxSettings.js",
+      "line": 124,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saveTaxSettings' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 297,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'printMptReceiptBridge' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 304,
+      "column": 16,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 316,
+      "column": 18,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 332,
+      "column": 16,
+      "code": "TS2339",
+      "message": "Property 'disabled' does not exist on type 'Element'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 338,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'testMptPrinter' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "line": 349,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/receiptService.js",
+      "line": 146,
+      "column": 10,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 114,
+      "column": 45,
+      "code": "TS2339",
+      "message": "Property 'app' does not exist on type 'Window & typeof globalThis'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 332,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'productId' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 333,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'product' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 334,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'qty' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 335,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saleUnit' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 336,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'saleUnitType' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/salesService.js",
+      "line": 337,
+      "column": 8,
+      "code": "TS2339",
+      "message": "Property 'actualQtySold' does not exist on type '{ syncStatus: string; syncedAt: any; retryCount: number; lastSyncError: any; lastSyncAttemptAt: any; id: string; items: { productId: any; name: any; quantity: any; saleUnit: any; unit: any; unitPrice: any; total: any; actualQtySold: any; batchAllocations: any; }[]; ... 7 more ...; taxSettingsSnapshot: { ...; }; }'."
+    },
+    {
+      "file": "js/services/userProfileService.js",
+      "line": 46,
+      "column": 24,
+      "code": "TS2339",
+      "message": "Property 'user' does not exist on type 'unknown'."
+    },
+    {
+      "file": "js/utils/errorUtils.js",
+      "line": 69,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'code' does not exist on type 'Error'."
+    },
+    {
+      "file": "js/utils/errorUtils.js",
+      "line": 70,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'source' does not exist on type 'Error'."
+    },
+    {
+      "file": "js/utils/errorUtils.js",
+      "line": 71,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'severity' does not exist on type 'Error'."
+    },
+    {
+      "file": "js/utils/errorUtils.js",
+      "line": 72,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'retryable' does not exist on type 'Error'."
+    },
+    {
+      "file": "js/utils/errorUtils.js",
+      "line": 73,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'userMessage' does not exist on type 'Error'."
+    }
+  ]
+}

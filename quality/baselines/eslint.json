@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "description": "Jyaano V1.5 accepted legacy ESLint diagnostics",
+  "diagnostics": [
+    {
+      "file": "functions/index.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    },
+    {
+      "file": "js/pages/addProduct.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'navigate' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/dashboard.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'refreshFromCloud' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'navigate' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'parseExpiryDate' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'selectedProduct' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/receiveStock.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'line' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/sales.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'unitLabel' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/staff.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    },
+    {
+      "file": "js/pages/stockAdjustment.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'navigate' is assigned a value but never used."
+    },
+    {
+      "file": "js/pages/supplierPayment.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'navigate' is assigned a value but never used."
+    },
+    {
+      "file": "js/services/mptReceiptService.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    },
+    {
+      "file": "js/services/printerBridgeService.js",
+      "ruleId": "no-useless-assignment",
+      "severity": 2,
+      "message": "The value assigned to 'payload' is not used in subsequent statements."
+    },
+    {
+      "file": "js/services/printerBridgeService.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    },
+    {
+      "file": "printer-bridge/server.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    },
+    {
+      "file": "printer-bridge/server.js",
+      "ruleId": "no-unused-vars",
+      "severity": 2,
+      "message": "'error' is defined but never used."
+    }
+  ]
+}
