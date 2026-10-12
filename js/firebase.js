@@ -12,6 +12,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+const PRODUCTION_PROJECT_ID = "inventory-app-19d04";
+const isStagingBuild = import.meta.env.MODE === "staging";
+
 const missingConfig = Object.entries(firebaseConfig)
   .filter(([, value]) => !value)
   .map(([key]) => key);
@@ -20,7 +23,11 @@ if (missingConfig.length > 0) {
   throw new Error(`Missing Firebase configuration: ${missingConfig.join(", ")}`);
 }
 
+if (isStagingBuild && firebaseConfig.projectId === PRODUCTION_PROJECT_ID) {
+  throw new Error("Staging builds must not use the production Firebase project.");
+}
+
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app, "us-central1");
+export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || "us-central1");

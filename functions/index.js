@@ -5,16 +5,14 @@ const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { getAllowedOrigins } = require("./runtime-config");
 
 initializeApp();
 
 const db = getFirestore();
 
 const ALLOWED_ROLES = new Set(["admin", "manager", "sales", "storekeeper"]);
-const ALLOWED_ORIGINS = [
-  "https://inventory-app-19d04.web.app",
-  "https://inventory-app-19d04.firebaseapp.com"
-];
+const ALLOWED_ORIGINS = getAllowedOrigins();
 const DEFAULT_PASSWORD_SETUP_URL = ALLOWED_ORIGINS[0];
 
 function normalizeEmail(value) {
