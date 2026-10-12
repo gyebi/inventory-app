@@ -2,9 +2,6 @@ name: Jyaano CI
 
 on:
   push:
-    branches:
-      - main
-      - chore/jyaano-ci-setup
   pull_request:
     branches:
       - main
@@ -14,7 +11,7 @@ permissions:
 
 jobs:
   verify:
-    name: Typecheck, Lint, Test, Build
+    name: Application and Functions verification
     runs-on: ubuntu-24.04
 
     steps:
@@ -28,6 +25,9 @@ jobs:
         with:
           node-version: '22.x'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -38,4 +38,12 @@ jobs:
         run: npm ci
 
       - name: Verify Jyaano
+        run: npm run verify
+
+      - name: Install Functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Verify Firebase Functions
+        working-directory: functions
         run: npm run verify

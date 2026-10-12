@@ -2,11 +2,13 @@
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
+const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 
-admin.initializeApp();
+initializeApp();
 
-const db = admin.firestore();
+const db = getFirestore();
 
 const ALLOWED_ROLES = new Set(["admin", "manager", "sales", "storekeeper"]);
 const ALLOWED_ORIGINS = [
@@ -146,8 +148,8 @@ async function bootstrapFirstAdminProfile({ uid, userRecord, email }) {
       : "password",
     mustChangePassword: false,
     credentialSetupMode: null,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     bootstrapMethod: "first_sign_in"
   };
 
@@ -209,7 +211,7 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
   let existingUser = null;
 
   try {
-    existingUser = await admin.auth().getUserByEmail(email);
+    existingUser = await getAuth().getUserByEmail(email);
   } catch (error) {
     if (error.code !== "auth/user-not-found") {
       logger.error("Failed to check existing auth user", error);
@@ -221,7 +223,7 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
     throw new HttpsError("already-exists", "A Firebase Auth user with this email already exists.");
   }
 
-  const userRecord = await admin.auth().createUser({
+  const userRecord = await getAuth().createUser({
     email,
     password: temporaryPassword || undefined,
     displayName: fullName,
@@ -232,12 +234,12 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
 
   if (!temporaryPassword) {
     try {
-      passwordSetupLink = await admin.auth().generatePasswordResetLink(email, {
+      passwordSetupLink = await getAuth().generatePasswordResetLink(email, {
         url: passwordSetupUrl
       });
     } catch (error) {
       logger.error("Failed to generate password setup link", error);
-      await admin.auth().deleteUser(userRecord.uid);
+      await getAuth().deleteUser(userRecord.uid);
       throw new HttpsError("internal", "Unable to generate the password setup link for this staff account.");
     }
   }
@@ -253,8 +255,8 @@ exports.createStaffUser = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
     authProvider: "password",
     mustChangePassword,
     credentialSetupMode,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
     createdBy: {
       uid: callerProfile.uid,
       fullName: callerProfile.fullName || callerProfile.username || callerProfile.email || callerProfile.uid,
@@ -289,7 +291,7 @@ exports.ensureSignedInUserProfile = onCall({ cors: ALLOWED_ORIGINS }, async (req
   }
 
   const uid = request.auth.uid;
-  const userRecord = await admin.auth().getUser(uid);
+  const userRecord = await getAuth().getUser(uid);
   const email = normalizeEmail(userRecord.email);
 
   if (!email) {
@@ -337,7 +339,7 @@ exports.ensureSignedInUserProfile = onCall({ cors: ALLOWED_ORIGINS }, async (req
     username: sourceData.username || "",
     active: sourceData.active !== false,
     pendingAuthCreation: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp()
   };
 
   await canonicalRef.set(migratedDoc, { merge: true });
@@ -373,7 +375,7 @@ exports.clearRequiredPasswordChange = onCall({ cors: ALLOWED_ORIGINS }, async (r
   await userRef.set(
     {
       mustChangePassword: false,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     },
     { merge: true }
   );
