@@ -15,10 +15,19 @@ PATTERN = re.compile(
 )
 
 def fingerprint(item):
+    message = item["message"].replace("\\", "/")
+
+    # Normalize machine-specific absolute paths inside diagnostics.
+    message = re.sub(
+        r"(?<![\\w./-])(?:/[^\\s'\\\"`]+)*/js/",
+        "js/",
+        message
+    )
+
     return (
         item["file"].replace("\\", "/"),
         item["code"],
-        item["message"]
+        message
     )
 
 baseline = json.loads(BASELINE.read_text())
