@@ -799,7 +799,7 @@ function navigate(page) {
   renderShell();
 
   if (page === "home") renderHome();
-  if (page === "dashboard" || page === "reports") window.renderDashboard?.();
+  if (page === "dashboard" || page === "reports") window["renderDashboard"]?.();
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "supplierPayment") window.renderSupplierPayment?.();
@@ -1090,6 +1090,11 @@ async function completeRequiredPasswordChange(event) {
 }
 
 function renderShell() {
+  if (currentPage === "dashboard") {
+    renderDashboardShell();
+    return;
+  }
+
   app.innerHTML = `
     <header class="app-header">
       <div>
@@ -1102,6 +1107,49 @@ function renderShell() {
     <main id="page"></main>
   `;
   updateStatusBar();
+}
+
+function renderDashboardShell() {
+  const dashboardNavItems = [
+    { page: "dashboard", icon: "⌂", title: "Dashboard" },
+    { page: "sales", icon: "🛒", title: "Sales (POS)" },
+    { page: "inventory", icon: "▣", title: "Inventory" },
+    { page: "receiveStock", icon: "⇩", title: "Receive Stock" },
+    { page: "addProduct", icon: "＋", title: "Products" },
+    { page: "categorySettings", icon: "◇", title: "Categories" },
+    { page: "suppliers", icon: "♧", title: "Suppliers" },
+    { page: "reports", icon: "▥", title: "Reports" },
+    { page: "staff", icon: "♙", title: "Staff" },
+    { page: "taxSettings", icon: "⚙", title: "Settings" }
+  ].filter((item) => canAccessPage(item.page));
+  const displayName = state.user?.fullName || state.user?.username || state.user?.email || "User";
+  const initial = escapeShellHtml(displayName.trim().charAt(0).toUpperCase() || "U");
+
+  app.innerHTML = `
+    <div class="jyaano-app-shell">
+      <aside class="jyaano-sidebar" aria-label="Primary navigation">
+        <div class="jyaano-wordmark" aria-label="Jyaano Inventory Made Simple"><span>Jyaano</span><small>Inventory Made Simple</small></div>
+        <nav class="jyaano-nav">${dashboardNavItems.map((item) => `<button class="${item.page === currentPage ? "is-active" : ""}" type="button" onclick="navigate('${item.page}')"><span aria-hidden="true">${item.icon}</span>${item.title}</button>`).join("")}</nav>
+        <button class="jyaano-help-link" type="button" onclick="navigate('help')"><span aria-hidden="true">?</span><b>Need Help?</b><small>Support & guides</small></button>
+      </aside>
+      <section class="jyaano-stage">
+        <header class="jyaano-topbar">
+          <p><span class="jyaano-live-dot"></span>Live business overview</p>
+          <div class="jyaano-user"><span>${initial}</span><div><strong>${escapeShellHtml(displayName)}</strong><small>${escapeShellHtml(state.user?.role || "Staff")}</small></div><button type="button" onclick="navigate('home')" aria-label="Open main menu">⌄</button></div>
+        </header>
+        <main id="page"></main>
+      </section>
+    </div>
+  `;
+}
+
+function escapeShellHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function renderHome() {
