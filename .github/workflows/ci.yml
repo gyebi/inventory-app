@@ -3,6 +3,7 @@ name: Jyaano CI
 on:
   push:
     branches:
+      - main
       - chore/jyaano-ci-setup
   pull_request:
     branches:
@@ -14,20 +15,22 @@ permissions:
 jobs:
   verify:
     name: Typecheck, Lint, Test, Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: '22.x'
           cache: npm
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 

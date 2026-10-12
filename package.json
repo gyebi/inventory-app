@@ -13,7 +13,7 @@
     "typecheck:baseline": "python3 quality/check-typecheck-baseline.py",
     "lint": "eslint js functions/index.js printer-bridge",
     "lint:baseline": "node quality/check-eslint-baseline.mjs",
-    "test": "node --test printer-bridge/test/*.test.js",
+    "test": "node --test printer-bridge/test/*.test.js quality/test/*.test.mjs && python3 -B -m unittest discover -s quality/test -p 'test_*.py'",
     "verify": "npm run typecheck:baseline && npm run lint:baseline && npm run test && npm run build"
   },
   "devDependencies": {

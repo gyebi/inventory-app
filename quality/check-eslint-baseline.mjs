@@ -1,6 +1,11 @@
 import { ESLint } from "eslint";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  collectDiagnostics,
+  compareDiagnostics,
+  validateBaseline
+} from "./eslint-baseline-lib.mjs";
 
 const root = process.cwd();
 const baselinePath = path.join(root, "quality/baselines/eslint.json");
@@ -9,78 +14,39 @@ const baseline = JSON.parse(
   fs.readFileSync(baselinePath, "utf8")
 );
 
-if (baseline.version !== 1 || !Array.isArray(baseline.diagnostics)) {
-  throw new Error("Invalid ESLint baseline");
-}
+validateBaseline(baseline);
 
-function fingerprint(item) {
-  return JSON.stringify([
-    item.file,
-    item.ruleId,
-    item.severity,
-    item.message
+let current;
+try {
+  const eslint = new ESLint();
+  const results = await eslint.lintFiles([
+    "js/**/*.js",
+    "functions/index.js",
+    "printer-bridge/**/*.js"
   ]);
+  current = collectDiagnostics(results, root);
+} catch (error) {
+  console.error(`FAIL: ESLint could not complete safely: ${error.message}`);
+  process.exit(1);
 }
 
-function countDiagnostics(items) {
-  const counts = new Map();
-
-  for (const item of items) {
-    const key = fingerprint(item);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
-const eslint = new ESLint();
-
-const results = await eslint.lintFiles([
-  "js/**/*.js",
-  "functions/index.js",
-  "printer-bridge/**/*.js"
-]);
-
-const current = results.flatMap(file =>
-  file.messages.map(message => ({
-    file: path.relative(root, file.filePath).replace(/\\/g, "/"),
-    ruleId: message.ruleId,
-    severity: message.severity,
-    message: message.message
-  }))
+const { oldCounts, newCounts, introduced, resolved } = compareDiagnostics(
+  baseline.diagnostics,
+  current
 );
+const introducedCount = [...introduced.values()].reduce((sum, count) => sum + count, 0);
+const resolvedCount = [...resolved.values()].reduce((sum, count) => sum + count, 0);
 
-const oldCounts = countDiagnostics(baseline.diagnostics);
-const newCounts = countDiagnostics(current);
-
-let introduced = 0;
-let resolved = 0;
-
-for (const [key, count] of newCounts) {
-  const difference = count - (oldCounts.get(key) ?? 0);
-
-  if (difference > 0) {
-    introduced += difference;
-    console.error(
-      `NEW x${difference}: ${key}`
-    );
-  }
-}
-
-for (const [key, count] of oldCounts) {
-  const difference = count - (newCounts.get(key) ?? 0);
-
-  if (difference > 0) {
-    resolved += difference;
-  }
+for (const [key, count] of introduced) {
+  console.error(`NEW x${count}: ${key}`);
 }
 
 console.log(`Baseline lint findings: ${baseline.diagnostics.length}`);
 console.log(`Current lint findings:  ${current.length}`);
-console.log(`Resolved findings:      ${resolved}`);
-console.log(`New findings:           ${introduced}`);
+console.log(`Resolved findings:      ${resolvedCount}`);
+console.log(`New findings:           ${introducedCount}`);
 
-if (introduced > 0) {
+if (introducedCount > 0) {
   console.error("\nFAIL: New ESLint violations detected.");
   process.exit(1);
 }
