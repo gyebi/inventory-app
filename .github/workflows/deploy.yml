@@ -39,7 +39,9 @@ jobs:
           service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
           create_credentials_file: true
       - name: Write staging web configuration
-        run: printf '%s' "${{ secrets.FIREBASE_STAGING_WEB_ENV }}" > .env.staging
+        env:
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_STAGING_WEB_ENV }}
+        run: printf '%s' "$FIREBASE_WEB_CONFIG" > .env.staging
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.30.0
       - name: Deploy Hosting only to staging
@@ -67,7 +69,9 @@ jobs:
           service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
           create_credentials_file: true
       - name: Write production web configuration
-        run: printf '%s' "${{ secrets.FIREBASE_PRODUCTION_WEB_ENV }}" > .env.production
+        env:
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_PRODUCTION_WEB_ENV }}
+        run: printf '%s' "$FIREBASE_WEB_CONFIG" > .env.production
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.30.0
       - name: Deploy Hosting only after protected-environment approval

@@ -33,6 +33,10 @@ npm run deploy:functions
 
 See [RELEASE-GUIDE.md](RELEASE-GUIDE.md) for staging setup, guarded deployment commands, GitHub OIDC configuration, smoke tests, rollback, and recovery limitations.
 
+## Local Firebase emulator development
+
+Use the isolated `demo-jyaano` project for local review. It uses synthetic accounts and only loopback endpoints; it does not read or write hosted Firebase projects. See [the local emulator workflow](docs/local-emulator-development.md) for prerequisites, commands, demo accounts, and shutdown instructions.
+
 Current callable backend functions:
 
 - `createStaffUser`
