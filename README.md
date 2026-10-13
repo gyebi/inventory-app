@@ -31,6 +31,8 @@ Deploy Cloud Functions:
 npm run deploy:functions
 ```
 
+See [RELEASE-GUIDE.md](RELEASE-GUIDE.md) for staging setup, guarded deployment commands, GitHub OIDC configuration, smoke tests, rollback, and recovery limitations.
+
 Current callable backend functions:
 
 - `createStaffUser`

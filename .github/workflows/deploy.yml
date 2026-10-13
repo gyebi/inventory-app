@@ -1,0 +1,77 @@
+name: Controlled Firebase deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Explicit deployment environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging-hosting:
+    if: inputs.environment == 'staging'
+    name: Deploy staging Hosting
+    runs-on: ubuntu-24.04
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+          cache: npm
+      - run: npm ci
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Write staging web configuration
+        run: printf '%s' "${{ secrets.FIREBASE_STAGING_WEB_ENV }}" > .env.staging
+      - name: Install pinned Firebase CLI
+        run: npm install --global firebase-tools@15.30.0
+      - name: Deploy Hosting only to staging
+        env:
+          FIREBASE_STAGING_PROJECT_ID: ${{ vars.FIREBASE_STAGING_PROJECT_ID }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+        run: npm run deploy:staging:hosting
+
+  deploy-production-hosting:
+    if: inputs.environment == 'production' && github.ref == 'refs/heads/main'
+    name: Deploy production Hosting
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+          cache: npm
+      - run: npm ci
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.FIREBASE_DEPLOYER_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+      - name: Write production web configuration
+        run: printf '%s' "${{ secrets.FIREBASE_PRODUCTION_WEB_ENV }}" > .env.production
+      - name: Install pinned Firebase CLI
+        run: npm install --global firebase-tools@15.30.0
+      - name: Deploy Hosting only after protected-environment approval
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          JYAANO_ALLOW_PRODUCTION_DEPLOY: yes
+        run: npm run deploy:hosting
