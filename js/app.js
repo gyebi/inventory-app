@@ -36,7 +36,11 @@ import { fetchCategorySettingsFromCloud } from "./services/categorySettingsServi
 import { clearRequiredPasswordChange, getUserProfile } from "./services/userProfileService.js";
 import { fetchTaxSettingsFromCloud } from "./services/taxSettingsService.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "./utils/errorUtils.js";
-import { getPagePermission } from "./utils/pagePermissions.js";
+import {
+  DASHBOARD_PAGE,
+  canAccessPageWithPermission,
+  normalizeNavigationPage
+} from "./utils/hubNavigation.js";
 
 
 const app = document.getElementById("app");
@@ -85,7 +89,7 @@ let stopUsersListener = null;
 let stopSuppliersListener = null;
 let stopSupplierPaymentsListener = null;
 let cloudSyncPromise = null;
-let currentPage = "home";
+let currentPage = DASHBOARD_PAGE;
 let cloudStatus = {
   connected: false,
   message: "Connecting to Firestore",
@@ -168,7 +172,7 @@ function updateStatusBar() {
     <span class="status-pill">User: ${name}</span>
     <span class="status-pill">Role: ${role}</span>
     <span class="status-pill">Last update: ${formatStatusTime(cloudStatus.lastUpdatedAt)}</span>
-    <button class="status-button" onclick="navigate('home')">Menu</button>
+    <button class="status-button" onclick="navigate('dashboard')">Dashboard</button>
   `;
 }
 
@@ -726,33 +730,27 @@ async function waitForInitialCloudSync() {
   ]);
 }
 
-const menuItems = [
-  { page: "addProduct", icon: "➕", title: "Add Product", text: "Create product details" },
-  { page: "receiveStock", icon: "📥", title: "Receive Stock", text: "Add supplier deliveries" },
-  { page: "supplierPayment", icon: "🧾", title: "Supplier Payment", text: "Record payments against supplier invoices" },
-  { page: "priceChanges", icon: "₵", title: "Price Changes", text: "Update selling prices and track batch history" },
-  { page: "printerSettings", icon: "🖨", title: "Printer", text: "Configure the receipt printer" },
-  { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment", text: "Record damaged, lost, expired, or broken stock" },
-  { page: "sales", icon: "💰", title: "Record Sale", text: "Sell bulk or base units" },
-  { page: "inventory", icon: "📦", title: "Inventory", text: "Check current stock" },
-  { page: "reports", icon: "📑", title: "Reports", text: "Open product and sales reports" },
-  { page: "suppliers", icon: "👥", title: "Suppliers", text: "Save supplier contacts" },
-  { page: "categorySettings", icon: "🏷️", title: "Categories", text: "Manage product categories" },
-  { page: "taxSettings", icon: "🧾", title: "Tax Settings", text: "Manage VAT and levy rates" },
-  { page: "staff", icon: "👤", title: "Staff", text: "Add staff and assign roles" },
-  { page: "dashboard", icon: "📊", title: "Dashboard", text: "View business summary" },
-  { page: "help", icon: "❔", title: "Help", text: "Learn how to use the app" },
-  { page: "logout", icon: "🚪", title: "Logout", text: "Sign out of the app" }
+const dashboardNavItems = [
+  { page: "dashboard", icon: "⌂", title: "Dashboard" },
+  { page: "sales", icon: "🛒", title: "Sales (POS)" },
+  { page: "inventory", icon: "▣", title: "Inventory" },
+  { page: "receiveStock", icon: "⇩", title: "Receive Stock" },
+  { page: "addProduct", icon: "＋", title: "Products" },
+  { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment" },
+  { page: "supplierPayment", icon: "🧾", title: "Supplier Payment" },
+  { page: "suppliers", icon: "♧", title: "Suppliers" },
+  { page: "priceChanges", icon: "₵", title: "Price Changes" },
+  { page: "reports", icon: "▥", title: "Reports" },
+  { page: "categorySettings", icon: "◇", title: "Categories" },
+  { page: "taxSettings", icon: "⚙", title: "Settings" },
+  { page: "printerSettings", icon: "🖨", title: "Printer" },
+  { page: "staff", icon: "♙", title: "Staff" },
+  { page: "help", icon: "?", title: "Help" },
+  { page: "logout", icon: "⇥", title: "Sign Out" }
 ];
 
 function canAccessPage(page) {
-  const requiredPermission = getPagePermission(page);
-
-  if (!requiredPermission) {
-    return true;
-  }
-
-  return hasPermission(requiredPermission);
+  return canAccessPageWithPermission(page, hasPermission);
 }
 
 function hasPendingRequiredPasswordChange() {
@@ -760,6 +758,8 @@ function hasPendingRequiredPasswordChange() {
 }
 
 function navigate(page) {
+  page = normalizeNavigationPage(page);
+
   if (page === "login") {
     currentPage = page;
     renderLogin();
@@ -790,7 +790,7 @@ function navigate(page) {
         <h2>Access Denied</h2>
         <p>You do not have permission to open this page.</p>
       </div>
-      <button onclick="navigate('home')">Back to Menu</button>
+      <button onclick="navigate('dashboard')">Back to Dashboard</button>
     `);
     return;
   }
@@ -798,8 +798,7 @@ function navigate(page) {
   currentPage = page;
   renderShell();
 
-  if (page === "home") renderHome();
-  if (page === "dashboard" || page === "reports") window.renderDashboard?.();
+  if (page === "dashboard" || page === "reports") window["renderDashboard"]?.();
   if (page === "addProduct") window.renderAddProduct?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "supplierPayment") window.renderSupplierPayment?.();
@@ -841,7 +840,7 @@ function renderCurrentEntryPage() {
     }
 
     void retryPendingSalesSync();
-    navigate("home");
+    navigate("dashboard");
     return;
   }
 
@@ -855,16 +854,33 @@ function isLoggedIn() {
 function renderLogin(error = "") {
   app.innerHTML = `
     <section class="login-page">
-      <div class="login-panel">
-        <h1>Kay-Flo Enterprise</h1>
-        <h2>Login</h2>
+      <aside class="login-brand-panel" aria-label="Kay-Flo Enterprise">
+        <img class="login-brand-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano logo featuring a Ghanaian Kente hat">
+        <div class="login-brand-copy">
+          <p>Inventory made practical</p>
+          <h1>Keep your business flowing.</h1>
+          <span>Manage stock, sales, suppliers, and receipts from one secure workspace.</span>
+        </div>
+        <div class="login-brand-highlights" aria-label="Application features">
+          <span><b aria-hidden="true">✓</b>Stock control</span>
+          <span><b aria-hidden="true">✓</b>Fast sales</span>
+          <span><b aria-hidden="true">✓</b>Cloud sync</span>
+        </div>
+      </aside>
+
+        <div class="login-panel">
+        <div class="login-panel-heading">
+          <p class="login-enterprise-name">Kay-Flo Enterprise</p>
+          <h2>Welcome back</h2>
+          <p>Sign in to continue to your dashboard.</p>
+        </div>
 
         ${error ? `<div class="message error">${error}</div>` : ""}
 
         <form class="form-column" onsubmit="login(event)">
           <div class="form-row">
-            <label for="identifier">Email</label>
-            <input id="identifier" type="email" autocomplete="email">
+            <label for="identifier">Staff email address</label>
+            <input id="identifier" type="email" autocomplete="email" placeholder="you@company.com">
           </div>
 
           <div class="form-row">
@@ -872,8 +888,9 @@ function renderLogin(error = "") {
             <input id="password" type="password" autocomplete="current-password">
           </div>
 
-          <button type="submit">Login</button>
+          <button class="login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
         </form>
+        <p class="login-security-note"><span aria-hidden="true">🔒</span> Your account is protected by secure staff authentication.</p>
       </div>
     </section>
   `;
@@ -948,7 +965,7 @@ async function login(event) {
     state.sessionUser = user.profile || null;
     saveState();
     await waitForInitialCloudSync();
-    navigate("home");
+    navigate("dashboard");
   } catch (error) {
     logAppError("Login failed", error);
     renderLogin(toUserMessage(error, "Unable to sign in. Check the email and password, then try again."));
@@ -1082,7 +1099,7 @@ async function completeRequiredPasswordChange(event) {
     state.user = buildSessionUser(updatedProfile);
     state.sessionUser = updatedProfile;
     saveState();
-    navigate("home");
+    navigate("dashboard");
   } catch (error) {
     logAppError("Required password change failed", error);
     renderRequiredPasswordChange(toUserMessage(error, "Unable to change the password. Check the new password and try again."));
@@ -1090,41 +1107,38 @@ async function completeRequiredPasswordChange(event) {
 }
 
 function renderShell() {
-  app.innerHTML = `
-    <header class="app-header">
-      <div>
-        <h1>Kay-Flo Enterprise</h1>
-        <p>Stock control, sales, and receipts in one place.</p>
-      </div>
-      <div id="statusBar" class="status-bar"></div>
-    </header>
-
-    <main id="page"></main>
-  `;
-  updateStatusBar();
+  renderDashboardShell();
 }
 
-function renderHome() {
-  const page = document.getElementById("page");
-  const cards = menuItems
-    .filter((item) => canAccessPage(item.page))
-    .map((item) => `
-    <button class="menu-card" onclick="navigate('${item.page}')">
-      <span class="menu-icon">${item.icon}</span>
-      <strong>${item.title}</strong>
-      <small>${item.text}</small>
-    </button>
-  `).join("");
+function renderDashboardShell() {
+  const permittedNavItems = dashboardNavItems.filter((item) => canAccessPage(item.page));
+  const displayName = state.user?.fullName || state.user?.username || state.user?.email || "User";
+  const initial = escapeShellHtml(displayName.trim().charAt(0).toUpperCase() || "U");
 
-  page.innerHTML = `
-    <section class="page-section home-section">
-      <div class="page-title">
-        <h2>Menu</h2>
-        <p>Choose what you want to do next.</p>
-      </div>
-      <div class="menu-grid">${cards}</div>
-    </section>
+  app.innerHTML = `
+    <div class="jyaano-app-shell">
+      <aside class="jyaano-sidebar" aria-label="Primary navigation">
+        <div class="jyaano-wordmark"><img src="/jyaanc-kente-hat-logo.png" alt="Jyaano logo featuring a Ghanaian Kente hat"></div>
+        <nav class="jyaano-nav">${permittedNavItems.map((item) => `<button class="${item.page === currentPage ? "is-active" : ""}" ${item.page === currentPage ? 'aria-current="page"' : ""} type="button" onclick="navigate('${item.page}')"><span aria-hidden="true">${item.icon}</span>${item.title}</button>`).join("")}</nav>
+      </aside>
+      <section class="jyaano-stage">
+        <header class="jyaano-topbar">
+          ${currentPage === DASHBOARD_PAGE ? '<p><span class="jyaano-live-dot"></span>Live business overview</p>' : ""}
+          <div class="jyaano-user"><span>${initial}</span><div><strong>${escapeShellHtml(displayName)}</strong><small>${escapeShellHtml(state.user?.role || "Staff")}</small></div><button type="button" onclick="navigate('dashboard')" aria-label="Go to Dashboard">⌂</button></div>
+        </header>
+        <main id="page"></main>
+      </section>
+    </div>
   `;
+}
+
+function escapeShellHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function renderPage(content) {
@@ -1368,6 +1382,10 @@ function printMptReceipt() {
 }
 
 function printModalReport() {
+  if (!canAccessPage("reports")) {
+    return;
+  }
+
   if (isPrintingModal) {
     return;
   }

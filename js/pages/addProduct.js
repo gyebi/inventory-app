@@ -98,7 +98,7 @@ function renderProductSaved(product) {
 
     <div class="form-column panel">
       <button onclick="renderAddProduct()">Add Another Product</button>
-      <button onclick="navigate('home')">Main Menu</button>
+      <button onclick="navigate('dashboard')">Dashboard</button>
     </div>
   `);
 }

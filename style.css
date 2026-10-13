@@ -109,16 +109,207 @@ button {
 .login-page {
   align-items: center;
   display: grid;
-  min-height: 90vh;
+  gap: clamp(24px, 5vw, 82px);
+  grid-template-columns: minmax(300px, 1.12fr) minmax(340px, 0.88fr);
+  margin: 0 auto;
+  max-width: 1200px;
+  min-height: calc(100vh - 48px);
+  padding: 24px;
 }
 
 .login-panel {
+  background: rgba(255, 250, 240, 0.98);
+  border: 1px solid #efd39f;
+  border-radius: 20px;
   box-sizing: border-box;
-  background: var(--brand-surface);
-  border: 1px solid var(--brand-line);
-  border-radius: 8px;
-  padding: 24px;
+  box-shadow: 0 24px 55px rgba(103, 69, 11, 0.16);
+  padding: clamp(28px, 4vw, 46px);
   width: min(560px, 100%);
+}
+
+.login-brand-panel {
+  background:
+    radial-gradient(circle at 83% 10%, rgba(245, 179, 59, 0.5), transparent 25%),
+    radial-gradient(circle at 13% 90%, rgba(0, 103, 70, 0.22), transparent 30%),
+    linear-gradient(145deg, #fffaf0 0%, #fff0ca 52%, #f6d798 100%);
+  border-radius: 24px;
+  box-shadow: 0 24px 55px rgba(44, 80, 47, 0.2);
+  box-sizing: border-box;
+  color: #003f36;
+  min-height: 590px;
+  overflow: hidden;
+  padding: clamp(28px, 4.5vw, 54px);
+  position: relative;
+}
+
+.login-brand-panel::after {
+  background:
+    linear-gradient(102deg, transparent 0 34%, rgba(0, 63, 54, 0.08) 34.25% 35%, transparent 35.25% 100%),
+    linear-gradient(20deg, transparent 0 73%, rgba(255, 107, 11, 0.16) 73.25% 74%, transparent 74.25% 100%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.login-brand-logo {
+  display: block;
+  filter: drop-shadow(0 8px 13px rgba(103, 69, 11, 0.18));
+  height: auto;
+  max-width: 280px;
+  position: relative;
+  width: min(100%, 280px);
+  z-index: 1;
+}
+
+.login-brand-copy {
+  bottom: 100px;
+  max-width: 470px;
+  position: absolute;
+  z-index: 1;
+}
+
+.login-brand-copy p,
+.login-enterprise-name {
+  color: #b0520a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.login-brand-copy h1 {
+  font-size: clamp(32px, 4vw, 53px);
+  letter-spacing: -1.6px;
+  line-height: 0.98;
+  margin: 0 0 17px;
+}
+
+.login-brand-copy span {
+  color: #36524c;
+  display: block;
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 430px;
+}
+
+.login-brand-highlights {
+  bottom: 35px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 17px;
+  position: absolute;
+  z-index: 1;
+}
+
+.login-brand-highlights span {
+  align-items: center;
+  color: #003f36;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.login-brand-highlights b {
+  align-items: center;
+  background: #006746;
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  font-size: 10px;
+  height: 17px;
+  justify-content: center;
+  width: 17px;
+}
+
+.login-panel-heading {
+  margin-bottom: 30px;
+}
+
+.login-enterprise-name {
+  color: #003f36;
+  font-size: clamp(21px, 2.2vw, 28px);
+  font-weight: 900;
+  letter-spacing: -0.7px;
+  line-height: 1;
+  margin: 0 0 15px;
+  text-transform: none;
+}
+
+.login-panel-heading h2 {
+  color: #003f36;
+  font-size: clamp(29px, 3vw, 38px);
+  letter-spacing: -1px;
+  margin: 0 0 9px;
+}
+
+.login-panel-heading > p:last-child {
+  color: #5f7180;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.login-panel .form-column {
+  gap: 18px;
+  max-width: none;
+}
+
+.login-panel .form-row {
+  align-items: stretch;
+  gap: 7px;
+  grid-template-columns: 1fr;
+}
+
+.login-panel .form-row label {
+  color: #005d4f;
+  font-size: 14px;
+}
+
+.login-panel .form-row input {
+  background: #fff;
+  border-color: #ddcfb3;
+  min-height: 48px;
+  padding: 12px 14px;
+}
+
+.login-panel .form-row input:focus {
+  border-color: #ff6b0b;
+  box-shadow: 0 0 0 3px rgba(255, 107, 11, 0.16);
+  outline: 0;
+}
+
+.login-submit {
+  align-items: center;
+  background: linear-gradient(110deg, #f05d05, #ff7b17);
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 9px 18px rgba(240, 93, 5, 0.25);
+  color: #fff;
+  display: flex;
+  font-size: 16px;
+  justify-content: space-between;
+  margin: 8px 0 0;
+  padding: 14px 17px;
+  width: 100%;
+}
+
+.login-submit:hover {
+  background: linear-gradient(110deg, #cf4f03, #f26a0b);
+  border-color: transparent;
+}
+
+.login-submit span {
+  font-size: 22px;
+  line-height: 0.8;
+}
+
+.login-security-note {
+  color: #71818c;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 25px 0 0;
 }
 
 .app-header {
@@ -205,39 +396,6 @@ button {
   border-color: #8f001a;
 }
 
-.menu-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.menu-card {
-  align-items: flex-start;
-  background: var(--brand-surface);
-  border: 1px solid var(--brand-line);
-  border-radius: 8px;
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  min-height: 130px;
-  padding: 18px;
-  text-align: left;
-  width: 100%;
-}
-
-.menu-card strong {
-  font-size: 18px;
-}
-
-.menu-card small {
-  color: var(--brand-muted);
-  font-size: 14px;
-}
-
-.menu-icon {
-  font-size: 30px;
-}
-
 .page-section {
   background: var(--brand-surface);
   border: 1px solid var(--brand-line);
@@ -246,10 +404,6 @@ button {
   max-width: 980px;
   padding: 20px;
   width: 100%;
-}
-
-.home-section {
-  max-width: 1180px;
 }
 
 .page-title {
@@ -675,6 +829,281 @@ p {
   box-sizing: border-box;
 }
 
+/* Jyaano V1.5 dashboard */
+.jyaano-app-shell {
+  --jyaano-forest: #003f36;
+  --jyaano-orange: #ff6b0b;
+  --jyaano-cream: #fffaf0;
+  --jyaano-ink: #10201e;
+  --jyaano-muted: #61716d;
+  --jyaano-line: #e8e9e4;
+  background: var(--jyaano-cream);
+  color: var(--jyaano-ink);
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  margin: -24px;
+  min-height: calc(100vh - 48px);
+  width: calc(100% + 48px);
+}
+
+.jyaano-sidebar {
+  background:
+    radial-gradient(circle at 4% 98%, rgba(58, 161, 124, 0.33), transparent 29%),
+    linear-gradient(160deg, #00473c 0%, var(--jyaano-forest) 60%, #002d28 100%);
+  box-sizing: border-box;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  overflow-y: auto;
+  padding: 30px 18px 22px;
+}
+
+.jyaano-wordmark {
+  background: var(--jyaano-cream);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  margin: 0 4px 24px;
+  padding: 10px;
+}
+
+.jyaano-wordmark img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 210px;
+}
+
+.jyaano-nav {
+  display: grid;
+  gap: 6px;
+}
+
+.jyaano-nav button,
+.jyaano-help-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: #f8fbf8;
+  display: grid;
+  font-weight: 600;
+  gap: 13px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  margin: 0;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.jyaano-nav button:hover,
+.jyaano-nav button.is-active {
+  background: var(--jyaano-orange);
+  border-color: transparent;
+  color: #fff;
+}
+
+.jyaano-nav button span {
+  font-size: 21px;
+  line-height: 1;
+  text-align: center;
+}
+
+.jyaano-help-link {
+  background: rgba(255, 255, 255, 0.12);
+  grid-template-columns: 28px minmax(0, 1fr);
+  margin-top: auto;
+}
+
+.jyaano-help-link > span {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-weight: 700;
+  height: 18px;
+  line-height: 16px;
+  text-align: center;
+  width: 18px;
+}
+
+.jyaano-help-link small {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  grid-column: 2;
+  margin-top: -12px;
+}
+
+.jyaano-stage {
+  min-width: 0;
+}
+
+.jyaano-topbar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid var(--jyaano-line);
+  box-sizing: border-box;
+  display: flex;
+  height: 77px;
+  justify-content: flex-end;
+  padding: 0 30px;
+}
+
+.jyaano-topbar > p {
+  color: var(--jyaano-muted);
+  font-size: 13px;
+  margin: 0 auto 0 0;
+}
+
+.jyaano-live-dot {
+  background: #09a461;
+  border-radius: 50%;
+  display: inline-block;
+  height: 8px;
+  margin-right: 7px;
+  width: 8px;
+}
+
+.jyaano-user {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+}
+
+.jyaano-user > span {
+  align-items: center;
+  background: linear-gradient(135deg, #f0bd68, #8e4b22);
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  font-family: Georgia, serif;
+  font-size: 21px;
+  font-weight: 700;
+  height: 43px;
+  justify-content: center;
+  width: 43px;
+}
+
+.jyaano-user strong,
+.jyaano-user small {
+  display: block;
+}
+
+.jyaano-user strong { font-size: 14px; }
+.jyaano-user small { color: var(--jyaano-muted); font-size: 12px; margin-top: 2px; }
+.jyaano-user button { border: 0; margin: 0 0 0 8px; padding: 4px; }
+
+.jyaano-stage .page-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  max-width: none;
+  padding: 18px 22px 28px;
+}
+
+.jyaano-dashboard { max-width: 1420px; margin: 0 auto; }
+
+.jyaano-welcome-banner {
+  background: linear-gradient(112deg, #fff7e7 0%, #ffefcf 55%, #f4d1a2 100%);
+  border-radius: 14px;
+  box-sizing: border-box;
+  min-height: 163px;
+  overflow: hidden;
+  padding: 24px 35px;
+  position: relative;
+}
+
+.jyaano-welcome-banner > div:first-child { position: relative; z-index: 2; }
+.jyaano-welcome-banner h2 { font-size: clamp(28px, 3.2vw, 42px); line-height: 0.98; margin: 2px 0 13px; }
+.jyaano-welcome-banner p { font-size: 16px; margin: 0; }
+.jyaano-eyebrow { color: #b0520a; font-size: 11px !important; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+
+.jyaano-banner-pattern {
+  background:
+    radial-gradient(ellipse 38% 80% at 52% 106%, #ffad12 0 45%, transparent 46%),
+    radial-gradient(ellipse 44% 74% at 76% 114%, #ff6f0d 0 45%, transparent 46%),
+    radial-gradient(ellipse 42% 71% at 93% 116%, #f34b1c 0 45%, transparent 46%);
+  bottom: -45px;
+  height: 150px;
+  left: 18%;
+  position: absolute;
+  right: -4%;
+}
+
+.jyaano-kpi-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 13px 0;
+}
+
+.jyaano-kpi-card {
+  background: #fff;
+  border: 1px solid #edf0ec;
+  border-radius: 13px;
+  box-shadow: 0 3px 9px rgba(25, 42, 33, 0.06);
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  margin: 0;
+  min-height: 115px;
+  padding: 16px;
+  text-align: left;
+}
+
+.jyaano-kpi-card:hover { border-color: #f5aa6d; background: #fff; transform: translateY(-1px); }
+.jyaano-kpi-icon { align-items: center; border-radius: 13px; display: flex; font-size: 22px; grid-row: 1 / span 3; height: 48px; justify-content: center; width: 48px; }
+.jyaano-kpi-label { align-self: end; font-size: 13px; }
+.jyaano-kpi-card strong { font-size: clamp(20px, 2vw, 26px); line-height: 1.05; }
+.jyaano-kpi-card small { color: var(--jyaano-muted); font-size: 11px; grid-column: 1 / -1; }
+.jyaano-kpi-sales { background: linear-gradient(135deg, #eefff4, #fff); }.jyaano-kpi-sales .jyaano-kpi-icon { background: #c9f7d9; color: #008e48; }
+.jyaano-kpi-products { background: linear-gradient(135deg, #fff8e8, #fff); }.jyaano-kpi-products .jyaano-kpi-icon { background: #ffe6bd; color: #d85e05; }
+.jyaano-kpi-value { background: linear-gradient(135deg, #fff3ef, #fff); }.jyaano-kpi-value .jyaano-kpi-icon { background: #ffdcd5; color: #db371b; }
+.jyaano-kpi-alerts { background: linear-gradient(135deg, #fff1ef, #fff); }.jyaano-kpi-alerts .jyaano-kpi-icon { background: #ffe1dc; color: #e64427; }
+
+.jyaano-dashboard-layout { align-items: start; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(275px, 0.34fr); }
+.jyaano-main-column, .jyaano-side-column { display: grid; gap: 14px; }
+.jyaano-panel { background: #fff; border: 1px solid #edf0ec; border-radius: 13px; box-shadow: 0 3px 9px rgba(25, 42, 33, 0.05); padding: 17px 19px; }
+.jyaano-panel-heading { align-items: start; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 13px; }
+.jyaano-panel-heading h3, .jyaano-quick-actions h3 { font-size: 18px; margin: 0; }.jyaano-panel-heading p { color: var(--jyaano-muted); font-size: 12px; margin: 3px 0 0; }
+.jyaano-text-button { background: transparent; border: 0; color: #006cdf; font-size: 13px; margin: 0; padding: 2px; white-space: nowrap; }.jyaano-text-button:hover { background: transparent; color: #004fa3; }
+.jyaano-period { border: 1px solid #dbe2dd; border-radius: 9px; font-size: 12px; padding: 8px 10px; white-space: nowrap; }
+
+.jyaano-chart { height: 202px; overflow: hidden; padding: 8px 2px 0; }.jyaano-chart-bars { align-items: end; background: repeating-linear-gradient(to bottom, transparent 0, transparent 49px, #edf0ec 50px, transparent 51px); display: flex; gap: clamp(10px, 3.5vw, 40px); height: 172px; justify-content: space-around; padding: 0 14px; }
+.jyaano-chart-bar-wrap { align-items: center; align-self: stretch; display: flex; flex: 1; flex-direction: column; justify-content: end; min-width: 22px; position: relative; }.jyaano-chart-bar-wrap i { background: linear-gradient(180deg, #ff944d, var(--jyaano-orange)); border-radius: 4px 4px 0 0; display: block; max-width: 42px; width: 100%; }.jyaano-chart-bar-wrap small { color: #52645e; font-size: 12px; margin-top: 8px; }.jyaano-chart-value { color: #6a7873; font-size: 10px; margin-bottom: 4px; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.jyaano-table-wrap { overflow-x: auto; }.jyaano-table { border-collapse: collapse; min-width: 540px; width: 100%; }.jyaano-table th { background: #f7f8f7; color: #52645e; font-size: 11px; font-weight: 600; padding: 9px 7px; text-align: left; }.jyaano-table td { border-bottom: 1px solid #eef0ed; font-size: 13px; max-width: 210px; overflow: hidden; padding: 11px 7px; text-overflow: ellipsis; white-space: nowrap; }.jyaano-number-danger { color: #eb3120; font-weight: 700; }.jyaano-status-badge { background: #ffe3e0; border-radius: 99px; color: #e72d20; font-size: 11px; padding: 5px 9px; }
+.jyaano-empty-state { background: #fbfcfa; border: 1px dashed #d9e2dc; border-radius: 9px; color: var(--jyaano-muted); font-size: 13px; padding: 19px; text-align: center; }
+
+.jyaano-quick-actions { background: linear-gradient(160deg, #ff7b17, #f05d05); border-radius: 13px; color: #fff; padding: 18px 15px 14px; }.jyaano-quick-actions h3 { display: flex; justify-content: space-between; margin: 2px 4px 13px; }.jyaano-quick-actions h3 span { color: #ffd361; }.jyaano-quick-actions button { align-items: center; background: rgba(255, 255, 255, 0.97); border: 0; border-radius: 9px; color: #1a2823; display: grid; font-size: 13px; gap: 9px; grid-template-columns: 23px minmax(0, 1fr) auto; margin: 8px 0; padding: 11px 12px; text-align: left; width: 100%; }.jyaano-quick-actions button:hover { background: #fff7e9; }.jyaano-quick-actions button > span { color: #00725d; font-size: 18px; font-weight: 700; text-align: center; }.jyaano-quick-actions button b { font-size: 24px; font-weight: 400; line-height: 12px; }
+.jyaano-recent-sales { display: grid; }.jyaano-recent-sales > div { align-items: center; border-bottom: 1px solid #edf0ec; display: grid; gap: 9px; grid-template-columns: 53px minmax(0, 1fr) auto; padding: 11px 0; }.jyaano-recent-sales > div:last-child { border-bottom: 0; }.jyaano-recent-sales time { color: #60716d; font-size: 11px; }.jyaano-recent-sales span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.jyaano-recent-sales strong { font-size: 12px; white-space: nowrap; }
+.jyaano-alert-list { display: grid; gap: 8px; }.jyaano-expiry-row { align-items: center; background: #fffaf5; border-left: 3px solid #ff9a22; display: flex; justify-content: space-between; padding: 10px 12px; }.jyaano-expiry-row strong, .jyaano-expiry-row span { display: block; }.jyaano-expiry-row strong { font-size: 13px; }.jyaano-expiry-row span { color: var(--jyaano-muted); font-size: 12px; margin-top: 2px; }.jyaano-expiry-row b { color: #c56809; font-size: 12px; white-space: nowrap; }.jyaano-expiry-row b.is-expired { color: #d52e21; }
+
+@media (max-width: 1279px) {
+  .jyaano-app-shell { grid-template-columns: 214px minmax(0, 1fr); }
+  .jyaano-sidebar { padding-left: 12px; padding-right: 12px; }.jyaano-wordmark img { width: 174px; }.jyaano-nav button { padding-left: 11px; }
+  .jyaano-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.jyaano-dashboard-layout { grid-template-columns: minmax(0, 1fr) 290px; }
+}
+
+@media (max-width: 767px) {
+  .jyaano-app-shell { display: block; margin: -14px; min-height: calc(100vh - 28px); width: calc(100% + 28px); }.jyaano-sidebar { min-height: auto; padding: 12px 14px 0; }.jyaano-wordmark { margin: 0 0 9px; padding: 5px 9px; width: max-content; }.jyaano-wordmark img { width: 110px; }.jyaano-nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; }.jyaano-nav button { flex: 0 0 auto; gap: 6px; grid-template-columns: auto auto; padding: 8px 10px; font-size: 12px; }.jyaano-nav button span { font-size: 16px; }.jyaano-help-link { display: none; }.jyaano-topbar { height: 56px; padding: 0 16px; }.jyaano-topbar > p { display: none; }.jyaano-user { margin-left: auto; }.jyaano-user > span { height: 34px; width: 34px; }.jyaano-stage .page-section { padding: 13px; }.jyaano-welcome-banner { min-height: 176px; padding: 21px; }.jyaano-welcome-banner p { font-size: 13px; max-width: 240px; }.jyaano-banner-pattern { left: -10%; }.jyaano-kpi-grid, .jyaano-dashboard-layout { grid-template-columns: 1fr; }.jyaano-kpi-card { min-height: 94px; }.jyaano-panel { padding: 15px; }.jyaano-side-column { grid-row: 1; }.jyaano-quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }.jyaano-quick-actions h3 { grid-column: 1 / -1; }.jyaano-quick-actions button { font-size: 12px; margin: 0; padding: 10px 8px; }.jyaano-quick-actions button > span { display: none; }.jyaano-user strong { font-size: 12px; }.jyaano-user small { font-size: 10px; }
+}
+
+@media (max-width: 800px) {
+  .login-page {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 620px;
+    min-height: auto;
+  }
+
+  .login-brand-panel {
+    min-height: 390px;
+  }
+
+  .login-panel {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
+
 @media (max-width: 900px) {
   body {
     padding: 18px;
@@ -732,34 +1161,52 @@ p {
 
   .login-page {
     align-items: stretch;
+    gap: 16px;
     min-height: auto;
+    padding: 0;
+  }
+
+  .login-brand-panel {
+    min-height: auto;
+    padding: 26px;
+  }
+
+  .login-brand-logo {
+    max-width: 220px;
+  }
+
+  .login-brand-copy,
+  .login-brand-highlights {
+    position: static;
+  }
+
+  .login-brand-copy {
+    margin-top: 28px;
+  }
+
+  .login-brand-copy h1 {
+    font-size: 31px;
+  }
+
+  .login-brand-highlights {
+    margin-top: 24px;
   }
 
   .login-panel {
     padding: 18px;
   }
 
-  .menu-grid,
   .list-grid,
   .stats-grid,
   .inventory-row {
     grid-template-columns: 1fr;
   }
 
-  .menu-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .menu-card,
   .card,
   .panel,
   .sale-summary,
   .modal-content {
     width: 100%;
-  }
-
-  .menu-card {
-    min-height: auto;
   }
 
   .form-row {

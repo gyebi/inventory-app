@@ -45,7 +45,7 @@ function renderCategorySettings(error = "", values = getCategoryValues()) {
       </div>
 
       <button type="button" onclick="saveCategoryList()">Save Category List</button>
-      <button type="button" onclick="navigate('home')">Back to Menu</button>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
     </div>
   `);
 }

@@ -1,3 +1,15 @@
+import {
+  getExpiryAlerts as selectExpiryAlerts,
+  getLowStockProducts as selectLowStockProducts,
+  getRecentSales as selectRecentSales,
+  getSalesTrend as selectSalesTrend,
+  getStockValuation as selectStockValuation,
+  getTodaySales as selectTodaySales,
+  isActiveProduct
+} from "../dashboardSelectors.js";
+import { hasPermission } from "../services/authService.js";
+import { canAccessReportAction } from "../utils/hubNavigation.js";
+
 const {
   ensureStockState,
   formatReceiptCurrency,
@@ -29,61 +41,181 @@ function renderDashboard() {
     return;
   }
 
-  const totalSales = state.sales.reduce((sum, sale) => sum + getTotalUnitsSold(sale), 0);
-  const totalProfit = state.sales.reduce((sum, sale) => sum + getSaleProfit(sale), 0);
-  const totalStockValue = getTotalStockValue();
-  const supplierPayables = getSupplierPayablesSummary();
-  const lowStockProducts = getLowStockProducts();
+  const now = new Date();
+  const products = Array.isArray(state.products) ? state.products : [];
+  const sales = Array.isArray(state.sales) ? state.sales : [];
+  const lowStockProducts = selectLowStockProducts(products, state.settings || {});
+  const expiryAlerts = selectExpiryAlerts(state.stock || [], products, now);
+  const salesTrend = selectSalesTrend(sales, now);
+  const recentSales = selectRecentSales(sales);
+  const activeProducts = products.filter(isActiveProduct).length;
+  const todaySales = selectTodaySales(sales, now);
+  const stockValuation = selectStockValuation(products);
+  const userName = getDashboardFirstName(state.user?.fullName || state.user?.username || state.user?.email);
+  const canViewBusinessOverview = hasPermission("view_dashboard");
+  const canManageStock = hasPermission("manage_stock");
+  const canAddProducts = hasPermission("add_product");
+  const canCreateSales = hasPermission("create_sale");
+  const canViewReports = canAccessReportAction(hasPermission);
+  const canViewInventoryData = canManageStock || canAddProducts;
+  const kpis = [
+    canViewBusinessOverview
+      ? renderKpiCard("sales", "Today’s Sales", formatReceiptCurrency(todaySales), "Sales completed today", canCreateSales ? "sales" : (canViewReports ? "reports" : ""))
+      : "",
+    canViewInventoryData
+      ? renderKpiCard("products", "Total Products", String(activeProducts), `${lowStockProducts.length} low in stock`, canManageStock ? "inventory" : "")
+      : "",
+    canViewReports && stockValuation.supported
+      ? renderKpiCard("value", "Total Stock Value", formatReceiptCurrency(stockValuation.amount), "At recorded cost price", "reports")
+      : "",
+    canManageStock
+      ? renderKpiCard("alerts", "Stock Alerts", String(lowStockProducts.length + expiryAlerts.length), `${lowStockProducts.length} low stock · ${expiryAlerts.length} expiry`, "inventory")
+      : ""
+  ].filter(Boolean).join("");
+  const quickActions = [
+    canCreateSales ? renderQuickAction("New Sale (POS)", "sales", "🛒") : "",
+    canManageStock ? renderQuickAction("Receive Stock", "receiveStock", "⇩") : "",
+    canAddProducts ? renderQuickAction("Add Product", "addProduct", "＋") : "",
+    canViewReports ? renderQuickAction("View Reports", "reports", "▥") : ""
+  ].filter(Boolean).join("");
+  const stockPanels = canManageStock ? `
+    <section class="jyaano-panel">
+      <div class="jyaano-panel-heading"><div><h3>Low Stock Items</h3><p>Items at or below their reorder level</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View all</button></div>
+      ${renderLowStockTable(lowStockProducts)}
+    </section>
+    ${expiryAlerts.length ? `<section class="jyaano-panel jyaano-expiry-panel"><div class="jyaano-panel-heading"><div><h3>Stock Expiry Alerts</h3><p>Current batches requiring attention</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View inventory</button></div>${renderExpiryAlerts(expiryAlerts)}</section>` : ""}
+  ` : "";
+  const salesPanels = canViewBusinessOverview ? `
+    <section class="jyaano-panel jyaano-trend-panel">
+      <div class="jyaano-panel-heading"><div><h3>Sales Trend</h3><p>Actual sales for the last 7 days</p></div><span class="jyaano-period">This week</span></div>
+      ${renderSalesTrend(salesTrend)}
+    </section>
+  ` : "";
+  const recentSalesPanel = canViewBusinessOverview ? `
+    <section class="jyaano-panel jyaano-recent-panel">
+      <div class="jyaano-panel-heading"><div><h3>Recent Sales</h3><p>Latest completed transactions</p></div>${canViewReports ? `<button class="jyaano-text-button" type="button" onclick="navigate('reports')">View all</button>` : ""}</div>
+      ${renderRecentSales(recentSales)}
+    </section>
+  ` : "";
+  const noOverviewMessage = !kpis && !salesPanels && !stockPanels
+    ? `<section class="jyaano-panel"><h3>Dashboard ready</h3><p>Your available tools are listed in the navigation. Contact an administrator if you need access to additional business data.</p></section>`
+    : "";
 
   renderPage(`
-    <div class="page-title">
-      <h2>📊 Dashboard</h2>
-      <p>Quick view of products, sales, profit, and low stock.</p>
+    <div class="jyaano-dashboard">
+      <section class="jyaano-welcome-banner">
+        <div>
+          <p class="jyaano-eyebrow">Business overview</p>
+          <h2>Good ${getTimeGreeting(now)},<br>${escapeHtml(userName)}!</h2>
+          <p>Here’s what’s happening in your business today.</p>
+        </div>
+        <div class="jyaano-banner-pattern" aria-hidden="true"></div>
+      </section>
+
+      ${kpis ? `<div class="jyaano-kpi-grid">${kpis}</div>` : ""}
+
+      <div class="jyaano-dashboard-layout">
+        <div class="jyaano-main-column">
+          ${salesPanels}
+          ${stockPanels}
+          ${noOverviewMessage}
+        </div>
+
+        <div class="jyaano-side-column">
+          ${quickActions ? `<section class="jyaano-quick-actions">
+            <h3>Quick Actions <span aria-hidden="true">ϟ</span></h3>
+            ${quickActions}
+          </section>` : ""}
+          ${recentSalesPanel}
+        </div>
+      </div>
     </div>
-
-    <div class="stats-grid">
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('products')">
-        <span>🧾</span>
-        <strong>${state.products.length}</strong>
-        <small>Total Products</small>
-      </button>
-
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('salesByProduct')">
-        <span>📦</span>
-        <strong>${totalSales}</strong>
-        <small>Items Sold</small>
-      </button>
-
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('profit')">
-        <span>💰</span>
-        <strong>${formatReceiptCurrency(totalProfit)}</strong>
-        <small>Total Profit</small>
-      </button>
-
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('inventoryValuation')">
-        <span>🏷️</span>
-        <strong>${formatReceiptCurrency(totalStockValue)}</strong>
-        <small>Total Amount in Stock Currently</small>
-      </button>
-
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('supplierOwed')">
-        <span>🤝</span>
-        <strong>${formatReceiptCurrency(supplierPayables.totalBalance)}</strong>
-        <small>Total Amount Owed</small>
-      </button>
-
-      <button class="card stat-card stat-button" onclick="showDashboardDetails('lowStock')">
-        <span>⚠️</span>
-        <strong>${lowStockProducts.length}</strong>
-        <small>Low Stock Items</small>
-      </button>
-    </div>
-
-    <button type="button" onclick="refreshFromCloud()">Refresh From Cloud</button>
   `);
 }
 
+function renderKpiCard(tone, label, value, detail, destination) {
+  const content = `
+    <span class="jyaano-kpi-icon" aria-hidden="true">${getKpiIcon(tone)}</span>
+    <span class="jyaano-kpi-label">${label}</span>
+    <strong>${value}</strong>
+    <small>${detail}</small>`;
+
+  return destination
+    ? `<button class="jyaano-kpi-card jyaano-kpi-${tone}" type="button" onclick="navigate('${destination}')">${content}</button>`
+    : `<div class="jyaano-kpi-card jyaano-kpi-${tone}">${content}</div>`;
+}
+
+function getKpiIcon(tone) {
+  return ({ sales: "🛒", products: "◈", value: "▥", alerts: "!" })[tone] || "•";
+}
+
+function renderQuickAction(label, destination, icon) {
+  return `<button type="button" onclick="navigate('${destination}')"><span aria-hidden="true">${icon}</span>${label}<b aria-hidden="true">›</b></button>`;
+}
+
+function renderSalesTrend(points) {
+  const max = Math.max(...points.map((point) => point.amount), 1);
+  const labels = points.map((point) => new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(point.date));
+  return `<div class="jyaano-chart" role="img" aria-label="Sales trend for the last seven days">
+    <div class="jyaano-chart-bars">${points.map((point, index) => `<div class="jyaano-chart-bar-wrap"><span class="jyaano-chart-value">${point.amount ? escapeHtml(formatReceiptCurrency(point.amount)) : ""}</span><i style="height:${Math.max((point.amount / max) * 100, point.amount ? 5 : 0)}%"></i><small>${labels[index]}</small></div>`).join("")}</div>
+  </div>`;
+}
+
+function renderLowStockTable(products) {
+  if (!products.length) return `<div class="jyaano-empty-state">All active products are above their reorder level.</div>`;
+  return `<div class="jyaano-table-wrap"><table class="jyaano-table"><thead><tr><th>Product</th><th>Current stock</th><th>Reorder level</th><th>Status</th></tr></thead><tbody>${products.slice(0, 5).map((product) => `<tr><td title="${escapeHtml(product.name || "Unnamed product")}"><strong>${escapeHtml(product.name || "Unnamed product")}</strong></td><td class="jyaano-number-danger">${escapeHtml(formatStockQuantity(product))}</td><td>${escapeHtml(String(getProductLowStockThreshold(product)))}</td><td><span class="jyaano-status-badge">Low stock</span></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderExpiryAlerts(alerts) {
+  return `<div class="jyaano-alert-list">${alerts.slice(0, 5).map((alert) => `<div class="jyaano-expiry-row"><div><strong>${escapeHtml(alert.productName)}</strong><span>${escapeHtml(formatStockBatchQuantity(alert))} · expires ${escapeHtml(formatShortDate(alert.expiry))}</span></div><b class="${alert.status === "Expired" ? "is-expired" : ""}">${alert.status}</b></div>`).join("")}</div>`;
+}
+
+function renderRecentSales(recentSales) {
+  if (!recentSales.length) return `<div class="jyaano-empty-state">No completed sales have been recorded yet.</div>`;
+  return `<div class="jyaano-recent-sales">${recentSales.map(({ sale, date }) => `<div><time datetime="${date.toISOString()}">${escapeHtml(new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date))}</time><span title="${escapeHtml(getSalePrimaryName(sale))}">${escapeHtml(getSalePrimaryName(sale))}</span><strong>${formatReceiptCurrency(getDashboardSaleAmount(sale))}</strong></div>`).join("")}</div>`;
+}
+
+function getDashboardSaleAmount(sale) {
+  const amount = Number(sale.totalAmount ?? sale.total);
+  return Number.isFinite(amount) ? amount : getSaleItems(sale).reduce((sum, item) => sum + Number(item.total || 0), 0);
+}
+
+function formatStockQuantity(product) {
+  return `${Number(product.quantity || 0)} ${product.baseUnit || "units"}`;
+}
+
+function formatStockBatchQuantity(batch) {
+  return `${Number(batch.quantity || 0)} ${batch.baseUnit || "units"}`;
+}
+
+function formatShortDate(value) {
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(value);
+}
+
+function getDashboardFirstName(value) {
+  const name = String(value || "there").trim();
+  return name.split(/\s+/)[0] || "there";
+}
+
+function getTimeGreeting(date) {
+  const hour = date.getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
 function renderReportsPage() {
+  if (!canAccessReportAction(hasPermission)) {
+    renderPage(`
+      <div class="page-title">
+        <h2>Access Denied</h2>
+        <p>You do not have permission to view reports.</p>
+      </div>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
+    `);
+    return;
+  }
+
   renderPage(`
     <div class="page-title">
       <h2>📑 Reports</h2>
@@ -116,6 +248,10 @@ function renderReportCard(type, icon, title, text) {
 }
 
 function showDashboardDetails(type) {
+  if (!canAccessReportAction(hasPermission)) {
+    return false;
+  }
+
   const report = buildReport(type);
 
   openModal(`
@@ -131,6 +267,7 @@ function showDashboardDetails(type) {
       </div>
     </div>
   `);
+  return true;
 }
 
 function renderReportDateFilters(type) {
@@ -706,13 +843,6 @@ function buildSupplierAmountOwedReport() {
   `;
 }
 
-function getTotalStockValue() {
-  return state.products.reduce(
-    (sum, product) => sum + (Number(product.quantity || 0) * Number(product.costPrice || 0)),
-    0
-  );
-}
-
 function getSupplierPayablesSummary() {
   const grouped = new Map();
 
@@ -922,16 +1052,6 @@ function getLatestSupplierForProduct(productId) {
 
 function getSaleItems(sale) {
   return Array.isArray(sale.items) ? sale.items : [];
-}
-
-function getTotalUnitsSold(sale) {
-  const items = getSaleItems(sale);
-
-  if (items.length > 0) {
-    return items.reduce((sum, item) => sum + (item.actualQtySold || item.quantity || 0), 0);
-  }
-
-  return sale.actualQtySold || sale.qty || 0;
 }
 
 function getSaleBaseUnitsSold(sale) {
@@ -1249,8 +1369,10 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-window.renderDashboard = renderDashboard;
-window.showDashboardDetails = showDashboardDetails;
-window.updateReportDateFilter = updateReportDateFilter;
-window.updateReportSalesPersonFilter = updateReportSalesPersonFilter;
-window.clearReportFilters = clearReportFilters;
+Object.assign(window, {
+  renderDashboard,
+  showDashboardDetails,
+  updateReportDateFilter,
+  updateReportSalesPersonFilter,
+  clearReportFilters
+});
