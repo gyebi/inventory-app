@@ -7,6 +7,8 @@ import {
   getTodaySales as selectTodaySales,
   isActiveProduct
 } from "../dashboardSelectors.js";
+import { hasPermission } from "../services/authService.js";
+import { canAccessReportAction } from "../utils/hubNavigation.js";
 
 const {
   ensureStockState,
@@ -50,6 +52,54 @@ function renderDashboard() {
   const todaySales = selectTodaySales(sales, now);
   const stockValuation = selectStockValuation(products);
   const userName = getDashboardFirstName(state.user?.fullName || state.user?.username || state.user?.email);
+  const canViewBusinessOverview = hasPermission("view_dashboard");
+  const canManageStock = hasPermission("manage_stock");
+  const canAddProducts = hasPermission("add_product");
+  const canCreateSales = hasPermission("create_sale");
+  const canViewReports = canAccessReportAction(hasPermission);
+  const canViewInventoryData = canManageStock || canAddProducts;
+  const kpis = [
+    canViewBusinessOverview
+      ? renderKpiCard("sales", "Today’s Sales", formatReceiptCurrency(todaySales), "Sales completed today", canCreateSales ? "sales" : (canViewReports ? "reports" : ""))
+      : "",
+    canViewInventoryData
+      ? renderKpiCard("products", "Total Products", String(activeProducts), `${lowStockProducts.length} low in stock`, canManageStock ? "inventory" : "")
+      : "",
+    canViewReports && stockValuation.supported
+      ? renderKpiCard("value", "Total Stock Value", formatReceiptCurrency(stockValuation.amount), "At recorded cost price", "reports")
+      : "",
+    canManageStock
+      ? renderKpiCard("alerts", "Stock Alerts", String(lowStockProducts.length + expiryAlerts.length), `${lowStockProducts.length} low stock · ${expiryAlerts.length} expiry`, "inventory")
+      : ""
+  ].filter(Boolean).join("");
+  const quickActions = [
+    canCreateSales ? renderQuickAction("New Sale (POS)", "sales", "🛒") : "",
+    canManageStock ? renderQuickAction("Receive Stock", "receiveStock", "⇩") : "",
+    canAddProducts ? renderQuickAction("Add Product", "addProduct", "＋") : "",
+    canViewReports ? renderQuickAction("View Reports", "reports", "▥") : ""
+  ].filter(Boolean).join("");
+  const stockPanels = canManageStock ? `
+    <section class="jyaano-panel">
+      <div class="jyaano-panel-heading"><div><h3>Low Stock Items</h3><p>Items at or below their reorder level</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View all</button></div>
+      ${renderLowStockTable(lowStockProducts)}
+    </section>
+    ${expiryAlerts.length ? `<section class="jyaano-panel jyaano-expiry-panel"><div class="jyaano-panel-heading"><div><h3>Stock Expiry Alerts</h3><p>Current batches requiring attention</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View inventory</button></div>${renderExpiryAlerts(expiryAlerts)}</section>` : ""}
+  ` : "";
+  const salesPanels = canViewBusinessOverview ? `
+    <section class="jyaano-panel jyaano-trend-panel">
+      <div class="jyaano-panel-heading"><div><h3>Sales Trend</h3><p>Actual sales for the last 7 days</p></div><span class="jyaano-period">This week</span></div>
+      ${renderSalesTrend(salesTrend)}
+    </section>
+  ` : "";
+  const recentSalesPanel = canViewBusinessOverview ? `
+    <section class="jyaano-panel jyaano-recent-panel">
+      <div class="jyaano-panel-heading"><div><h3>Recent Sales</h3><p>Latest completed transactions</p></div>${canViewReports ? `<button class="jyaano-text-button" type="button" onclick="navigate('reports')">View all</button>` : ""}</div>
+      ${renderRecentSales(recentSales)}
+    </section>
+  ` : "";
+  const noOverviewMessage = !kpis && !salesPanels && !stockPanels
+    ? `<section class="jyaano-panel"><h3>Dashboard ready</h3><p>Your available tools are listed in the navigation. Contact an administrator if you need access to additional business data.</p></section>`
+    : "";
 
   renderPage(`
     <div class="jyaano-dashboard">
@@ -59,45 +109,24 @@ function renderDashboard() {
           <h2>Good ${getTimeGreeting(now)},<br>${escapeHtml(userName)}!</h2>
           <p>Here’s what’s happening in your business today.</p>
         </div>
-        <div class="jyaano-banner-motto" aria-label="Jyaano motto">Stock Today<br>Grow Tomorrow</div>
         <div class="jyaano-banner-pattern" aria-hidden="true"></div>
       </section>
 
-      <div class="jyaano-kpi-grid">
-        ${renderKpiCard("sales", "Today’s Sales", formatReceiptCurrency(todaySales), "Sales completed today", "sales")}
-        ${renderKpiCard("products", "Total Products", String(activeProducts), `${lowStockProducts.length} low in stock`, "inventory")}
-        ${stockValuation.supported ? renderKpiCard("value", "Total Stock Value", formatReceiptCurrency(stockValuation.amount), "At recorded cost price", "reports") : ""}
-        ${renderKpiCard("alerts", "Stock Alerts", String(lowStockProducts.length + expiryAlerts.length), `${lowStockProducts.length} low stock · ${expiryAlerts.length} expiry`, "inventory")}
-      </div>
+      ${kpis ? `<div class="jyaano-kpi-grid">${kpis}</div>` : ""}
 
       <div class="jyaano-dashboard-layout">
         <div class="jyaano-main-column">
-          <section class="jyaano-panel jyaano-trend-panel">
-            <div class="jyaano-panel-heading"><div><h3>Sales Trend</h3><p>Actual sales for the last 7 days</p></div><span class="jyaano-period">This week</span></div>
-            ${renderSalesTrend(salesTrend)}
-          </section>
-
-          <section class="jyaano-panel">
-            <div class="jyaano-panel-heading"><div><h3>Low Stock Items</h3><p>Items at or below their reorder level</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View all</button></div>
-            ${renderLowStockTable(lowStockProducts)}
-          </section>
-
-          ${expiryAlerts.length ? `<section class="jyaano-panel jyaano-expiry-panel"><div class="jyaano-panel-heading"><div><h3>Stock Expiry Alerts</h3><p>Current batches requiring attention</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View inventory</button></div>${renderExpiryAlerts(expiryAlerts)}</section>` : ""}
+          ${salesPanels}
+          ${stockPanels}
+          ${noOverviewMessage}
         </div>
 
         <div class="jyaano-side-column">
-          <section class="jyaano-quick-actions">
+          ${quickActions ? `<section class="jyaano-quick-actions">
             <h3>Quick Actions <span aria-hidden="true">ϟ</span></h3>
-            ${renderQuickAction("New Sale (POS)", "sales", "🛒")}
-            ${renderQuickAction("Receive Stock", "receiveStock", "⇩")}
-            ${renderQuickAction("Add Product", "addProduct", "＋")}
-            ${renderQuickAction("View Reports", "reports", "▥")}
-          </section>
-
-          <section class="jyaano-panel jyaano-recent-panel">
-            <div class="jyaano-panel-heading"><div><h3>Recent Sales</h3><p>Latest completed transactions</p></div><button class="jyaano-text-button" type="button" onclick="navigate('reports')">View all</button></div>
-            ${renderRecentSales(recentSales)}
-          </section>
+            ${quickActions}
+          </section>` : ""}
+          ${recentSalesPanel}
         </div>
       </div>
     </div>
@@ -105,12 +134,15 @@ function renderDashboard() {
 }
 
 function renderKpiCard(tone, label, value, detail, destination) {
-  return `<button class="jyaano-kpi-card jyaano-kpi-${tone}" type="button" onclick="navigate('${destination}')">
+  const content = `
     <span class="jyaano-kpi-icon" aria-hidden="true">${getKpiIcon(tone)}</span>
     <span class="jyaano-kpi-label">${label}</span>
     <strong>${value}</strong>
-    <small>${detail}</small>
-  </button>`;
+    <small>${detail}</small>`;
+
+  return destination
+    ? `<button class="jyaano-kpi-card jyaano-kpi-${tone}" type="button" onclick="navigate('${destination}')">${content}</button>`
+    : `<div class="jyaano-kpi-card jyaano-kpi-${tone}">${content}</div>`;
 }
 
 function getKpiIcon(tone) {
@@ -173,6 +205,17 @@ function getTimeGreeting(date) {
 }
 
 function renderReportsPage() {
+  if (!canAccessReportAction(hasPermission)) {
+    renderPage(`
+      <div class="page-title">
+        <h2>Access Denied</h2>
+        <p>You do not have permission to view reports.</p>
+      </div>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
+    `);
+    return;
+  }
+
   renderPage(`
     <div class="page-title">
       <h2>📑 Reports</h2>
@@ -205,6 +248,10 @@ function renderReportCard(type, icon, title, text) {
 }
 
 function showDashboardDetails(type) {
+  if (!canAccessReportAction(hasPermission)) {
+    return false;
+  }
+
   const report = buildReport(type);
 
   openModal(`
@@ -220,6 +267,7 @@ function showDashboardDetails(type) {
       </div>
     </div>
   `);
+  return true;
 }
 
 function renderReportDateFilters(type) {

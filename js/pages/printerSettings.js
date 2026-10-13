@@ -152,7 +152,7 @@ function renderPrinterSettings(error = "", success = "") {
         <button type="submit">Save Printer Settings</button>
       </div>
 
-      <button type="button" onclick="navigate('home')">Back to Menu</button>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
     </form>
   `);
 

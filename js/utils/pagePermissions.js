@@ -1,5 +1,7 @@
 export const pagePermissions = {
-  dashboard: "view_dashboard",
+  // Dashboard is available to every authenticated user. Its figures and
+  // actions remain individually limited by the permissions below.
+  dashboard: null,
   sales: "create_sale",
   receiveStock: "manage_stock",
   stockAdjustment: "manage_stock",

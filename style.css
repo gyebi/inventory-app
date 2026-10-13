@@ -109,16 +109,207 @@ button {
 .login-page {
   align-items: center;
   display: grid;
-  min-height: 90vh;
+  gap: clamp(24px, 5vw, 82px);
+  grid-template-columns: minmax(300px, 1.12fr) minmax(340px, 0.88fr);
+  margin: 0 auto;
+  max-width: 1200px;
+  min-height: calc(100vh - 48px);
+  padding: 24px;
 }
 
 .login-panel {
+  background: rgba(255, 250, 240, 0.98);
+  border: 1px solid #efd39f;
+  border-radius: 20px;
   box-sizing: border-box;
-  background: var(--brand-surface);
-  border: 1px solid var(--brand-line);
-  border-radius: 8px;
-  padding: 24px;
+  box-shadow: 0 24px 55px rgba(103, 69, 11, 0.16);
+  padding: clamp(28px, 4vw, 46px);
   width: min(560px, 100%);
+}
+
+.login-brand-panel {
+  background:
+    radial-gradient(circle at 83% 10%, rgba(245, 179, 59, 0.5), transparent 25%),
+    radial-gradient(circle at 13% 90%, rgba(0, 103, 70, 0.22), transparent 30%),
+    linear-gradient(145deg, #fffaf0 0%, #fff0ca 52%, #f6d798 100%);
+  border-radius: 24px;
+  box-shadow: 0 24px 55px rgba(44, 80, 47, 0.2);
+  box-sizing: border-box;
+  color: #003f36;
+  min-height: 590px;
+  overflow: hidden;
+  padding: clamp(28px, 4.5vw, 54px);
+  position: relative;
+}
+
+.login-brand-panel::after {
+  background:
+    linear-gradient(102deg, transparent 0 34%, rgba(0, 63, 54, 0.08) 34.25% 35%, transparent 35.25% 100%),
+    linear-gradient(20deg, transparent 0 73%, rgba(255, 107, 11, 0.16) 73.25% 74%, transparent 74.25% 100%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.login-brand-logo {
+  display: block;
+  filter: drop-shadow(0 8px 13px rgba(103, 69, 11, 0.18));
+  height: auto;
+  max-width: 280px;
+  position: relative;
+  width: min(100%, 280px);
+  z-index: 1;
+}
+
+.login-brand-copy {
+  bottom: 100px;
+  max-width: 470px;
+  position: absolute;
+  z-index: 1;
+}
+
+.login-brand-copy p,
+.login-enterprise-name {
+  color: #b0520a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.login-brand-copy h1 {
+  font-size: clamp(32px, 4vw, 53px);
+  letter-spacing: -1.6px;
+  line-height: 0.98;
+  margin: 0 0 17px;
+}
+
+.login-brand-copy span {
+  color: #36524c;
+  display: block;
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 430px;
+}
+
+.login-brand-highlights {
+  bottom: 35px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 17px;
+  position: absolute;
+  z-index: 1;
+}
+
+.login-brand-highlights span {
+  align-items: center;
+  color: #003f36;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.login-brand-highlights b {
+  align-items: center;
+  background: #006746;
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  font-size: 10px;
+  height: 17px;
+  justify-content: center;
+  width: 17px;
+}
+
+.login-panel-heading {
+  margin-bottom: 30px;
+}
+
+.login-enterprise-name {
+  color: #003f36;
+  font-size: clamp(21px, 2.2vw, 28px);
+  font-weight: 900;
+  letter-spacing: -0.7px;
+  line-height: 1;
+  margin: 0 0 15px;
+  text-transform: none;
+}
+
+.login-panel-heading h2 {
+  color: #003f36;
+  font-size: clamp(29px, 3vw, 38px);
+  letter-spacing: -1px;
+  margin: 0 0 9px;
+}
+
+.login-panel-heading > p:last-child {
+  color: #5f7180;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.login-panel .form-column {
+  gap: 18px;
+  max-width: none;
+}
+
+.login-panel .form-row {
+  align-items: stretch;
+  gap: 7px;
+  grid-template-columns: 1fr;
+}
+
+.login-panel .form-row label {
+  color: #005d4f;
+  font-size: 14px;
+}
+
+.login-panel .form-row input {
+  background: #fff;
+  border-color: #ddcfb3;
+  min-height: 48px;
+  padding: 12px 14px;
+}
+
+.login-panel .form-row input:focus {
+  border-color: #ff6b0b;
+  box-shadow: 0 0 0 3px rgba(255, 107, 11, 0.16);
+  outline: 0;
+}
+
+.login-submit {
+  align-items: center;
+  background: linear-gradient(110deg, #f05d05, #ff7b17);
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 9px 18px rgba(240, 93, 5, 0.25);
+  color: #fff;
+  display: flex;
+  font-size: 16px;
+  justify-content: space-between;
+  margin: 8px 0 0;
+  padding: 14px 17px;
+  width: 100%;
+}
+
+.login-submit:hover {
+  background: linear-gradient(110deg, #cf4f03, #f26a0b);
+  border-color: transparent;
+}
+
+.login-submit span {
+  font-size: 22px;
+  line-height: 0.8;
+}
+
+.login-security-note {
+  color: #71818c;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 25px 0 0;
 }
 
 .app-header {
@@ -205,39 +396,6 @@ button {
   border-color: #8f001a;
 }
 
-.menu-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.menu-card {
-  align-items: flex-start;
-  background: var(--brand-surface);
-  border: 1px solid var(--brand-line);
-  border-radius: 8px;
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  min-height: 130px;
-  padding: 18px;
-  text-align: left;
-  width: 100%;
-}
-
-.menu-card strong {
-  font-size: 18px;
-}
-
-.menu-card small {
-  color: var(--brand-muted);
-  font-size: 14px;
-}
-
-.menu-icon {
-  font-size: 30px;
-}
-
 .page-section {
   background: var(--brand-surface);
   border: 1px solid var(--brand-line);
@@ -246,10 +404,6 @@ button {
   max-width: 980px;
   padding: 20px;
   width: 100%;
-}
-
-.home-section {
-  max-width: 1180px;
 }
 
 .page-title {
@@ -701,32 +855,24 @@ p {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  overflow-y: auto;
   padding: 30px 18px 22px;
 }
 
 .jyaano-wordmark {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
-  color: #fff8e8;
-  display: grid;
-  justify-items: center;
-  margin: -4px 4px 24px;
-  padding: 8px 0 19px;
+  background: var(--jyaano-cream);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  margin: 0 4px 24px;
+  padding: 10px;
 }
 
-.jyaano-wordmark span {
-  color: #f5b33b;
-  font-family: Georgia, serif;
-  font-size: 42px;
-  font-weight: 700;
-  letter-spacing: -2px;
-  line-height: 0.9;
-}
-
-.jyaano-wordmark small {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  margin-top: 10px;
+.jyaano-wordmark img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: 210px;
 }
 
 .jyaano-nav {
@@ -870,21 +1016,6 @@ p {
 .jyaano-welcome-banner p { font-size: 16px; margin: 0; }
 .jyaano-eyebrow { color: #b0520a; font-size: 11px !important; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
 
-.jyaano-banner-motto {
-  color: #006746;
-  font-family: Georgia, serif;
-  font-size: clamp(21px, 2.3vw, 32px);
-  font-style: italic;
-  font-weight: 700;
-  line-height: 0.95;
-  position: absolute;
-  right: 26%;
-  text-align: center;
-  top: 30px;
-  transform: rotate(-5deg);
-  z-index: 1;
-}
-
 .jyaano-banner-pattern {
   background:
     radial-gradient(ellipse 38% 80% at 52% 106%, #ffad12 0 45%, transparent 46%),
@@ -948,12 +1079,29 @@ p {
 
 @media (max-width: 1279px) {
   .jyaano-app-shell { grid-template-columns: 214px minmax(0, 1fr); }
-  .jyaano-sidebar { padding-left: 12px; padding-right: 12px; }.jyaano-wordmark span { font-size: 36px; }.jyaano-nav button { padding-left: 11px; }
-  .jyaano-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.jyaano-dashboard-layout { grid-template-columns: minmax(0, 1fr) 290px; }.jyaano-banner-motto { right: 7%; }
+  .jyaano-sidebar { padding-left: 12px; padding-right: 12px; }.jyaano-wordmark img { width: 174px; }.jyaano-nav button { padding-left: 11px; }
+  .jyaano-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.jyaano-dashboard-layout { grid-template-columns: minmax(0, 1fr) 290px; }
 }
 
 @media (max-width: 767px) {
-  .jyaano-app-shell { display: block; margin: -14px; min-height: calc(100vh - 28px); width: calc(100% + 28px); }.jyaano-sidebar { min-height: auto; padding: 12px 14px 0; }.jyaano-wordmark { border: 0; display: block; margin: 0 0 9px; padding: 0; text-align: left; }.jyaano-wordmark span { font-size: 30px; }.jyaano-wordmark small { display: inline; margin-left: 8px; }.jyaano-nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; }.jyaano-nav button { flex: 0 0 auto; gap: 6px; grid-template-columns: auto auto; padding: 8px 10px; font-size: 12px; }.jyaano-nav button span { font-size: 16px; }.jyaano-help-link { display: none; }.jyaano-topbar { height: 56px; padding: 0 16px; }.jyaano-topbar > p { display: none; }.jyaano-user { margin-left: auto; }.jyaano-user > span { height: 34px; width: 34px; }.jyaano-stage .page-section { padding: 13px; }.jyaano-welcome-banner { min-height: 176px; padding: 21px; }.jyaano-welcome-banner p { font-size: 13px; max-width: 240px; }.jyaano-banner-motto { font-size: 20px; right: 14px; top: 33px; }.jyaano-banner-pattern { left: -10%; }.jyaano-kpi-grid, .jyaano-dashboard-layout { grid-template-columns: 1fr; }.jyaano-kpi-card { min-height: 94px; }.jyaano-panel { padding: 15px; }.jyaano-side-column { grid-row: 1; }.jyaano-quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }.jyaano-quick-actions h3 { grid-column: 1 / -1; }.jyaano-quick-actions button { font-size: 12px; margin: 0; padding: 10px 8px; }.jyaano-quick-actions button > span { display: none; }.jyaano-user strong { font-size: 12px; }.jyaano-user small { font-size: 10px; }
+  .jyaano-app-shell { display: block; margin: -14px; min-height: calc(100vh - 28px); width: calc(100% + 28px); }.jyaano-sidebar { min-height: auto; padding: 12px 14px 0; }.jyaano-wordmark { margin: 0 0 9px; padding: 5px 9px; width: max-content; }.jyaano-wordmark img { width: 110px; }.jyaano-nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; }.jyaano-nav button { flex: 0 0 auto; gap: 6px; grid-template-columns: auto auto; padding: 8px 10px; font-size: 12px; }.jyaano-nav button span { font-size: 16px; }.jyaano-help-link { display: none; }.jyaano-topbar { height: 56px; padding: 0 16px; }.jyaano-topbar > p { display: none; }.jyaano-user { margin-left: auto; }.jyaano-user > span { height: 34px; width: 34px; }.jyaano-stage .page-section { padding: 13px; }.jyaano-welcome-banner { min-height: 176px; padding: 21px; }.jyaano-welcome-banner p { font-size: 13px; max-width: 240px; }.jyaano-banner-pattern { left: -10%; }.jyaano-kpi-grid, .jyaano-dashboard-layout { grid-template-columns: 1fr; }.jyaano-kpi-card { min-height: 94px; }.jyaano-panel { padding: 15px; }.jyaano-side-column { grid-row: 1; }.jyaano-quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }.jyaano-quick-actions h3 { grid-column: 1 / -1; }.jyaano-quick-actions button { font-size: 12px; margin: 0; padding: 10px 8px; }.jyaano-quick-actions button > span { display: none; }.jyaano-user strong { font-size: 12px; }.jyaano-user small { font-size: 10px; }
+}
+
+@media (max-width: 800px) {
+  .login-page {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 620px;
+    min-height: auto;
+  }
+
+  .login-brand-panel {
+    min-height: 390px;
+  }
+
+  .login-panel {
+    justify-self: stretch;
+    width: 100%;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1013,34 +1161,52 @@ p {
 
   .login-page {
     align-items: stretch;
+    gap: 16px;
     min-height: auto;
+    padding: 0;
+  }
+
+  .login-brand-panel {
+    min-height: auto;
+    padding: 26px;
+  }
+
+  .login-brand-logo {
+    max-width: 220px;
+  }
+
+  .login-brand-copy,
+  .login-brand-highlights {
+    position: static;
+  }
+
+  .login-brand-copy {
+    margin-top: 28px;
+  }
+
+  .login-brand-copy h1 {
+    font-size: 31px;
+  }
+
+  .login-brand-highlights {
+    margin-top: 24px;
   }
 
   .login-panel {
     padding: 18px;
   }
 
-  .menu-grid,
   .list-grid,
   .stats-grid,
   .inventory-row {
     grid-template-columns: 1fr;
   }
 
-  .menu-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .menu-card,
   .card,
   .panel,
   .sale-summary,
   .modal-content {
     width: 100%;
-  }
-
-  .menu-card {
-    min-height: auto;
   }
 
   .form-row {

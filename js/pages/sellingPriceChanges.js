@@ -46,7 +46,7 @@ function renderSellingPriceChanges(error = "", success = "") {
       <div id="priceChangePreview" class="sync-panel">Choose a product to preview affected batches.</div>
 
       <button type="submit">Save Price Change</button>
-      <button type="button" onclick="navigate('home')">Back to Menu</button>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
     </form>
 
     <h3>Price Change History</h3>

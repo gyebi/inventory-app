@@ -77,7 +77,7 @@ function renderTaxSettings(error = "", values = getTaxSettings()) {
       </div>
 
       <button type="submit">Save Tax Settings</button>
-      <button type="button" onclick="navigate('home')">Back to Menu</button>
+      <button type="button" onclick="navigate('dashboard')">Back to Dashboard</button>
     </form>
   `);
 }

@@ -253,7 +253,7 @@ function renderStockAdjustmentSaved(adjustment, product) {
       <button onclick="renderStockAdjustment()">Record Another Adjustment</button>
       <button onclick="navigate('reports')">View Reports</button>
       <button onclick="navigate('inventory')">View Inventory</button>
-      <button onclick="navigate('home')">Main Menu</button>
+      <button onclick="navigate('dashboard')">Dashboard</button>
     </div>
   `);
 }
