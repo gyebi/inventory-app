@@ -1,4 +1,8 @@
 const { execFile } = require("child_process");
+const {
+  PRINTER_ERROR_CODES,
+  createPrinterError,
+} = require("./printerErrors");
 
 function toBoolean(value) {
   if (typeof value === "boolean") {
@@ -18,16 +22,19 @@ function toBoolean(value) {
 
 function normalizePrinterEntry(entry = {}) {
   const name = String(entry.Name || entry.name || "").trim();
+  const printerStatus = String(entry.PrinterStatus || entry.printerStatus || "Unknown");
+  const workOffline = toBoolean(entry.WorkOffline ?? entry.workOffline);
+  const statusIndicatesError = /error|offline|paused|unavailable/i.test(printerStatus);
 
   return {
     name,
-    printerStatus: String(entry.PrinterStatus || entry.printerStatus || "Unknown"),
-    workOffline: toBoolean(entry.WorkOffline ?? entry.workOffline),
+    printerStatus,
+    workOffline,
     shared: toBoolean(entry.Shared ?? entry.shared),
     portName: String(entry.PortName || entry.portName || ""),
     type: String(entry.Type || entry.type || ""),
     driverName: String(entry.DriverName || entry.driverName || ""),
-    ready: name.length > 0 && !toBoolean(entry.WorkOffline ?? entry.workOffline),
+    ready: name.length > 0 && !workOffline && !statusIndicatesError,
   };
 }
 
@@ -47,8 +54,11 @@ function parsePrinterJson(stdout) {
     .filter((printer) => printer.name.length > 0);
 }
 
-function discoverWindowsPrinters() {
-  if (process.platform !== "win32") {
+function discoverWindowsPrinters(options = {}) {
+  const platform = options.platform || process.platform;
+  const runCommand = options.execFile || execFile;
+
+  if (platform !== "win32") {
     return Promise.resolve([]);
   }
 
@@ -58,7 +68,7 @@ function discoverWindowsPrinters() {
       "$printers | ConvertTo-Json -Depth 3",
     ].join("; ");
 
-    execFile(
+    runCommand(
       "powershell.exe",
       [
         "-NoProfile",
@@ -70,7 +80,10 @@ function discoverWindowsPrinters() {
       (error, stdout, stderr) => {
         if (error) {
           const message = String(stderr || error.message || "Unable to discover Windows printers").trim();
-          reject(new Error(message));
+          const code = /access is denied|access denied/i.test(message)
+            ? PRINTER_ERROR_CODES.PERMISSION_DENIED
+            : PRINTER_ERROR_CODES.PRINTER_DISCOVERY_FAILED;
+          reject(createPrinterError(code, message, { cause: error }));
           return;
         }
 

@@ -1,4 +1,3 @@
-
 param(
     [Parameter(Mandatory=$true)]
     [string]$PrinterName,
@@ -16,129 +15,114 @@ public class RawPrinterHelper
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public class DOCINFO
     {
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pDocName;
-
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pOutputFile;
-
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pDataType;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pDataType;
     }
 
-    [DllImport("winspool.drv",
-        EntryPoint = "OpenPrinterW",
-        SetLastError = true,
-        CharSet = CharSet.Unicode)]
-    public static extern bool OpenPrinter(
-        string printerName,
-        out IntPtr printerHandle,
-        IntPtr printerDefaults
-    );
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool ClosePrinter(
-        IntPtr printerHandle
-    );
-
-    [DllImport("winspool.drv",
-        EntryPoint = "StartDocPrinterW",
-        SetLastError = true,
-        CharSet = CharSet.Unicode)]
-    public static extern int StartDocPrinter(
-        IntPtr printerHandle,
-        int level,
-        [In] DOCINFO docInfo
-    );
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool EndDocPrinter(
-        IntPtr printerHandle
-    );
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool StartPagePrinter(
-        IntPtr printerHandle
-    );
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool EndPagePrinter(
-        IntPtr printerHandle
-    );
-
-    [DllImport("winspool.drv", SetLastError = true)]
-    public static extern bool WritePrinter(
-        IntPtr printerHandle,
-        IntPtr bytes,
-        int count,
-        out int written
-    );
-
-    public static bool SendBytes(string printerName, byte[] bytes)
+    public class PrintResult
     {
-        IntPtr printerHandle;
+        public bool Success;
+        public int JobId;
+        public string Stage;
+        public int Win32Error;
+        public int BytesWritten;
+    }
 
-        if (!OpenPrinter(printerName, out printerHandle, IntPtr.Zero))
-            return false;
+    [DllImport("winspool.drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool OpenPrinter(string printerName, out IntPtr printerHandle, IntPtr printerDefaults);
+    [DllImport("winspool.drv", SetLastError = true)] public static extern bool ClosePrinter(IntPtr printerHandle);
+    [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern int StartDocPrinter(IntPtr printerHandle, int level, [In] DOCINFO docInfo);
+    [DllImport("winspool.drv", SetLastError = true)] public static extern bool EndDocPrinter(IntPtr printerHandle);
+    [DllImport("winspool.drv", SetLastError = true)] public static extern bool StartPagePrinter(IntPtr printerHandle);
+    [DllImport("winspool.drv", SetLastError = true)] public static extern bool EndPagePrinter(IntPtr printerHandle);
+    [DllImport("winspool.drv", SetLastError = true)]
+    public static extern bool WritePrinter(IntPtr printerHandle, IntPtr bytes, int count, out int written);
 
-        DOCINFO docInfo = new DOCINFO();
-        docInfo.pDocName = "Inventory Receipt";
-        docInfo.pDataType = "RAW";
+    public static PrintResult SendBytes(string printerName, byte[] bytes)
+    {
+        IntPtr printerHandle = IntPtr.Zero;
+        IntPtr unmanagedBytes = IntPtr.Zero;
+        bool documentStarted = false;
+        bool pageStarted = false;
+        PrintResult result = new PrintResult { Stage = "OpenPrinter" };
 
-        int jobId = StartDocPrinter(
-            printerHandle,
-            1,
-            docInfo
-        );
-
-        if (jobId == 0)
+        try
         {
-            ClosePrinter(printerHandle);
-            return false;
+            if (!OpenPrinter(printerName, out printerHandle, IntPtr.Zero))
+            {
+                result.Win32Error = Marshal.GetLastWin32Error();
+                return result;
+            }
+
+            result.Stage = "StartDocPrinter";
+            DOCINFO docInfo = new DOCINFO { pDocName = "Inventory Receipt", pDataType = "RAW" };
+            result.JobId = StartDocPrinter(printerHandle, 1, docInfo);
+            if (result.JobId == 0)
+            {
+                result.Win32Error = Marshal.GetLastWin32Error();
+                return result;
+            }
+            documentStarted = true;
+
+            result.Stage = "StartPagePrinter";
+            if (!StartPagePrinter(printerHandle))
+            {
+                result.Win32Error = Marshal.GetLastWin32Error();
+                return result;
+            }
+            pageStarted = true;
+
+            result.Stage = "WritePrinter";
+            unmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
+            Marshal.Copy(bytes, 0, unmanagedBytes, bytes.Length);
+            if (!WritePrinter(printerHandle, unmanagedBytes, bytes.Length, out result.BytesWritten) || result.BytesWritten != bytes.Length)
+            {
+                result.Win32Error = Marshal.GetLastWin32Error();
+                return result;
+            }
+
+            result.Success = true;
+            return result;
         }
-
-        StartPagePrinter(printerHandle);
-
-        IntPtr unmanagedBytes =
-            Marshal.AllocCoTaskMem(bytes.Length);
-
-        Marshal.Copy(
-            bytes,
-            0,
-            unmanagedBytes,
-            bytes.Length
-        );
-
-        int written;
-
-        bool success = WritePrinter(
-            printerHandle,
-            unmanagedBytes,
-            bytes.Length,
-            out written
-        );
-
-        Marshal.FreeCoTaskMem(unmanagedBytes);
-
-        EndPagePrinter(printerHandle);
-        EndDocPrinter(printerHandle);
-        ClosePrinter(printerHandle);
-
-        return success && written == bytes.Length;
+        finally
+        {
+            if (unmanagedBytes != IntPtr.Zero) Marshal.FreeCoTaskMem(unmanagedBytes);
+            if (pageStarted) EndPagePrinter(printerHandle);
+            if (documentStarted) EndDocPrinter(printerHandle);
+            if (printerHandle != IntPtr.Zero) ClosePrinter(printerHandle);
+        }
     }
 }
 "@
 
-$bytes = [System.IO.File]::ReadAllBytes($FilePath)
-
-$success = [RawPrinterHelper]::SendBytes(
-    $PrinterName,
-    $bytes
-)
-
-if (-not $success) {
-    throw "Unable to send RAW receipt data to printer '$PrinterName'."
+function Get-ErrorCode([int]$Win32Error) {
+    switch ($Win32Error) {
+        5 { return "permission-denied" }
+        1801 { return "printer-not-found" }
+        1797 { return "driver-error" }
+        126 { return "driver-error" }
+        default { return "print-job-failed" }
+    }
 }
 
-Write-Output "Receipt sent to $PrinterName"
+$bytes = [System.IO.File]::ReadAllBytes($FilePath)
+$result = [RawPrinterHelper]::SendBytes($PrinterName, $bytes)
 
+if (-not $result.Success) {
+    $errorPayload = @{
+        code = Get-ErrorCode $result.Win32Error
+        message = "Windows print job failed at $($result.Stage) for '$PrinterName'."
+        details = @{
+            stage = $result.Stage
+            win32Error = $result.Win32Error
+            bytesWritten = $result.BytesWritten
+        }
+    } | ConvertTo-Json -Compress
+    [Console]::Error.WriteLine("JYAANO_PRINTER_ERROR=$errorPayload")
+    exit 1
+}
+
+$successPayload = @{ jobId = $result.JobId } | ConvertTo-Json -Compress
+Write-Output "JYAANO_PRINT_JOB=$successPayload"

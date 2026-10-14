@@ -37,6 +37,10 @@ See [RELEASE-GUIDE.md](RELEASE-GUIDE.md) for staging setup, guarded deployment c
 
 Use the isolated `demo-jyaano` project for local review. It uses synthetic accounts and only loopback endpoints; it does not read or write hosted Firebase projects. See [the local emulator workflow](docs/local-emulator-development.md) for prerequisites, commands, demo accounts, and shutdown instructions.
 
+## Receipt printing
+
+For Windows local receipt-printer setup, diagnostics, bridge error codes, and physical-hardware validation, see [Windows receipt printing](docs/windows-receipt-printing.md). The existing Linux MPT-II Bluetooth/RFCOMM deployment guide remains in `printer-bridge/deployment/README.md`.
+
 Current callable backend functions:
 
 - `createStaffUser`

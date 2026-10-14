@@ -2,6 +2,11 @@ import {
   RECEIPT_BUSINESS_NAME,
   formatReceiptCurrency,
 } from "./receiptService.js";
+import {
+  fetchPrinterBridgeStatus,
+  printReceiptThroughBridge,
+  testPrinterBridge,
+} from "./printerBridgeService.js";
 
 function formatReceiptDateTime(value) {
   if (!value) {
@@ -137,47 +142,15 @@ async function sendReceiptToMptPrinter(sale) {
     totalAmount: Number(sale.totalAmount || 0),
   };
 
-  const response = await fetch("http://127.0.0.1:17820/print", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(receipt),
-  });
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.error || "Unable to print receipt");
-  }
-
-  return result;
+  return printReceiptThroughBridge(receipt);
 }
 
 async function getPrinterStatus() {
-  const response = await fetch("http://127.0.0.1:17820/status");
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error("Unable to read printer status");
-  }
-
-  return result.printer;
+  return fetchPrinterBridgeStatus();
 }
 
 async function runPrinterTest() {
-  const response = await fetch("http://127.0.0.1:17820/test-print", {
-    method: "POST",
-  });
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.error || "Unable to run test print");
-  }
-
-  return result;
+  return testPrinterBridge();
 }
 
 function buildMptReceiptMarkup(sale) {
@@ -308,7 +281,7 @@ export function renderMptReceiptPage(sale) {
       await sendReceiptToMptPrinter(sale);
 
       if (button) {
-        button.textContent = "Printed";
+        button.textContent = "Job Submitted";
       }
 
       setTimeout(() => {
@@ -321,7 +294,7 @@ export function renderMptReceiptPage(sale) {
       console.error("MPT-II printing failed:", error);
 
       alert(
-        `Unable to print receipt.\n\n${error.message}`
+        `Unable to submit the print job (${error.code || "print-job-failed"}).\n\n${error.message}`
       );
 
       const button = document.querySelector(
@@ -338,10 +311,10 @@ export function renderMptReceiptPage(sale) {
   window.testMptPrinter = async () => {
     try {
       await runPrinterTest();
-      alert("Test receipt printed successfully.");
+      alert("Test job submitted. Confirm that a physical receipt was printed.");
     } catch (error) {
       alert(
-        `Printer test failed.\n\n${error.message}`
+        `Printer test failed (${error.code || "print-job-failed"}).\n\n${error.message}`
       );
     }
   };

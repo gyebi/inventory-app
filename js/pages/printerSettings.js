@@ -17,6 +17,20 @@ const printerSettingsState = {
   hasLoaded: false,
 };
 
+function describePrinterError(error, fallback) {
+  const code = error?.code || "print-job-failed";
+  const labels = {
+    "bridge-offline": "Local print service unavailable",
+    "printer-not-found": "Printer not found",
+    "printer-offline": "Printer offline",
+    "driver-error": "Windows driver error",
+    "permission-denied": "Printer permission denied",
+    "print-job-failed": "Print job failed",
+  };
+
+  return `${labels[code] || "Printer error"}: ${error?.message || fallback}`;
+}
+
 function getReceiptOutputMode() {
   return localStorage.getItem("receiptPrinterType") === "mpt58" ? "mpt58" : "browser";
 }
@@ -31,8 +45,18 @@ function getSelectedPrinterType() {
 
 function getPrinterStatusSummary() {
   if (printerSettingsState.printerStatus) {
+    const errorLabels = {
+      "printer-not-configured": "Printer Not Configured",
+      "printer-not-found": "Printer Not Found",
+      "printer-offline": "Printer Offline",
+      "driver-error": "Driver Error",
+      "permission-denied": "Permission Denied",
+      "printer-discovery-failed": "Discovery Failed",
+    };
+    const errorCode = printerSettingsState.printerStatus.errorCode;
+
     return {
-      label: printerSettingsState.printerStatus.ready ? "Ready" : "Offline",
+      label: printerSettingsState.printerStatus.ready ? "Ready" : (errorLabels[errorCode] || "Offline"),
       detail: printerSettingsState.printerStatus.message || printerSettingsState.bridgeMessage || "Print service responded.",
       className: printerSettingsState.printerStatus.ready ? "online" : "warning",
     };
@@ -65,7 +89,7 @@ function renderPrinterSettings(error = "", success = "") {
   const displayName = printerConfig.displayName || printerStatus.displayName || printerStatus.name || "Receipt Printer";
   const paperWidthMm = Number(printerConfig.paperWidthMm || printerStatus.paperWidthMm || 58);
   const printerTypeName = selectedType === "windows-usb"
-    ? "Windows USB"
+    ? "Windows Printer (USB/Bluetooth)"
     : "Linux RFCOMM";
 
   renderPage(`
@@ -180,7 +204,7 @@ async function hydratePrinterSettings() {
       printerSettingsState.printerConfig = statusResult.value.config || printerSettingsState.printerConfig;
     } else {
       printerSettingsState.printerStatus = null;
-      printerSettingsState.bridgeError = statusResult.reason?.message || "Receipt print service is not running.";
+      printerSettingsState.bridgeError = describePrinterError(statusResult.reason, "Receipt print service is not running.");
     }
 
     if (printersResult.status === "fulfilled") {
@@ -191,13 +215,13 @@ async function hydratePrinterSettings() {
       printerSettingsState.availablePrinters = [];
       printerSettingsState.bridgeMessage = "";
       if (!printerSettingsState.bridgeError) {
-        printerSettingsState.bridgeError = printersResult.reason?.message || "Unable to discover printers.";
+        printerSettingsState.bridgeError = describePrinterError(printersResult.reason, "Unable to discover printers.");
       }
     }
   } catch (error) {
     printerSettingsState.printerStatus = null;
     printerSettingsState.availablePrinters = [];
-    printerSettingsState.bridgeError = error.message || "Receipt print service is not running.";
+    printerSettingsState.bridgeError = describePrinterError(error, "Receipt print service is not running.");
   }
 
   printerSettingsState.loading = false;
@@ -283,16 +307,16 @@ async function savePrinterSettings(event) {
     setReceiptOutputMode(receiptOutputMode);
     renderPrinterSettings("", "Printer settings saved.");
   } catch (error) {
-    renderPrinterSettings(error.message || "Unable to save printer settings.");
+    renderPrinterSettings(describePrinterError(error, "Unable to save printer settings."));
   }
 }
 
 async function testPrinterSettings() {
   try {
     await testPrinterBridge();
-    renderPrinterSettings("", "Test receipt sent to the configured printer.");
+    renderPrinterSettings("", "Test job submitted. Confirm that a physical receipt was printed.");
   } catch (error) {
-    renderPrinterSettings(error.message || "Unable to test the printer.");
+    renderPrinterSettings(describePrinterError(error, "Unable to test the printer."));
   }
 }
 

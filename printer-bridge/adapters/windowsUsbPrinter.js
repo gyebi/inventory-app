@@ -1,18 +1,49 @@
-
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFile } = require("child_process");
 const { discoverWindowsPrinters } = require("../services/windowsPrinterDiscovery");
+const {
+  PRINTER_ERROR_CODES,
+  createPrinterError,
+  getPrinterErrorCode,
+} = require("../services/printerErrors");
+
+function parsePowerShellError(output) {
+  const match = String(output || "").match(/JYAANO_PRINTER_ERROR=(\{.+\})/);
+
+  if (!match) return null;
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function parsePowerShellResult(output) {
+  const match = String(output || "").match(/JYAANO_PRINT_JOB=(\{.+\})/);
+
+  if (!match) return null;
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
 
 function createWindowsUsbPrinter(config, options = {}) {
   const listPrinters = typeof options.listPrinters === "function"
     ? options.listPrinters
     : discoverWindowsPrinters;
-
-  function getPowerShell() {
-    return "powershell.exe";
-  }
+  const platform = options.platform || process.platform;
+  const writeFile = options.writeFile || fs.promises.writeFile;
+  const unlink = options.unlink || fs.promises.unlink;
+  const runProcess = options.execFile || execFile;
+  const getTempDirectory = options.tmpdir || os.tmpdir;
+  const joinPath = options.joinPath || path.join;
+  const scriptPath = options.scriptPath || path.join(__dirname, "..", "scripts", "printRaw.ps1");
 
   function getConfiguredPrinterName() {
     return String(config.printerName || "").trim();
@@ -21,9 +52,7 @@ function createWindowsUsbPrinter(config, options = {}) {
   function findConfiguredPrinter(printers = []) {
     const configuredPrinterName = getConfiguredPrinterName();
 
-    if (!configuredPrinterName) {
-      return null;
-    }
+    if (!configuredPrinterName) return null;
 
     const normalizedConfiguredPrinterName = configuredPrinterName.toLowerCase();
 
@@ -32,16 +61,83 @@ function createWindowsUsbPrinter(config, options = {}) {
     )) || null;
   }
 
+  function getUnavailablePrinterError(configuredPrinter) {
+    const configuredPrinterName = getConfiguredPrinterName();
+
+    if (!configuredPrinterName) {
+      return createPrinterError(
+        PRINTER_ERROR_CODES.PRINTER_NOT_CONFIGURED,
+        "Windows printer name is not configured"
+      );
+    }
+
+    if (!configuredPrinter) {
+      return createPrinterError(
+        PRINTER_ERROR_CODES.PRINTER_NOT_FOUND,
+        `Configured Windows printer is not installed: ${configuredPrinterName}`
+      );
+    }
+
+    if (!configuredPrinter.ready || configuredPrinter.workOffline) {
+      return createPrinterError(
+        PRINTER_ERROR_CODES.PRINTER_OFFLINE,
+        `Configured Windows printer is not ready: ${configuredPrinterName} (${configuredPrinter.printerStatus || "Offline"})`,
+        { details: { printerStatus: configuredPrinter.printerStatus || "Unknown" } }
+      );
+    }
+
+    return null;
+  }
+
+  function runPowerShell(printerName, tempFile) {
+    return new Promise((resolve, reject) => {
+      runProcess(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          scriptPath,
+          "-PrinterName",
+          printerName,
+          "-FilePath",
+          tempFile,
+        ],
+        (error, stdout, stderr) => {
+          const rawError = parsePowerShellError(`${stderr}\n${stdout}`);
+
+          if (error || rawError) {
+            const message = rawError?.message || String(stderr || error?.message || "Windows print job failed").trim();
+            reject(createPrinterError(
+              rawError?.code || getPrinterErrorCode(error),
+              message,
+              { cause: error, details: rawError?.details }
+            ));
+            return;
+          }
+
+          resolve(parsePowerShellResult(stdout) || {});
+        }
+      );
+    });
+  }
+
   return {
     async getStatus() {
-      if (process.platform !== "win32") {
+      const baseStatus = {
+        type: "windows-usb",
+        name: config.name,
+        printerName: config.printerName,
+        displayName: config.displayName || config.name,
+        paperWidthMm: Number(config.paperWidthMm || 80),
+      };
+
+      if (platform !== "win32") {
         return {
-          type: "windows-usb",
-          name: config.name,
-          printerName: config.printerName,
-          displayName: config.displayName || config.name,
-          paperWidthMm: Number(config.paperWidthMm || 80),
+          ...baseStatus,
           ready: false,
+          errorCode: PRINTER_ERROR_CODES.UNSUPPORTED_PLATFORM,
           message: "Windows printer adapter is not running on Windows",
         };
       }
@@ -49,113 +145,65 @@ function createWindowsUsbPrinter(config, options = {}) {
       try {
         const printers = await listPrinters();
         const configuredPrinter = findConfiguredPrinter(printers);
+        const unavailableError = getUnavailablePrinterError(configuredPrinter);
 
         return {
-          type: "windows-usb",
-          name: config.name,
-          printerName: config.printerName,
-          displayName: config.displayName || config.name,
-          paperWidthMm: Number(config.paperWidthMm || 80),
-          ready: Boolean(configuredPrinter && !configuredPrinter.workOffline),
-          message: configuredPrinter
-            ? (configuredPrinter.workOffline ? "Configured printer is offline" : "Configured printer is ready")
-            : "Configured printer is not installed",
+          ...baseStatus,
+          ready: !unavailableError,
+          errorCode: unavailableError?.code || "",
+          message: unavailableError?.message || "Configured printer is ready",
           availablePrinters: printers,
         };
       } catch (error) {
         return {
-          type: "windows-usb",
-          name: config.name,
-          printerName: config.printerName,
-          displayName: config.displayName || config.name,
-          paperWidthMm: Number(config.paperWidthMm || 80),
+          ...baseStatus,
           ready: false,
+          errorCode: getPrinterErrorCode(error, PRINTER_ERROR_CODES.PRINTER_DISCOVERY_FAILED),
           message: error.message || "Unable to discover Windows printers",
         };
       }
     },
 
     print(text, callback) {
-      if (process.platform !== "win32") {
-        return callback(
-          new Error(
+      const printJob = async () => {
+        if (platform !== "win32") {
+          throw createPrinterError(
+            PRINTER_ERROR_CODES.UNSUPPORTED_PLATFORM,
             "Windows USB printer adapter can only print on Windows"
-          )
-        );
-      }
-
-      const configuredPrinterName = getConfiguredPrinterName();
-
-      if (!configuredPrinterName) {
-        return callback(
-          new Error("Windows printer name is not configured")
-        );
-      }
-
-      listPrinters()
-        .then((printers) => {
-          const configuredPrinter = findConfiguredPrinter(printers);
-
-          if (!configuredPrinter) {
-            throw new Error(`Configured Windows printer is not installed: ${configuredPrinterName}`);
-          }
-
-          if (configuredPrinter.workOffline) {
-            throw new Error(`Configured Windows printer is offline: ${configuredPrinterName}`);
-          }
-
-          const initializePrinter = Buffer.from([0x1b, 0x40]);
-          const receiptBytes = Buffer.from(text, "ascii");
-
-          const output = Buffer.concat([
-            initializePrinter,
-            receiptBytes,
-          ]);
-
-          const tempFile = path.join(
-            os.tmpdir(),
-            `inventory-receipt-${Date.now()}.bin`
           );
+        }
 
-          fs.writeFileSync(tempFile, output);
+        const printers = await listPrinters();
+        const configuredPrinter = findConfiguredPrinter(printers);
+        const unavailableError = getUnavailablePrinterError(configuredPrinter);
 
-          const scriptPath = path.join(
-            __dirname,
-            "..",
-            "scripts",
-            "printRaw.ps1"
-          );
+        if (unavailableError) throw unavailableError;
 
-          execFile(
-            getPowerShell(),
-            [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              scriptPath,
-              "-PrinterName",
-              configuredPrinterName,
-              "-FilePath",
-              tempFile,
-            ],
-            (error, stdout, stderr) => {
-              fs.unlink(tempFile, () => {});
+        const output = Buffer.concat([
+          Buffer.from([0x1b, 0x40]),
+          Buffer.from(text, "ascii"),
+        ]);
+        const tempFile = joinPath(getTempDirectory(), `inventory-receipt-${Date.now()}-${process.pid}.bin`);
 
-              if (error) {
-                console.error(stderr || error.message);
-                return callback(error);
-              }
+        try {
+          await writeFile(tempFile, output);
+          const result = await runPowerShell(getConfiguredPrinterName(), tempFile);
+          return { queued: true, jobId: result.jobId || null };
+        } finally {
+          await unlink(tempFile).catch(() => {});
+        }
+      };
 
-              callback(null);
-            }
-          );
-        })
-        .catch((error) => callback(error));
+      void printJob().then(
+        (result) => callback(null, result),
+        (error) => callback(error)
+      );
     },
   };
 }
 
 module.exports = {
   createWindowsUsbPrinter,
+  parsePowerShellError,
+  parsePowerShellResult,
 };
