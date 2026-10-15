@@ -4,6 +4,12 @@ import {
   savePrinterConfiguration,
   testPrinterBridge,
 } from "../services/printerBridgeService.js";
+import {
+  WEB_SERIAL_OUTPUT_MODE,
+  getWebSerialPrinterPreferences,
+  saveWebSerialPrinterPreferences,
+  webSerialPrinter,
+} from "../services/webSerialPrinterService.js";
 
 const { renderPage } = window.app;
 
@@ -32,18 +38,44 @@ function describePrinterError(error, fallback) {
 }
 
 function getReceiptOutputMode() {
-  return localStorage.getItem("receiptPrinterType") === "mpt58" ? "mpt58" : "browser";
+  const mode = localStorage.getItem("receiptPrinterType");
+  return ["browser", "mpt58", WEB_SERIAL_OUTPUT_MODE].includes(mode) ? mode : "browser";
 }
 
 function setReceiptOutputMode(mode) {
-  localStorage.setItem("receiptPrinterType", mode === "mpt58" ? "mpt58" : "browser");
+  localStorage.setItem(
+    "receiptPrinterType",
+    ["mpt58", WEB_SERIAL_OUTPUT_MODE].includes(mode) ? mode : "browser",
+  );
 }
 
 function getSelectedPrinterType() {
   return printerSettingsState.printerConfig?.type || printerSettingsState.printerStatus?.type || "linux-rfcomm";
 }
 
-function getPrinterStatusSummary() {
+function getWebSerialStatusLabel(status) {
+  const labels = {
+    connected: "Connected",
+    connecting: "Waiting for permission",
+    printing: "Submitting",
+    uncertain: "Physical result unknown",
+    unsupported: "Unavailable",
+    error: "Attention needed",
+    disconnected: "Not connected",
+  };
+  return labels[status.state] || "Not connected";
+}
+
+function getPrinterStatusSummary(receiptOutputMode) {
+  if (receiptOutputMode === WEB_SERIAL_OUTPUT_MODE) {
+    const status = webSerialPrinter.getStatus();
+    return {
+      label: getWebSerialStatusLabel(status),
+      detail: status.detail,
+      className: status.connected ? "online" : (status.state === "error" || status.state === "uncertain" ? "offline" : "warning"),
+    };
+  }
+
   if (printerSettingsState.printerStatus) {
     const errorLabels = {
       "printer-not-configured": "Printer Not Configured",
@@ -82,13 +114,21 @@ function renderPrinterSettings(error = "", success = "") {
   const printerStatus = printerSettingsState.printerStatus || {};
   const printerConfig = printerSettingsState.printerConfig || printerStatus;
   const selectedType = getSelectedPrinterType();
-  const printerStatusSummary = getPrinterStatusSummary();
+  const printerStatusSummary = getPrinterStatusSummary(receiptOutputMode);
+  const webSerialPreferences = getWebSerialPrinterPreferences();
+  const webSerialStatus = webSerialPrinter.getStatus();
   const availablePrinters = Array.isArray(printerSettingsState.availablePrinters)
     ? printerSettingsState.availablePrinters
     : [];
-  const displayName = printerConfig.displayName || printerStatus.displayName || printerStatus.name || "Receipt Printer";
-  const paperWidthMm = Number(printerConfig.paperWidthMm || printerStatus.paperWidthMm || 58);
-  const printerTypeName = selectedType === "windows-usb"
+  const displayName = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE
+    ? "Bluetooth/Web Serial Printer"
+    : (printerConfig.displayName || printerStatus.displayName || printerStatus.name || "Receipt Printer");
+  const paperWidthMm = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE
+    ? webSerialPreferences.paperWidthMm
+    : Number(printerConfig.paperWidthMm || printerStatus.paperWidthMm || 58);
+  const printerTypeName = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE
+    ? "Bluetooth / Web Serial (Chrome)"
+    : selectedType === "windows-usb"
     ? "Windows Printer (USB/Bluetooth)"
     : "Linux RFCOMM";
 
@@ -116,6 +156,7 @@ function renderPrinterSettings(error = "", success = "") {
         <select id="receiptOutputMode" onchange="togglePrinterServicePanel()">
           <option value="browser" ${receiptOutputMode === "browser" ? "selected" : ""}>Browser / PDF Receipt</option>
           <option value="mpt58" ${receiptOutputMode === "mpt58" ? "selected" : ""}>Local Print Service</option>
+          <option value="${WEB_SERIAL_OUTPUT_MODE}" ${receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "selected" : ""}>Bluetooth / Web Serial Printer (Chrome)</option>
         </select>
       </div>
 
@@ -170,9 +211,28 @@ function renderPrinterSettings(error = "", success = "") {
         </div>
       </div>
 
+      <div id="webSerialPrinterPanel" style="${receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "" : "display:none;"}">
+        <div class="card">
+          <strong>Bluetooth / Web Serial Printer</strong><br>
+          <small class="field-hint">Chrome asks an operator to choose the paired printer. Jyaano saves only safe print preferences, never a Bluetooth device identity or assumed permission. This does not use the local printer bridge.</small><br>
+          <strong>Connection:</strong> <span id="webSerialStatus" class="status-pill ${webSerialStatus.connected ? "online" : "warning"}">${escapeHtml(getWebSerialStatusLabel(webSerialStatus))}</span><br>
+          <small class="field-hint" id="webSerialStatusDetail">${escapeHtml(webSerialStatus.detail)}</small>
+        </div>
+        <div class="form-row">
+          <label for="webSerialBaudRate">Baud Rate</label>
+          <input id="webSerialBaudRate" type="number" min="1" value="${webSerialPreferences.baudRate}">
+        </div>
+        <div class="purchase-actions">
+          <button type="button" onclick="connectWebSerialPrinter()">Select / reconnect printer</button>
+          <button type="button" onclick="disconnectWebSerialPrinter()" ${webSerialStatus.connected ? "" : "disabled"}>Disconnect</button>
+          <button type="button" onclick="testWebSerialPrinterSettings()" ${webSerialStatus.connected ? "" : "disabled"}>Send fixed test receipt</button>
+        </div>
+        <p class="field-hint">“Bytes submitted” means Chrome accepted the receipt bytes; confirm that paper emerged before recording a physical-print result. A timeout has an unknown physical result—do not retry it.</p>
+      </div>
+
       <div class="purchase-actions">
-        <button type="button" onclick="refreshPrinterSettings()">Refresh Printers</button>
-        <button type="button" onclick="testPrinterSettings()">Test Print</button>
+        <button type="button" onclick="refreshPrinterSettings()" ${receiptOutputMode === "mpt58" ? "" : "style=\"display:none;\""}>Refresh Printers</button>
+        <button type="button" onclick="testPrinterSettings()" ${receiptOutputMode === "mpt58" ? "" : "style=\"display:none;\""}>Test Print</button>
         <button type="submit">Save Printer Settings</button>
       </div>
 
@@ -180,7 +240,7 @@ function renderPrinterSettings(error = "", success = "") {
     </form>
   `);
 
-  if (!printerSettingsState.hasLoaded && !printerSettingsState.loading) {
+  if (receiptOutputMode === "mpt58" && !printerSettingsState.hasLoaded && !printerSettingsState.loading) {
     printerSettingsState.loading = true;
     setTimeout(() => {
       void hydratePrinterSettings();
@@ -233,6 +293,11 @@ async function hydratePrinterSettings() {
 }
 
 async function refreshPrinterSettings() {
+  if (getReceiptOutputMode() !== "mpt58") {
+    renderPrinterSettings();
+    return;
+  }
+
   printerSettingsState.hasLoaded = false;
   printerSettingsState.loading = true;
   renderPrinterSettings("", "Refreshing printer list...");
@@ -242,9 +307,14 @@ async function refreshPrinterSettings() {
 function togglePrinterServicePanel() {
   const receiptOutputMode = document.getElementById("receiptOutputMode")?.value || "browser";
   const servicePanel = document.getElementById("printerServicePanel");
+  const webSerialPanel = document.getElementById("webSerialPrinterPanel");
 
   if (servicePanel) {
     servicePanel.style.display = receiptOutputMode === "mpt58" ? "block" : "none";
+  }
+
+  if (webSerialPanel) {
+    webSerialPanel.style.display = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "block" : "none";
   }
 }
 
@@ -267,6 +337,18 @@ async function savePrinterSettings(event) {
 
   const receiptOutputMode = document.getElementById("receiptOutputMode")?.value || "browser";
   setReceiptOutputMode(receiptOutputMode);
+
+  if (receiptOutputMode === WEB_SERIAL_OUTPUT_MODE) {
+    const baudRate = Number((/** @type {HTMLInputElement | null} */ (document.getElementById("webSerialBaudRate")))?.value || 0);
+    if (!Number.isInteger(baudRate) || baudRate < 1) {
+      renderPrinterSettings("Enter a valid Web Serial baud rate before saving.");
+      return;
+    }
+
+    saveWebSerialPrinterPreferences({ baudRate, paperWidthMm: 58 });
+    renderPrinterSettings("", "Bluetooth/Web Serial preference saved. Select the printer again whenever Chrome requires authorization.");
+    return;
+  }
 
   if (receiptOutputMode !== "mpt58") {
     renderPrinterSettings("", "Browser receipt mode saved.");
@@ -320,6 +402,52 @@ async function testPrinterSettings() {
   }
 }
 
+async function connectWebSerialPrinter() {
+  try {
+    // This function is invoked directly by the operator's button click. The
+    // service calls navigator.serial.requestPort() before any other await.
+    await webSerialPrinter.connect();
+    renderPrinterSettings("", "Bluetooth/Web Serial printer connected.");
+  } catch (error) {
+    renderPrinterSettings(`Bluetooth/Web Serial connection failed: ${error.message}`);
+  }
+}
+
+async function disconnectWebSerialPrinter() {
+  try {
+    await webSerialPrinter.disconnect();
+    renderPrinterSettings("", "Bluetooth/Web Serial printer disconnected.");
+  } catch (error) {
+    renderPrinterSettings(`Bluetooth/Web Serial disconnect failed: ${error.message}`);
+  }
+}
+
+async function testWebSerialPrinterSettings() {
+  try {
+    await webSerialPrinter.printTestReceipt();
+    renderPrinterSettings("", "Test bytes submitted. Confirm that the fixed physical test receipt emerged.");
+  } catch (error) {
+    renderPrinterSettings(`Bluetooth/Web Serial test failed: ${error.message}`);
+  }
+}
+
+function updateWebSerialStatus() {
+  const appWindow = /** @type {any} */ (window);
+  if (appWindow.app?.getCurrentPage?.() !== "printerSettings" || getReceiptOutputMode() !== WEB_SERIAL_OUTPUT_MODE) return;
+
+  const status = webSerialPrinter.getStatus();
+
+  const statusElement = document.getElementById("webSerialStatus");
+  const detailElement = document.getElementById("webSerialStatusDetail");
+  if (statusElement) {
+    statusElement.textContent = getWebSerialStatusLabel(status);
+    statusElement.className = `status-pill ${status.connected ? "online" : (status.state === "error" || status.state === "uncertain" ? "offline" : "warning")}`;
+  }
+  if (detailElement) detailElement.textContent = status.detail;
+}
+
+webSerialPrinter.onStatusChange(updateWebSerialStatus);
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -335,3 +463,7 @@ window.savePrinterSettings = savePrinterSettings;
 window.testPrinterSettings = testPrinterSettings;
 window.togglePrinterServicePanel = togglePrinterServicePanel;
 window.togglePrinterTypeFields = togglePrinterTypeFields;
+const appWindow = /** @type {any} */ (window);
+appWindow.connectWebSerialPrinter = connectWebSerialPrinter;
+appWindow.disconnectWebSerialPrinter = disconnectWebSerialPrinter;
+appWindow.testWebSerialPrinterSettings = testWebSerialPrinterSettings;

@@ -2,7 +2,7 @@ import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 
-import { renderMptReceiptPage } from "../services/mptReceiptService.js";
+import { renderMptReceiptPage, renderWebSerialReceiptPage } from "../services/mptReceiptService.js";
 
 const { ensureStockState, renderPage, state } = window.app;
 let saleCart = [];
@@ -334,6 +334,8 @@ async function recordSale() {
 
     if (printerType === "mpt58") {
       renderMptReceiptPage(sale);
+    } else if (printerType === "web-serial") {
+      renderWebSerialReceiptPage(sale);
     } else {
       renderReceiptPage(sale);
     }
