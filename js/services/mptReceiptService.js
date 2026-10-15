@@ -2,6 +2,12 @@ import {
   RECEIPT_BUSINESS_NAME,
   formatReceiptCurrency,
 } from "./receiptService.js";
+import {
+  fetchPrinterBridgeStatus,
+  printReceiptThroughBridge,
+  testPrinterBridge,
+} from "./printerBridgeService.js";
+import { webSerialPrinter } from "./webSerialPrinterService.js";
 
 function formatReceiptDateTime(value) {
   if (!value) {
@@ -137,51 +143,23 @@ async function sendReceiptToMptPrinter(sale) {
     totalAmount: Number(sale.totalAmount || 0),
   };
 
-  const response = await fetch("http://127.0.0.1:17820/print", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(receipt),
-  });
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.error || "Unable to print receipt");
-  }
-
-  return result;
+  return printReceiptThroughBridge(receipt);
 }
 
 async function getPrinterStatus() {
-  const response = await fetch("http://127.0.0.1:17820/status");
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error("Unable to read printer status");
-  }
-
-  return result.printer;
+  return fetchPrinterBridgeStatus();
 }
 
 async function runPrinterTest() {
-  const response = await fetch("http://127.0.0.1:17820/test-print", {
-    method: "POST",
-  });
-
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    throw new Error(result.error || "Unable to run test print");
-  }
-
-  return result;
+  return testPrinterBridge();
 }
 
-function buildMptReceiptMarkup(sale) {
+function buildMptReceiptMarkup(sale, { webSerial = false } = {}) {
   const tax = getTaxBreakdown(sale);
+  const printFunction = webSerial ? "printWebSerialReceipt()" : "printMptReceiptBridge()";
+  const testFunction = webSerial ? "testWebSerialPrinter()" : "testMptPrinter()";
+  const printerLabel = webSerial ? "Bluetooth/Web Serial Printer" : "Local Print Service";
+  const printLabel = webSerial ? "Submit Bluetooth/Web Serial Receipt" : "Print MPT-II Receipt";
 
   return `
     <div class="mpt-receipt-page">
@@ -189,7 +167,7 @@ function buildMptReceiptMarkup(sale) {
     <div class="mpt-printer-status">
       <div>
         Printer:
-        <strong id="mptPrinterName">Checking...</strong>
+        <strong id="mptPrinterName">${printerLabel}</strong>
       </div>
 
       <div>
@@ -197,7 +175,7 @@ function buildMptReceiptMarkup(sale) {
         <strong id="mptPrinterStatus">Checking...</strong>
       </div>
 
-      <button onclick="testMptPrinter()">
+      <button onclick="${testFunction}">
         Test Print
       </button>
     </div>
@@ -284,8 +262,8 @@ function buildMptReceiptMarkup(sale) {
           Back to Sale
         </button>
 
-        <button onclick="printMptReceiptBridge()">
-          Print MPT-II Receipt
+        <button onclick="${printFunction}">
+          ${printLabel}
         </button>
       </div>
 
@@ -293,11 +271,15 @@ function buildMptReceiptMarkup(sale) {
   `;
 }
 
-export function renderMptReceiptPage(sale) {
-  window.printMptReceiptBridge = async () => {
+function renderThermalReceiptPage(sale, { webSerial = false } = {}) {
+  const printFunctionName = webSerial ? "printWebSerialReceipt" : "printMptReceiptBridge";
+  const testFunctionName = webSerial ? "testWebSerialPrinter" : "testMptPrinter";
+  const printLabel = webSerial ? "Submit Bluetooth/Web Serial Receipt" : "Print MPT-II Receipt";
+
+  window[printFunctionName] = async () => {
     try {
       const button = document.querySelector(
-        '[onclick="printMptReceiptBridge()"]'
+        `[onclick="${printFunctionName}()"]`
       );
 
       if (button) {
@@ -305,48 +287,57 @@ export function renderMptReceiptPage(sale) {
         button.textContent = "Printing...";
       }
 
-      await sendReceiptToMptPrinter(sale);
+      if (webSerial) {
+        await webSerialPrinter.printSaleReceipt(sale);
+      } else {
+        await sendReceiptToMptPrinter(sale);
+      }
 
       if (button) {
-        button.textContent = "Printed";
+        button.textContent = webSerial ? "Bytes Submitted — Confirm Paper" : "Job Submitted";
       }
 
       setTimeout(() => {
         if (button) {
           button.disabled = false;
-          button.textContent = "Print MPT-II Receipt";
+          button.textContent = printLabel;
         }
       }, 1500);
     } catch (error) {
-      console.error("MPT-II printing failed:", error);
+      console.error("Receipt printing failed:", error);
 
       alert(
-        `Unable to print receipt.\n\n${error.message}`
+        `Unable to submit the print job (${error.code || "print-job-failed"}).\n\n${error.message}`
       );
 
       const button = document.querySelector(
-        '[onclick="printMptReceiptBridge()"]'
+        `[onclick="${printFunctionName}()"]`
       );
 
       if (button) {
         button.disabled = false;
-        button.textContent = "Print MPT-II Receipt";
+        button.textContent = printLabel;
       }
     }
   };
 
-  window.testMptPrinter = async () => {
+  window[testFunctionName] = async () => {
     try {
-      await runPrinterTest();
-      alert("Test receipt printed successfully.");
+      if (webSerial) {
+        await webSerialPrinter.printTestReceipt();
+        alert("Test bytes submitted. Confirm that a physical receipt was printed.");
+      } else {
+        await runPrinterTest();
+        alert("Test job submitted. Confirm that a physical receipt was printed.");
+      }
     } catch (error) {
       alert(
-        `Printer test failed.\n\n${error.message}`
+        `Printer test failed (${error.code || "print-job-failed"}).\n\n${error.message}`
       );
     }
   };
 
-  window.app.renderPage(buildMptReceiptMarkup(sale));
+  window.app.renderPage(buildMptReceiptMarkup(sale, { webSerial }));
 
   setTimeout(async () => {
     const nameElement = document.getElementById(
@@ -358,16 +349,18 @@ export function renderMptReceiptPage(sale) {
     );
 
     try {
-      const printer = await getPrinterStatus();
+      const printer = webSerial ? webSerialPrinter.getStatus() : await getPrinterStatus();
 
       if (nameElement) {
         nameElement.textContent =
-          printer.name || "Receipt Printer";
+          webSerial ? "Bluetooth/Web Serial Printer" : (printer.name || "Receipt Printer");
       }
 
       if (statusElement) {
         statusElement.textContent =
-          printer.ready ? "Ready" : "Offline";
+          webSerial
+            ? (printer.connected ? "Connected" : "Not connected")
+            : (printer.ready ? "Ready" : "Offline");
       }
     } catch (error) {
       if (nameElement) {
@@ -379,4 +372,12 @@ export function renderMptReceiptPage(sale) {
       }
     }
   }, 0);
+}
+
+export function renderMptReceiptPage(sale) {
+  renderThermalReceiptPage(sale);
+}
+
+export function renderWebSerialReceiptPage(sale) {
+  renderThermalReceiptPage(sale, { webSerial: true });
 }

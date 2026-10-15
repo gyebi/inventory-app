@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -10,6 +10,33 @@ import {
   PRODUCTION_PROJECT_ID
 } from "../scripts/hosting-artifact.mjs";
 import { validateDeploymentRequest } from "../scripts/deploy-firebase.mjs";
+import {
+  WEB_SERIAL_TEST_PAGE,
+  publishWebSerialTestPage
+} from "../scripts/staging-web-serial-test-page.mjs";
+
+test("Web Serial receipt proof of concept is copied only into staging Hosting artifacts", (t) => {
+  const temporaryDirectory = mkdtempSync(resolve(tmpdir(), "jyaano-web-serial-page-"));
+  const destination = resolve(temporaryDirectory, WEB_SERIAL_TEST_PAGE);
+
+  t.after(() => rmSync(temporaryDirectory, { force: true, recursive: true }));
+
+  publishWebSerialTestPage("staging", temporaryDirectory);
+  assert.equal(existsSync(destination), true);
+  assert.match(readFileSync(destination, "utf8"), /JYAANO WEB SERIAL TEST/);
+
+  publishWebSerialTestPage("production", temporaryDirectory);
+  assert.equal(existsSync(destination), false);
+});
+
+test("Web Serial proof of concept requires a picker and contains no Jyaano printer integration", () => {
+  const page = readFileSync(resolve("prototypes", "web-serial-windows-poc.html"), "utf8");
+
+  assert.match(page, /navigator\.serial\.requestPort\(\)/);
+  assert.doesNotMatch(page, /navigator\.serial\.getPorts|printerBridge|mptReceipt/i);
+  assert.match(page, /JYAANO WEB SERIAL TEST/);
+  assert.match(page, /Test only - no sale recorded/);
+});
 
 test("a staging Hosting artifact cannot be replaced by or deployed as a production artifact", () => {
   const stagingArtifact = createHostingArtifact("staging", "jyaano-staging");

@@ -11,6 +11,7 @@ const {
 const {
   discoverWindowsPrinters,
 } = require("./services/windowsPrinterDiscovery");
+const { toPrinterErrorPayload } = require("./services/printerErrors");
 
 let runtimeConfig = loadPrinterConfig();
 let printer = createPrinter(runtimeConfig.printer, {
@@ -209,7 +210,7 @@ async function handleListPrinters(res, origin) {
   } catch (error) {
     return sendJson(res, 500, {
       ok: false,
-      error: error.message || "Unable to discover Windows printers",
+      ...toPrinterErrorPayload(error, "Unable to discover Windows printers"),
     }, origin);
   }
 }
@@ -296,17 +297,18 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === "POST" && pathname === "/test-print") {
-      return printReceipt(createTestReceipt(), (error) => {
+      return printReceipt(createTestReceipt(), (error, result) => {
         if (error) {
           return sendJson(res, 500, {
             ok: false,
-            error: error.message,
+            ...toPrinterErrorPayload(error),
           }, origin);
         }
 
         return sendJson(res, 200, {
           ok: true,
-          message: "Test receipt printed",
+          message: "Test print job accepted by the local print service. Confirm the physical receipt.",
+          printJob: result || null,
         }, origin);
       });
     }
@@ -327,11 +329,11 @@ async function handleRequest(req, res) {
           }, origin);
         }
 
-        printReceipt(receipt, (printError) => {
+        printReceipt(receipt, (printError, result) => {
           if (printError) {
             return sendJson(res, 500, {
               ok: false,
-              error: printError.message,
+              ...toPrinterErrorPayload(printError),
             }, origin);
           }
 
@@ -339,7 +341,8 @@ async function handleRequest(req, res) {
 
           return sendJson(res, 200, {
             ok: true,
-            message: "Receipt printed",
+            message: "Print job accepted by the local print service. Confirm the physical receipt.",
+            printJob: result || null,
           }, origin);
         });
       });
@@ -353,7 +356,7 @@ async function handleRequest(req, res) {
     console.error("Printer bridge request failed:", error);
     return sendJson(res, 500, {
       ok: false,
-      error: error.message || "Internal server error",
+      ...toPrinterErrorPayload(error, "Internal server error"),
     }, origin);
   }
 }
