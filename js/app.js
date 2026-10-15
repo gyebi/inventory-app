@@ -741,6 +741,8 @@ const dashboardNavItems = [
   { page: "suppliers", icon: "♧", title: "Suppliers" },
   { page: "priceChanges", icon: "₵", title: "Price Changes" },
   { page: "reports", icon: "▥", title: "Reports" },
+  { page: "stocktakingPrototype", icon: "✓", title: "Stocktaking prototype" },
+  { page: "receiptDeliveryPrototype", icon: "✉", title: "Receipt delivery prototype" },
   { page: "categorySettings", icon: "◇", title: "Categories" },
   { page: "taxSettings", icon: "⚙", title: "Settings" },
   { page: "printerSettings", icon: "🖨", title: "Printer" },
@@ -812,6 +814,8 @@ function navigate(page) {
   if (page === "inventory") window.renderInventory?.();
   if (page === "staff") window.renderStaff?.();
   if (page === "help") window.renderHelp?.();
+  if (page === "stocktakingPrototype") window["renderStocktakingPrototype"]?.();
+  if (page === "receiptDeliveryPrototype") window["renderReceiptDeliveryPrototype"]?.();
   if (page === "changePassword") renderRequiredPasswordChange();
 }
 
@@ -1112,6 +1116,14 @@ function renderShell() {
 
 function renderDashboardShell() {
   const permittedNavItems = dashboardNavItems.filter((item) => canAccessPage(item.page));
+  const primaryMobileItems = [
+    { page: "dashboard", icon: "⌂", title: "Home" },
+    { page: "sales", icon: "🛒", title: "Sales" },
+    { page: "inventory", icon: "▣", title: "Stock" },
+    { page: "reports", icon: "▥", title: "Reports" }
+  ].filter((item) => canAccessPage(item.page));
+  const mobileMoreItems = permittedNavItems.filter((item) => !primaryMobileItems.some((primaryItem) => primaryItem.page === item.page));
+  const mobileMoreActive = !primaryMobileItems.some((item) => item.page === currentPage);
   const displayName = state.user?.fullName || state.user?.username || state.user?.email || "User";
   const initial = escapeShellHtml(displayName.trim().charAt(0).toUpperCase() || "U");
 
@@ -1128,8 +1140,34 @@ function renderDashboardShell() {
         </header>
         <main id="page"></main>
       </section>
+      <nav class="jyaano-mobile-nav" aria-label="Mobile navigation">
+        ${primaryMobileItems.map((item) => `<button class="${item.page === currentPage ? "is-active" : ""}" ${item.page === currentPage ? 'aria-current="page"' : ""} type="button" onclick="navigate('${item.page}')"><span aria-hidden="true">${item.icon}</span><small>${item.title}</small></button>`).join("")}
+        <button class="${mobileMoreActive ? "is-active" : ""}" type="button" aria-expanded="false" aria-controls="mobileMoreSheet" onclick="toggleMobileMore()"><span aria-hidden="true">•••</span><small>More</small></button>
+      </nav>
+      <div id="mobileMoreSheet" class="jyaano-mobile-more hidden" role="dialog" aria-modal="true" aria-label="More navigation options">
+        <button class="jyaano-mobile-more-backdrop" type="button" aria-label="Close more menu" onclick="toggleMobileMore(false)"></button>
+        <section class="jyaano-mobile-more-panel">
+          <div class="jyaano-mobile-more-heading"><h2>More</h2><button type="button" aria-label="Close more menu" onclick="toggleMobileMore(false)">×</button></div>
+          <div class="jyaano-mobile-more-list">${mobileMoreItems.map((item) => `<button type="button" onclick="navigateFromMobileMore('${item.page}')"><span aria-hidden="true">${item.icon}</span>${item.title}<b aria-hidden="true">›</b></button>`).join("")}</div>
+        </section>
+      </div>
     </div>
   `;
+}
+
+function toggleMobileMore(forceOpen) {
+  const sheet = document.getElementById("mobileMoreSheet");
+  const trigger = document.querySelector(".jyaano-mobile-nav button:last-child");
+  if (!sheet) return;
+  const open = typeof forceOpen === "boolean" ? forceOpen : sheet.classList.contains("hidden");
+  sheet.classList.toggle("hidden", !open);
+  trigger?.setAttribute("aria-expanded", String(open));
+  document.body.classList.toggle("mobile-menu-open", open);
+}
+
+function navigateFromMobileMore(page) {
+  toggleMobileMore(false);
+  navigate(page);
 }
 
 function escapeShellHtml(value) {
@@ -1451,6 +1489,8 @@ window.printReceipt = printReceipt;
 window.printMptReceipt = printMptReceipt;
 window.printModalReport = printModalReport;
 window.refreshFromCloud = refreshFromCloud;
+/** @type {any} */ (window).toggleMobileMore = toggleMobileMore;
+/** @type {any} */ (window).navigateFromMobileMore = navigateFromMobileMore;
 
 renderSplash();
 
@@ -1471,6 +1511,8 @@ await import("./pages/inventory.js");
 await import("./pages/dashboard.js");
 await import("./pages/staff.js");
 await import("./pages/help.js");
+await import("./pages/stocktakingPrototype.js");
+await import("./pages/receiptDeliveryPrototype.js");
 
 window.app.formatStock = window.formatStock;
 window.app.getCurrentDateTimeValue = window.getCurrentDateTimeValue;

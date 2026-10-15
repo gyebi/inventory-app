@@ -19,6 +19,10 @@ export const pagePermissions = {
   stock: "manage_stock",
   products: "add_product",
   reports: "view_reports",
+  // This is an explicitly non-operational UI prototype. It uses the same
+  // inventory access boundary as the screens it prepares staff to use.
+  stocktakingPrototype: "manage_stock",
+  receiptDeliveryPrototype: "create_sale",
   staff: "manage_users"
 };
 
