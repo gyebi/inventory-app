@@ -1,16 +1,21 @@
 import { renderReceiptPage } from "../services/receiptService.js";
 import { createSale } from "../services/salesService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
+import { hasPermission } from "../services/authService.js";
+import { fetchPrinterBridgeStatus } from "../services/printerBridgeService.js";
 
 import { renderMptReceiptPage, renderWebSerialReceiptPage } from "../services/mptReceiptService.js";
 
-const { ensureStockState, renderPage, state } = window.app;
+const app = /** @type {any} */ (window).app;
+const { ensureStockState, renderPage, state } = app;
 let saleCart = [];
 let selectedProductId = "";
 let selectedSaleUnit = "bulk";
+let selectedSalePaymentMethod = "Cash";
+let posPrinterStatus = { checked: false, loading: false, ready: null, message: "" };
 
 function formatSaleStock(product) {
-  return window.app.formatStock(product);
+  return app.formatStock(product);
 }
 
 function getCommittedBaseQuantity(product) {
@@ -120,9 +125,14 @@ function renderCartItems() {
           <strong>${product?.name || "Unknown product"}</strong>
           <small>${item.quantity} ${unitLabel}(s)</small>
         </div>
-        <div>
+        <div class="sale-cart-item-actions">
           <span>${window.app.formatReceiptCurrency(itemTotal)}</span>
-          <button type="button" onclick="removeSaleCartItem(${index})">Remove</button>
+          <div class="sale-quantity-controls" aria-label="Quantity controls for ${product?.name || "cart item"}">
+            <button type="button" aria-label="Decrease quantity" onclick="adjustSaleCartItem(${index}, -1)">−</button>
+            <b>${item.quantity}</b>
+            <button type="button" aria-label="Increase quantity" onclick="adjustSaleCartItem(${index}, 1)">+</button>
+          </div>
+          <button class="sale-remove-button" type="button" onclick="removeSaleCartItem(${index})">Remove</button>
         </div>
       </div>
     `;
@@ -162,6 +172,25 @@ function renderSales(error = "") {
     availableBaseQuantity,
     unitLabel: quantityUnitLabel
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
+  const productCards = state.products
+    .filter((product) => Number(product.quantity || 0) > 0)
+    .slice(0, 24)
+    .map((product) => {
+      const price = getSaleUnitPrice(product, selectedSaleUnit);
+      const isSelected = product.id === selectedProduct.id;
+    return `<button type="button" class="sale-product-card ${isSelected ? "is-selected" : ""}" data-sale-product-search="${escapeHtml(`${product.name} ${product.category || ""}`.toLowerCase())}" onclick="selectSaleProduct('${product.id}')"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category || getProductUnitLabel(product, selectedSaleUnit))}</small><b>${app.formatReceiptCurrency(price)}</b></button>`;
+    }).join("");
+  const localPrinter = localStorage.getItem("receiptPrinterType") === "mpt58";
+  const canManagePrinter = hasPermission("manage_settings");
+  const printerMessage = localPrinter
+    ? (posPrinterStatus.loading
+      ? "Checking local printer…"
+      : posPrinterStatus.ready === true
+        ? "Local printer ready"
+        : posPrinterStatus.ready === false
+          ? "Local printer needs attention"
+          : "Local printer selected")
+    : "Browser receipt selected";
 
   renderPage(`
     <div class="page-title">
@@ -171,14 +200,20 @@ function renderSales(error = "") {
 
     ${error ? `<div class="message error">${error}</div>` : ""}
 
-    <div class="sale-panel">
+    <div class="sale-panel sale-pos-layout">
       <div class="sale-summary">
         <strong>Available Stock</strong>
         <span>${formatSaleStock(selectedProduct)}</span>
         <small>Available for next sale: ${formatBaseQuantity(selectedProduct, availableBaseQuantity)}</small>
       </div>
 
-      <div class="form-column">
+      <section class="sale-product-picker" aria-label="Product selection">
+        <div class="sale-section-heading"><div><h3>Find products</h3><p>Search, then tap an item to select it.</p></div></div>
+        <input id="saleProductSearch" class="sale-product-search" type="search" inputmode="search" autocomplete="off" placeholder="Search products or categories" oninput="filterSaleProducts(this.value)">
+        <div id="saleProductCards" class="sale-product-cards">${productCards || '<p class="sale-cart-empty">No in-stock products match the current list.</p>'}</div>
+      </section>
+
+      <div class="form-column sale-entry-form">
         <div class="form-row">
           <label for="productIndex">Product</label>
           <select id="productIndex" onchange="updateSalePreview()">${options}</select>
@@ -194,10 +229,10 @@ function renderSales(error = "") {
 
         <div class="form-row">
           <label for="qty">Quantity (${quantityUnitLabel})</label>
-          <input id="qty" class="number-field" type="number" min="1" step="1">
+          <input id="qty" class="number-field" type="number" inputmode="numeric" min="1" step="1" enterkeyhint="done">
         </div>
 
-        <button type="button" onclick="addSaleCartItem()">Add Product</button>
+        <button class="sale-add-button" type="button" onclick="addSaleCartItem()">Add to cart</button>
       </div>
 
       <div class="sale-cart">
@@ -208,10 +243,44 @@ function renderSales(error = "") {
         <div class="sale-cart-list">
           ${renderCartItems()}
         </div>
-        <button id="completeSaleButton" onclick="recordSale()">Complete Sale</button>
+        <div class="sale-payment-methods" role="group" aria-label="Payment method">
+          <span>Payment method</span>
+          ${["Cash", "MoMo", "Card"].map((method) => `<button class="${selectedSalePaymentMethod === method ? "is-selected" : ""}" type="button" aria-pressed="${selectedSalePaymentMethod === method}" onclick="setSalePaymentMethod('${method}')">${method}</button>`).join("")}
+        </div>
+        <div class="sale-checkout-total"><span>Cart total</span><strong>${window.app.formatReceiptCurrency(getCartTotal())}</strong></div>
+        <button id="completeSaleButton" class="sale-complete-button" onclick="confirmSale()" ${saleCart.length ? "" : "disabled"}>Review & complete sale</button>
+        <div class="sale-printer-status"><span class="${localPrinter && posPrinterStatus.ready === true ? "is-ready" : ""}">● ${printerMessage}</span>${canManagePrinter ? '<button type="button" onclick="navigate(\'printerSettings\')">Printer & reconnect</button>' : '<small>Printer settings are managed by authorized staff.</small>'}</div>
       </div>
     </div>
   `);
+
+  if (localPrinter && canManagePrinter && !posPrinterStatus.checked && !posPrinterStatus.loading) {
+    void refreshPosPrinterStatus();
+  }
+}
+
+async function refreshPosPrinterStatus() {
+  posPrinterStatus.loading = true;
+  try {
+    const status = await fetchPrinterBridgeStatus();
+    posPrinterStatus = {
+      checked: true,
+      loading: false,
+      ready: status.ready === true,
+      message: status.message || ""
+    };
+  } catch (error) {
+    posPrinterStatus = {
+      checked: true,
+      loading: false,
+      ready: false,
+      message: error?.message || "Receipt print service is unavailable."
+    };
+  }
+
+  if (app.getCurrentPage?.() === "sales") {
+    renderSales();
+  }
 }
 
 function setSaleProcessing(isProcessing) {
@@ -312,6 +381,62 @@ function removeSaleCartItem(index) {
   renderSales();
 }
 
+function adjustSaleCartItem(index, change) {
+  const item = saleCart[index];
+  const product = state.products.find((candidate) => candidate.id === item?.productId);
+  if (!item || !product) return;
+  const nextQuantity = item.quantity + change;
+  if (nextQuantity <= 0) {
+    removeSaleCartItem(index);
+    return;
+  }
+  const otherItemsBaseQuantity = saleCart
+    .filter((_, itemIndex) => itemIndex !== index)
+    .filter((candidate) => candidate.productId === product.id)
+    .reduce((sum, candidate) => sum + toBaseQuantity(product, candidate.quantity, candidate.saleUnit), 0);
+  if (toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > Number(product.quantity || 0)) {
+    renderSales(`Not enough stock available for ${product.name}.`);
+    return;
+  }
+  item.quantity = nextQuantity;
+  renderSales();
+}
+
+function selectSaleProduct(productId) {
+  if (!state.products.some((product) => product.id === productId)) return;
+  selectedProductId = productId;
+  renderSales();
+}
+
+function filterSaleProducts(query = "") {
+  const normalizedQuery = query.trim().toLowerCase();
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-sale-product-search]")).forEach((card) => {
+    card.hidden = Boolean(normalizedQuery) && !card.dataset.saleProductSearch.includes(normalizedQuery);
+  });
+}
+
+function setSalePaymentMethod(method) {
+  selectedSalePaymentMethod = method;
+  renderSales();
+}
+
+function confirmSale() {
+  if (saleCart.length === 0) {
+    renderSales("Add at least one product before completing the sale.");
+    return;
+  }
+  app.openModal(`
+    <section class="sale-confirmation">
+      <p class="jyaano-eyebrow">Checkout confirmation</p>
+      <h3>Complete this sale?</h3>
+      <p>${saleCart.length} line item${saleCart.length === 1 ? "" : "s"} · ${selectedSalePaymentMethod}</p>
+      <strong>${app.formatReceiptCurrency(getCartTotal())}</strong>
+      <small>Confirm once to record the sale. Receipt delivery is selected after the completed sale.</small>
+      <div><button type="button" onclick="closeModal()">Keep editing</button><button id="confirmSaleButton" class="sale-complete-button" type="button" onclick="recordSale()">Confirm & complete</button></div>
+    </section>
+  `);
+}
+
 async function recordSale() {
   ensureStockState();
 
@@ -322,13 +447,12 @@ async function recordSale() {
 
   try {
     setSaleProcessing(true);
+    document.getElementById("confirmSaleButton")?.setAttribute("disabled", "disabled");
     const sale = await createSale(saleCart);
 
-    window.app.saveState();
+    app.saveState();
     saleCart = [];
-
-    window.app.saveState();
-    saleCart = [];
+    app.closeModal();
 
     const printerType = getSelectedPrinterType();
 
@@ -351,8 +475,23 @@ function getSelectedPrinterType() {
   return localStorage.getItem("receiptPrinterType") || "browser";
 }
 
-window.renderSales = renderSales;
-window.updateSalePreview = updateSalePreview;
-window.addSaleCartItem = addSaleCartItem;
-window.removeSaleCartItem = removeSaleCartItem;
-window.recordSale = recordSale;
+const globalWindow = /** @type {any} */ (window);
+globalWindow.renderSales = renderSales;
+globalWindow.updateSalePreview = updateSalePreview;
+globalWindow.addSaleCartItem = addSaleCartItem;
+globalWindow.removeSaleCartItem = removeSaleCartItem;
+globalWindow.adjustSaleCartItem = adjustSaleCartItem;
+globalWindow.selectSaleProduct = selectSaleProduct;
+globalWindow.filterSaleProducts = filterSaleProducts;
+globalWindow.setSalePaymentMethod = setSalePaymentMethod;
+globalWindow.confirmSale = confirmSale;
+globalWindow.recordSale = recordSale;
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}

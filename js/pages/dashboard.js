@@ -104,6 +104,7 @@ function renderDashboard() {
   renderPage(`
     <div class="jyaano-dashboard">
       <section class="jyaano-welcome-banner">
+        <img class="jyaano-dashboard-mobile-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano">
         <div>
           <p class="jyaano-eyebrow">Business overview</p>
           <h2>Good ${getTimeGreeting(now)},<br>${escapeHtml(userName)}!</h2>

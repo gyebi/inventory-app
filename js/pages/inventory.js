@@ -1,6 +1,5 @@
 const {
   ensureStockState,
-  getBatchesByProductId,
   getExpiredBatches,
   getExpiredStockQuantity,
   getSellableBatches,
@@ -48,7 +47,7 @@ function renderInventory() {
       <h2>📦 Inventory</h2>
       <p>Use the physical stock breakdown for counting and reconciliation.</p>
     </div>
-    <div class="inventory-toolbar">
+    <div class="inventory-toolbar inventory-toolbar-mobile">
       <input
         id="inventorySearch"
         class="inventory-search-input"
@@ -57,6 +56,7 @@ function renderInventory() {
         value="${escapeHtml(inventorySearchQuery)}"
         oninput="updateInventorySearch(this.value)"
       >
+      <div class="inventory-toolbar-actions"><button type="button" onclick="navigate('receiveStock')">Receive stock</button><button type="button" onclick="navigate('addProduct')">Add product</button></div>
     </div>
   `;
 
@@ -70,10 +70,10 @@ function renderInventory() {
     return;
   }
 
-  html += `<div class="inventory-list">`;
+  const lowStockCount = filteredProducts.filter((product) => Number(product.quantity || 0) <= Number(product.lowStockThreshold ?? state.settings?.lowStockThreshold ?? 0)).length;
+  html += `<div class="inventory-mobile-summary"><span>${filteredProducts.length} product${filteredProducts.length === 1 ? "" : "s"}</span><span class="${lowStockCount ? "is-alert" : ""}">${lowStockCount} low stock</span></div><div class="inventory-list">`;
 
   filteredProducts.forEach((p) => {
-    const productBatches = getBatchesByProductId(p.id);
     const activeBatches = getSellableBatches(p.id);
     const expiredBatches = getExpiredBatches(p.id);
     const physicalStock = getPhysicalStock(p);
@@ -82,25 +82,23 @@ function renderInventory() {
       .filter(Boolean)
       .sort((left, right) => left.getTime() - right.getTime())[0];
 
+    const lowStock = Number(p.quantity || 0) <= Number(p.lowStockThreshold ?? state.settings?.lowStockThreshold ?? 0);
     html += `
-      <div class="inventory-row">
-        <div><strong>${p.name}</strong></div>
-        <div><strong>Category:</strong> ${p.category}</div>
-        <div><strong>Physical Stock:</strong> ${formatProductStock(p)}</div>
-        <div><strong>Bulk Units:</strong> ${physicalStock.fullBulk} ${p.bulkUnit}(s)</div>
-        <div><strong>Loose Units:</strong> ${physicalStock.remainder} ${p.baseUnit}(s)</div>
-        <div><strong>Total Base Units:</strong> ${p.quantity} ${p.baseUnit}(s)</div>
-        <div><strong>Conversion:</strong> 1 ${p.bulkUnit} = ${physicalStock.unitsPerBulk} ${p.baseUnit}(s)</div>
-        <div><strong>Expired Stock:</strong> ${getExpiredStockQuantity(p.id)} ${p.baseUnit}(s)</div>
-        <div><strong>Tracked Batches:</strong> ${productBatches.length}</div>
-        <div><strong>Active Batches:</strong> ${activeBatches.length}</div>
-        <div><strong>Expired Batches:</strong> ${expiredBatches.length}</div>
-        <div><strong>Next Expiry:</strong> ${nextExpiry ? nextExpiry.toLocaleDateString() : "N/A"}</div>
-        <div><strong>Base Cost:</strong> ${formatOptionalCurrency(p.costPrice)}</div>
-        <div><strong>Base Selling:</strong> ${formatOptionalCurrency(p.sellingPrice)}</div>
-        <div><strong>Bulk Cost:</strong> ${formatOptionalCurrency(p.bulkCostPrice)}</div>
-        <div><strong>Bulk Selling:</strong> ${formatOptionalCurrency(p.bulkSellingPrice)}</div>
-      </div>
+      <article class="inventory-row inventory-product-card">
+        <div class="inventory-product-heading"><div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.category || "Uncategorized")}</small></div><span class="${lowStock ? "inventory-alert" : "inventory-ok"}">${lowStock ? "Low stock" : "In stock"}</span></div>
+        <div class="inventory-product-key-stats"><div><span>Available</span><b>${escapeHtml(formatProductStock(p))}</b></div><div><span>Base selling</span><b>${formatOptionalCurrency(p.sellingPrice)}</b></div></div>
+        <details class="inventory-details"><summary>Product details <span aria-hidden="true">⌄</span></summary><div class="inventory-details-grid">
+          <div><strong>Bulk units</strong><span>${physicalStock.fullBulk} ${escapeHtml(p.bulkUnit || "bulk unit")}(s)</span></div>
+          <div><strong>Loose units</strong><span>${physicalStock.remainder} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
+          <div><strong>Total base units</strong><span>${p.quantity} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
+          <div><strong>Conversion</strong><span>1 ${escapeHtml(p.bulkUnit || "bulk")} = ${physicalStock.unitsPerBulk} ${escapeHtml(p.baseUnit || "base")}(s)</span></div>
+          <div><strong>Expired stock</strong><span>${getExpiredStockQuantity(p.id)} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
+          <div><strong>Active / expired batches</strong><span>${activeBatches.length} / ${expiredBatches.length}</span></div>
+          <div><strong>Next expiry</strong><span>${nextExpiry ? nextExpiry.toLocaleDateString() : "N/A"}</span></div>
+          <div><strong>Base cost / selling</strong><span>${formatOptionalCurrency(p.costPrice)} / ${formatOptionalCurrency(p.sellingPrice)}</span></div>
+          <div><strong>Bulk cost / selling</strong><span>${formatOptionalCurrency(p.bulkCostPrice)} / ${formatOptionalCurrency(p.bulkSellingPrice)}</span></div>
+        </div></details>
+      </article>
     `;
   });
 
