@@ -1178,6 +1178,12 @@ p {
   position: relative;
 }
 
+.jyaano-dashboard-mobile-logo {
+  display: none;
+  height: auto;
+  max-width: 100%;
+}
+
 .jyaano-welcome-banner > div:first-child { position: relative; z-index: 2; }
 .jyaano-welcome-banner h2 { font-size: clamp(28px, 3.2vw, 42px); line-height: 0.98; margin: 2px 0 13px; }
 .jyaano-welcome-banner p { font-size: 16px; margin: 0; }
@@ -1898,6 +1904,7 @@ body.printing-mpt-receipt .mpt-footer {
   .jyaano-app-shell { display: block; margin: 0; min-height: 100dvh; width: 100%; }
   .jyaano-sidebar { display: none !important; }
   .jyaano-stage { min-height: 100dvh; padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .jyaano-dashboard-mobile-logo { display: block; margin: 0 0 12px; width: clamp(82px, 25vw, 108px); }
   .jyaano-topbar { min-height: 58px; padding: 8px 14px; position: sticky; top: 0; z-index: 10; }
   .jyaano-topbar::before { color: #00473c; content: "JYAANO"; font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-right: auto; }
   .jyaano-stage .page-section { padding: 14px; }
