@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jyaano Web Serial receipt test — non-production</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 45rem; }
+      button { font: inherit; margin: .25rem .25rem .25rem 0; padding: .45rem .7rem; }
+      #status { background: #f3f4f6; border-radius: .25rem; padding: .75rem; white-space: pre-wrap; }
+      .warning { color: #9a3412; }
+    </style>
+  </head>
+  <body>
+    <h1>Jyaano Web Serial receipt test</h1>
+    <p class="warning"><strong>Non-production physical test only.</strong> This page sends a fixed test receipt, never sales data. It is not linked into Jyaano and does not replace the Linux bridge.</p>
+    <p>Use Chrome on Windows, serve this page from HTTPS or <code>localhost</code>, pair the printer in Windows, load paper, then select the printer in the browser picker.</p>
+
+    <div>
+      <button id="connect">Connect printer</button>
+      <button id="print" disabled>Print fixed test receipt</button>
+      <button id="disconnect" disabled>Disconnect</button>
+    </div>
+    <p id="status">Checking browser support…</p>
+
+    <script>
+      "use strict";
+
+      let port = null;
+      const encoder = new TextEncoder();
+      const TEST_BAUD_RATE = 9600;
+      const status = document.querySelector("#status");
+      const connectButton = document.querySelector("#connect");
+      const printButton = document.querySelector("#print");
+      const disconnectButton = document.querySelector("#disconnect");
+
+      function showStatus(message) {
+        status.textContent = message;
+      }
+
+      function updateButtons() {
+        const connected = Boolean(port?.writable);
+        connectButton.disabled = connected;
+        printButton.disabled = !connected;
+        disconnectButton.disabled = !port;
+      }
+
+      async function closePort() {
+        if (!port) return;
+        const openPort = port;
+        port = null;
+        updateButtons();
+        try {
+          await openPort.close();
+        } catch (error) {
+          // Bluetooth range loss can close the port before this call.
+          showStatus(`Disconnected: ${error.message}`);
+        }
+      }
+
+      async function connect() {
+        if (!("serial" in navigator)) {
+          throw new Error("Web Serial is unavailable. Use Chrome on a supported desktop platform.");
+        }
+
+        // No filter: Chrome can list a paired standard Bluetooth Classic SPP/RFCOMM printer.
+        // requestPort runs directly from the Connect click handler, so Chrome shows
+        // its picker and the operator must explicitly authorize the port.
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: TEST_BAUD_RATE, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" });
+        const info = port.getInfo();
+        showStatus(`Connected. Bluetooth service: ${info.bluetoothServiceClassId || "not reported"}.`);
+        updateButtons();
+      }
+
+      async function printTestReceipt() {
+        if (!port?.writable) throw new Error("Connect a printer first.");
+
+        // ESC @ initializes ESC/POS state. Three line feeds provide paper advance;
+        // this PoC intentionally does not issue a cutter command.
+        const payload = new Uint8Array([
+          0x1b, 0x40,
+          ...encoder.encode("JYAANO WEB SERIAL TEST\n"),
+          ...encoder.encode("MPT-II / 58 mm candidate\n"),
+          ...encoder.encode("If this receipt is legible, record PASS.\n"),
+          ...encoder.encode("--------------------------------\n"),
+          ...encoder.encode("Test only - no sale recorded\n\n\n"),
+        ]);
+        const writer = port.writable.getWriter();
+        try {
+          await writer.write(payload);
+          showStatus("Bytes submitted. Confirm that this exact physical receipt emerged before recording a pass.");
+        } finally {
+          writer.releaseLock();
+        }
+      }
+
+      navigator.serial?.addEventListener("disconnect", (event) => {
+        if (event.target === port) {
+          port = null;
+          updateButtons();
+          showStatus("Printer disconnected. Restore power/range, then choose Connect printer; do not assume a retry printed.");
+        }
+      });
+
+      connectButton.addEventListener("click", () => {
+        // Keep this call synchronous with the trusted click. Do not call getPorts()
+        // or auto-connect: choosing a serial device always requires user action.
+        connect().catch((error) => showStatus(`Connection failed: ${error.message}`));
+      });
+      printButton.addEventListener("click", () => printTestReceipt().catch((error) => showStatus(`Print failed: ${error.message}`)));
+      disconnectButton.addEventListener("click", () => closePort().finally(() => { updateButtons(); showStatus("Disconnected."); }));
+
+      showStatus("Ready. Pair the printer in Windows first, then select Connect printer.");
+      updateButtons();
+    </script>
+  </body>
+</html>
