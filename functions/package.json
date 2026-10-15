@@ -6,8 +6,8 @@
     "node": "22"
   },
   "scripts": {
-    "lint": "node --check index.js && node --check runtime-config.js && node --check scripts/seed-local-emulators.mjs && node --check test/index.test.js && node --check test/runtime-config.test.js",
-    "test": "node test/index.test.js && node test/runtime-config.test.js",
+    "lint": "node --check index.js && node --check runtime-config.js && node --check services/secureSalesService.js && node --check scripts/seed-local-emulators.mjs && node --check test/index.test.js && node --check test/runtime-config.test.js && node --check test/secure-sales.test.js",
+    "test": "node test/index.test.js && node test/runtime-config.test.js && node test/secure-sales.test.js",
     "smoke": "node -e \"require('./index.js'); console.log('Functions module loaded without invoking Firebase APIs.')\"",
     "verify": "npm run lint && npm test && npm run smoke",
     "serve": "firebase emulators:start --only functions",

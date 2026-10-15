@@ -6,6 +6,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getAllowedOrigins } = require("./runtime-config");
+const { createSecureSalesService } = require("./services/secureSalesService");
 
 initializeApp();
 
@@ -14,6 +15,7 @@ const db = getFirestore();
 const ALLOWED_ROLES = new Set(["admin", "manager", "sales", "storekeeper"]);
 const ALLOWED_ORIGINS = getAllowedOrigins();
 const DEFAULT_PASSWORD_SETUP_URL = ALLOWED_ORIGINS[0];
+const secureSalesService = createSecureSalesService({ db, FieldValue, HttpsError });
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -386,4 +388,10 @@ exports.clearRequiredPasswordChange = onCall({ cors: ALLOWED_ORIGINS }, async (r
       mustChangePassword: false
     }
   };
+});
+
+// This callable is intentionally not connected to the current browser checkout.
+// It is deployed only after the product-price policy and Firestore-rule cutover are approved.
+exports.submitSecureSale = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  return secureSalesService.submitSecureSale(request);
 });
