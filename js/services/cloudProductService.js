@@ -2,6 +2,7 @@ import { db } from "../firebase.js";
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   runTransaction,
@@ -15,6 +16,21 @@ const productsCollection = collection(db, "products");
 const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
 const priceChangesCollection = collection(db, "priceChanges");
+const secureSalesSettingsRef = doc(db, "settings", "secureSales");
+
+export async function assertLegacyStockWriteAllowed() {
+  const snapshot = await getDoc(secureSalesSettingsRef);
+
+  if (snapshot.exists() && snapshot.data()?.enabled === true) {
+    throw createAppError(
+      "Secure inventory mode is enabled. This legacy stock-writing path is unavailable until the secure receiving and adjustment workflow is used.",
+      {
+        code: "secure-sales/legacy-stock-write-disabled",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      }
+    );
+  }
+}
 
 const toOptionalPositiveNumber = (value) => {
   const amount = Number(value);
@@ -44,6 +60,7 @@ const fromCloudProduct = (snapshot) => ({
 });
 
 export async function saveProductToCloud(product) {
+  await assertLegacyStockWriteAllowed();
   const productRef = doc(db, "products", product.id);
 
   try {
@@ -166,6 +183,7 @@ export async function receiveStockInCloudTransaction({
   quantityReceived,
   receipt
 }) {
+  await assertLegacyStockWriteAllowed();
   const productRef = doc(db, "products", productId);
   const receiptRef = doc(stockReceiptsCollection);
   const receivedQuantity = Number(quantityReceived || 0);
@@ -198,6 +216,7 @@ export async function receiveStockInCloudTransaction({
 }
 
 export async function receivePurchaseInCloudTransaction({ lines = [] }) {
+  await assertLegacyStockWriteAllowed();
   const batch = writeBatch(db);
   const savedLines = [];
 
@@ -242,6 +261,7 @@ export async function submitSaleToCloudTransaction({
   sale,
   stockDeductions
 }) {
+  await assertLegacyStockWriteAllowed();
   const saleRef = doc(db, "sales", sale.id);
   const deductionsByProduct = stockDeductions.reduce((map, deduction) => {
     map.set(

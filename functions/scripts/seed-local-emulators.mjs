@@ -120,6 +120,11 @@ async function seed() {
       bulkUnit: "Carton",
       unitsPerBulk: 12,
       quantity: 48,
+      sellableQuantity: 48,
+      inventorySchemaVersion: 2,
+      pricingStatus: "approved",
+      sellingPricePesewas: 600,
+      bulkSellingPricePesewas: 7200,
       lowStockThreshold: 10,
       costPrice: 4,
       bulkCostPrice: 48,
@@ -138,6 +143,40 @@ async function seed() {
       purchaseDate: seededAt,
       receivedAt: seededAt,
       createdAt: seededAt
+    }, { merge: true }),
+    db.collection("stockBatches").doc("demo-secure-batch-fefo").set({
+      schemaVersion: 2,
+      productId: "demo-water",
+      receiptId: "demo-receipt-001",
+      originalBaseQuantity: 24,
+      remainingBaseQuantity: 24,
+      costAllocatedBaseQuantity: 0,
+      totalLandedCostPesewas: 9600,
+      baseUnit: "Bottle",
+      bulkUnit: "Carton",
+      unitsPerBulk: 12,
+      receivedAt: "2026-10-01T08:00:00.000Z",
+      expiryBusinessDate: "2099-01-01",
+      inventoryStatus: "active",
+      createdAt: seededAt,
+      updatedAt: seededAt
+    }, { merge: true }),
+    db.collection("stockBatches").doc("demo-secure-batch-fifo").set({
+      schemaVersion: 2,
+      productId: "demo-water",
+      receiptId: "demo-receipt-001",
+      originalBaseQuantity: 24,
+      remainingBaseQuantity: 24,
+      costAllocatedBaseQuantity: 0,
+      totalLandedCostPesewas: 9600,
+      baseUnit: "Bottle",
+      bulkUnit: "Carton",
+      unitsPerBulk: 12,
+      receivedAt: "2026-10-02T08:00:00.000Z",
+      expiryBusinessDate: "",
+      inventoryStatus: "active",
+      createdAt: seededAt,
+      updatedAt: seededAt
     }, { merge: true }),
     db.collection("sales").doc("demo-sale-001").set({
       items: [{ productId: "demo-water", productName: "Demo Mineral Water", quantity: 2, total: 12 }],
@@ -162,6 +201,12 @@ async function seed() {
       getfundRate: 2.5,
       withholdingVatRate: 7,
       taxMode: "standard"
+    }, { merge: true }),
+    db.collection("settings").doc("secureSales").set({
+      enabled: true,
+      schemaVersion: 2,
+      syntheticFixture: true,
+      updatedAt: seededAt
     }, { merge: true })
   ]);
 

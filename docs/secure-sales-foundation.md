@@ -1,100 +1,94 @@
-# Secure sales foundation (A1.2)
+# Batch-aware secure sales foundation
 
-## Status and scope
+## Status
 
-`submitSecureSale` is an additive callable Function foundation. It is not called by the existing browser checkout, has not been deployed, and does not change Firestore rules. Existing Linux RFCOMM, Windows bridge, Web Serial, browser/PDF printing, legacy sales, and receipt rendering are unchanged.
+This is an additive, server-controlled foundation. The existing browser checkout is
+not connected to it and production remains disabled unless
+`settings/secureSales.enabled == true`. An absent flag is disabled. No deployed
+environment or production document is changed by this branch.
 
-The command is intentionally unsafe to activate against the current production product data: it rejects products without a canonical product-level selling price. This is preferable to silently selecting a receipt/batch price from client-era records.
+## Authoritative model
 
-## Current-data finding and required decision
+- `stockBatches.remainingBaseQuantity` is authoritative.
+- `products.quantity` is an atomically maintained projection of every remaining
+  physical unit, including expired and quarantined batches.
+- `products.sellableQuantity` is the separate projection of active, unexpired,
+  valid-expiry-or-undated batches.
+- `stockMovements` are immutable sale allocation records. Existing receipts and
+  legacy sales are retained unchanged.
+- Secure sales require `inventorySchemaVersion: 2`,
+  `pricingStatus: "approved"`, and a positive integer
+  `sellingPricePesewas`. No receipt/batch price or zero value is inferred.
 
-Current production product records store aggregate `quantity`, unit metadata, and no canonical `sellingPrice` or `bulkSellingPrice`. Current prices live in `stockReceipts.unitSellingPrice` and are replayed in the browser with local batch state. The browser also rebuilds remaining batches from receipt history and legacy sale `items[].batchAllocations`.
+Product bulk pricing is optional. When absent, the server derives it from the
+approved base price and that product's positive safe-integer `unitsPerBulk`.
+All sale quantities are whole base units.
 
-There is no approved, server-authoritative answer to both of these questions:
+## Allocation and expiry
 
-1. Is the sale price a current product price, a selected batch price, or a manager-approved override?
-2. If batch price applies, which batches are consumed and how are adjustments, returns, and historic records reconciled?
+Business dates use `Africa/Accra`. A `YYYY-MM-DD` expiry is sellable through
+that local business date and is expired on the following date. Valid dated stock
+is allocated FEFO; undated stock follows FIFO. Both use `receivedAt`, then
+`batchId`, as deterministic tie-breakers. Malformed expiry data blocks the
+product until the batch is quarantined.
 
-Before activation, approve one policy:
+The callable reads at most 20 products and 10 batches per product. A product with
+more than 10 batches is rejected with `resource-exhausted` rather than receiving
+a partial or nondeterministic allocation. The maximum transaction write count is
+bounded below Firestore's 500-write limit.
 
-- **Product aggregate policy:** persist canonical product `sellingPrice` and optional `bulkSellingPrice`; inventory remains aggregate-only. This requires a compatible replacement for the current browser batch reconstruction.
-- **Batch policy:** introduce an authoritative batch/movement model and server-side FEFO/allocation rules before a secure sale can commit.
+## Money and snapshots
 
-This phase implements only the first policy as a strict testable contract. It never falls back to `stockReceipts` pricing and it does not write `batchAllocations`.
+All secure monetary values are integer pesewas. A batch stores
+`totalLandedCostPesewas`; allocation uses cumulative integer division:
 
-## Callable contract
+`floor(totalCost * consumedAfter / originalQuantity) - floor(totalCost * consumedBefore / originalQuantity)`
 
-Callable name: `submitSecureSale`
+This preserves an exact batch total for fractional per-unit costs without
+floating-point rounding. Secure sale documents snapshot product name, pricing,
+tax, conversion, batch allocation, expiry, and allocated cost. They also retain
+legacy-compatible GHS fields (`items[].unitPrice`, `items[].total`,
+`subtotalAmount`, `totalAmount`, and `taxBreakdown`) for reporting/receipt
+read compatibility.
 
-Request:
+## Rules and legacy paths
 
-```json
-{
-  "idempotencyKey": "sale-request-000001",
-  "items": [
-    { "productId": "water", "quantity": 2, "unit": "base" }
-  ],
-  "paymentMethod": "cash"
-}
-```
+When secure mode is disabled, existing client sales and receipt workflows retain
+their legacy permissions. When enabled, rules deny client writes to
+`stockBatches`, `stockMovements`, `saleRequests`, `sales`, product
+quantity projections, and `stockReceipts`. The browser's legacy sale, receipt,
+and adjustment services explicitly fail before writing when they observe the
+secure flag. There is deliberately no fallback to legacy checkout after a secure
+call failure.
 
-- `idempotencyKey`: 16–128 URL-safe characters. The client must generate and persist it before its first request and reuse it after a timeout or unknown result.
-- `items`: one to fifty distinct product IDs; `quantity` is a positive integer; `unit` is exactly `base` or `bulk`.
-- `paymentMethod` is optional because current checkout does not require it. If present it is one of `cash`, `mobile_money`, `card`, `credit`, or `other`.
-- Client prices, totals, tax, staff data, stock quantities, discounts, and arbitrary request fields are rejected.
+Secure receiving, returns, and adjustments require their own server transaction
+before secure mode can be used operationally. They are intentionally blocked now
+instead of diverging from batch authority.
 
-Successful response:
+## Rehearsal and reconciliation
 
-```json
-{
-  "saleId": "SEC-...",
-  "committed": true,
-  "committedAt": "2026-10-15T00:00:00.000Z",
-  "currency": "GHS",
-  "paymentMethod": "cash",
-  "createdBy": { "uid": "...", "fullName": "...", "role": "sales" },
-  "items": [{ "productId": "water", "baseQuantity": 2, "unitPricePesewas": 600 }],
-  "subtotalPesewas": 1200,
-  "taxBreakdown": { "taxAmountPesewas": 240, "totalAmountPesewas": 1440 },
-  "totalAmountPesewas": 1440
-}
-```
+`npm --prefix functions run seed:secure-rehearsal` creates only named synthetic
+fixtures and accepts only `demo-jyaano` (with an emulator) or `jyaano-staging`
+with `JYAANO_ALLOW_SYNTHETIC_STAGING=true`. It rejects every other project,
+including production.
 
-The response is canonical committed receipt data. Physical-print status remains separate and is not claimed by this command.
+`npm --prefix functions run reconcile:secure` requires
+`JYAANO_RECONCILIATION_DRY_RUN=true`, writes nothing, and exits non-zero for
+unresolved pricing or aggregate/batch discrepancies. It is not a production
+migration tool.
 
-## Transaction and idempotency behavior
+`npm run emulators:secure-sales` runs callable and Firestore-rule integration
+coverage against the demo emulators. The batch lookup uses one equality filter on
+`stockBatches.productId`; Firestore's automatic single-field index is sufficient.
+No composite index is required.
 
-Within one Firestore transaction, the Function:
+## Cutover prerequisites
 
-1. Reads a deterministic `saleRequests/{sha256(uid + key)}` document.
-2. Returns the stored canonical response for an identical request; rejects reuse of the key with different content.
-3. Reads the caller profile, tax configuration, and affected products before writing.
-4. Requires an existing active `admin` or `sales` profile and derives attribution from that profile and Firebase UID.
-5. Validates aggregate stock, calculates GHS values in integer pesewas, and deducts product quantities.
-6. Writes the new `sales/SEC-...` record and idempotency record atomically.
-
-The transaction has no external side effects, so Firestore retries are safe. A client retry after a lost response reads the idempotency record and returns the original sale rather than applying another deduction.
-
-Tax policy is the existing `settings/tax` model, normalized on the server. VAT, NHIL, and GETFund are added to the total; withholding VAT is calculated and reported but is not added, matching current client behavior. A missing tax document uses the current application defaults.
-
-## Proposed additive data shape
-
-No production document has been created by this branch. When approved and invoked, the Function would add:
-
-- `saleRequests/{requestHash}`: caller UID, request fingerprint, deterministic sale ID, canonical response, and server timestamp.
-- `sales/SEC-{requestHashPrefix}`: `schemaVersion: 2`, pesewa monetary fields, server attribution, and `idempotencyKeyHash`.
-
-No Firestore index is required: transaction reads use direct document references only.
-
-Existing sales retain their legacy GHS-number fields and batch allocations. The current checkout and receipt pages do not yet understand the v2 pesewa schema, which is intentional because this branch does not switch checkout.
-
-## Future cutover requirements
-
-1. Approve and migrate the canonical pricing and batch policy.
-2. Add emulator tests for the approved batch/movement model and production-data migration rehearsal.
-3. Integrate checkout behind a controlled rollout flag; persist and reuse the idempotency key in a durable client draft.
-4. Update receipt rendering to consume canonical v2 data while retaining legacy rendering.
-5. Deploy Firestore rules with the cutover: clients must no longer create `sales`, mutate product quantities, or write the idempotency collection directly. The server Admin SDK remains the only writer for committed sales and inventory deductions.
-6. Add active-profile enforcement and least-privilege reads to rules as part of that separately approved security rollout.
-
-Do not deploy this Function or rules before those decisions and compatibility work are approved.
+1. Migrate and reconcile products/batches in staging, including quarantined data.
+2. Obtain manager approval for every canonical product price.
+3. Implement server-authoritative receiving, returns, and adjustments.
+4. Integrate the existing checkout behind a rollout flag with durable idempotency
+   drafts and no fallback on failure.
+5. Verify printers and legacy receipt rendering against secure-sale documents.
+6. Deploy rules and Functions only through an approved cutover; do not enable the
+   production flag beforehand.

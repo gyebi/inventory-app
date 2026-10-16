@@ -1,4 +1,5 @@
 import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
+import { assertLegacyStockWriteAllowed } from "../services/cloudProductService.js";
 
 const {
   ensureStockState,
@@ -141,10 +142,18 @@ function collectStockAdjustmentValues() {
   };
 }
 
-function recordStockAdjustment() {
+async function recordStockAdjustment() {
   ensureStockState();
 
   const values = collectStockAdjustmentValues();
+
+  try {
+    await assertLegacyStockWriteAllowed();
+  } catch (error) {
+    renderStockAdjustment(error?.message || "Secure inventory mode blocks legacy stock adjustments.", values);
+    return;
+  }
+
   const product = getSelectedProduct(values.productId);
   const quantityAffected = Number(values.quantityAffected);
 
