@@ -41,6 +41,7 @@ import {
   canAccessPageWithPermission,
   normalizeNavigationPage
 } from "./utils/hubNavigation.js";
+import { getCloudConnectionBadgeState } from "./utils/cloudConnectionStatus.js";
 
 
 const app = document.getElementById("app");
@@ -92,8 +93,13 @@ let cloudSyncPromise = null;
 let currentPage = DASHBOARD_PAGE;
 let cloudStatus = {
   connected: false,
+  isConnecting: true,
+  isReconnecting: false,
   message: "Connecting to Firestore",
-  lastUpdatedAt: null
+  lastUpdatedAt: null,
+  expectedListenerNames: [],
+  confirmedListenerNames: [],
+  failedListenerNames: []
 };
 let isPrintingModal = false;
 
@@ -182,18 +188,98 @@ function setCloudStatus(updates = {}) {
     ...updates
   };
   updateStatusBar();
+  updateDashboardConnectionBadge();
 }
 
-function markCloudUpdated(message = "Firestore connected") {
+function getDashboardConnectionBadgeState() {
+  return getCloudConnectionBadgeState({
+    online: navigator.onLine,
+    isConnecting: cloudStatus.isConnecting,
+    isReconnecting: cloudStatus.isReconnecting,
+    expectedListenerCount: cloudStatus.expectedListenerNames.length,
+    confirmedListenerCount: cloudStatus.confirmedListenerNames.length,
+    failedListenerCount: cloudStatus.failedListenerNames.length
+  });
+}
+
+function updateDashboardConnectionBadge() {
+  const badge = document.getElementById("dashboardConnectionBadge");
+
+  if (!badge) {
+    return;
+  }
+
+  const badgeState = getDashboardConnectionBadgeState();
+  const label = badge.querySelector(".jyaano-connection-badge-label");
+  const hasChanged = badge.dataset.connectionState !== badgeState.id;
+
+  badge.className = `jyaano-connection-badge is-${badgeState.id}`;
+  badge.dataset.connectionState = badgeState.id;
+
+  if (hasChanged) {
+    badge.setAttribute("aria-label", badgeState.description);
+    label.textContent = badgeState.label;
+  }
+}
+
+function startCloudListenerTracking(listenerNames) {
   setCloudStatus({
-    connected: true,
+    connected: false,
+    isConnecting: true,
+    isReconnecting: cloudStatus.isReconnecting,
+    message: "Connecting to Firestore",
+    expectedListenerNames: listenerNames,
+    confirmedListenerNames: [],
+    failedListenerNames: []
+  });
+}
+
+function setCloudIdleStatus(message) {
+  setCloudStatus({
+    connected: false,
+    isConnecting: false,
+    isReconnecting: false,
     message,
-    lastUpdatedAt: new Date().toISOString()
+    expectedListenerNames: [],
+    confirmedListenerNames: [],
+    failedListenerNames: []
+  });
+}
+
+function markCloudUpdated(message, { listenerName, fromCache }) {
+  const confirmedListenerNames = new Set(cloudStatus.confirmedListenerNames);
+
+  if (fromCache) {
+    // A cached snapshot can be delivered after an earlier server snapshot, so it
+    // cannot retain an old Live indication.
+    confirmedListenerNames.delete(listenerName);
+  } else {
+    confirmedListenerNames.add(listenerName);
+  }
+
+  const expectedListenerNames = cloudStatus.expectedListenerNames;
+  const connected = expectedListenerNames.length > 0 && expectedListenerNames.every((name) => confirmedListenerNames.has(name));
+
+  setCloudStatus({
+    connected,
+    isConnecting: false,
+    isReconnecting: false,
+    message,
+    lastUpdatedAt: new Date().toISOString(),
+    confirmedListenerNames: [...confirmedListenerNames]
   });
 }
 
 function handleCloudListenerError(label, error) {
-  setCloudStatus({ connected: false, message: `${label} sync needs attention` });
+  const failedListenerNames = new Set(cloudStatus.failedListenerNames);
+  failedListenerNames.add(label);
+  setCloudStatus({
+    connected: false,
+    isConnecting: false,
+    isReconnecting: false,
+    message: `${label} sync needs attention`,
+    failedListenerNames: [...failedListenerNames]
+  });
   logAppError(`${label} listener failed`, error);
 }
 
@@ -205,7 +291,6 @@ function replaceProducts(products = []) {
   const changed = Array.isArray(state.stock) && state.stock.length > 0
     ? syncProductSellingPricesFromStock()
     : false;
-  markCloudUpdated("Products synced");
   if (changed) {
     saveState();
     return;
@@ -260,7 +345,6 @@ function replaceUsers(users = []) {
     }
   }
 
-  markCloudUpdated("Users synced");
   saveState();
 }
 
@@ -499,14 +583,12 @@ function syncProductSellingPricesFromStock() {
 function replaceStockReceipts(receipts = []) {
   state.stockReceipts = receipts;
   rebuildStockFromCloudReceipts();
-  markCloudUpdated("Stock synced");
   saveState();
 }
 
 function replacePriceChanges(priceChanges = []) {
   state.priceChanges = Array.isArray(priceChanges) ? priceChanges : [];
   const changed = applyPriceChangeHistoryToStock() || syncProductSellingPricesFromStock();
-  markCloudUpdated("Price changes synced");
   if (changed) {
     saveState();
     return;
@@ -517,7 +599,6 @@ function replacePriceChanges(priceChanges = []) {
 function replaceSales(sales = []) {
   state.sales = sales;
   rebuildStockFromCloudReceipts();
-  markCloudUpdated("Sales synced");
   saveState();
 }
 
@@ -539,13 +620,11 @@ function replaceSuppliers(suppliers = []) {
   state.suppliers = suppliers
     .filter((supplier) => supplier.name)
     .map(normalizeSupplier);
-  markCloudUpdated("Suppliers synced");
   saveState();
 }
 
 function replaceSupplierPayments(payments = []) {
   state.supplierPayments = Array.isArray(payments) ? payments : [];
-  markCloudUpdated("Supplier payments synced");
   saveState();
 }
 
@@ -587,6 +666,16 @@ function stopCloudListeners() {
 }
 
 async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
+  const listenerNames = [
+    "Product",
+    "Price change",
+    "Stock receipt",
+    "Sales",
+    ...(canSyncAllUsers() ? ["User"] : []),
+    "Supplier",
+    "Supplier payment"
+  ];
+  startCloudListenerTracking(listenerNames);
   await migrateLocalProductsToCloudOnce();
   await migrateLocalSuppliersToCloudOnce();
 
@@ -621,8 +710,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   stopCloudListeners();
 
   stopProductsListener = listenToProducts(
-    (products) => {
+    (products, metadata) => {
       replaceProducts(products);
+      markCloudUpdated("Products synced", { listenerName: "Product", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Product", error);
@@ -630,8 +720,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   );
 
   stopPriceChangesListener = listenToPriceChanges(
-    (priceChanges) => {
+    (priceChanges, metadata) => {
       replacePriceChanges(priceChanges);
+      markCloudUpdated("Price changes synced", { listenerName: "Price change", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Price change", error);
@@ -639,8 +730,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   );
 
   stopStockReceiptsListener = listenToStockReceipts(
-    (receipts) => {
+    (receipts, metadata) => {
       replaceStockReceipts(receipts);
+      markCloudUpdated("Stock synced", { listenerName: "Stock receipt", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Stock receipt", error);
@@ -648,8 +740,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   );
 
   stopSalesListener = listenToSales(
-    (sales) => {
+    (sales, metadata) => {
       replaceSales(sales);
+      markCloudUpdated("Sales synced", { listenerName: "Sales", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Sales", error);
@@ -658,8 +751,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
 
   if (syncUsers) {
     stopUsersListener = listenToUsers(
-      (users) => {
+      (users, metadata) => {
         replaceUsers(users);
+        markCloudUpdated("Users synced", { listenerName: "User", fromCache: metadata.fromCache });
       },
       (error) => {
         handleCloudListenerError("User", error);
@@ -668,8 +762,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   }
 
   stopSuppliersListener = listenToSuppliers(
-    (suppliers) => {
+    (suppliers, metadata) => {
       replaceSuppliers(suppliers);
+      markCloudUpdated("Suppliers synced", { listenerName: "Supplier", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Supplier", error);
@@ -677,8 +772,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   );
 
   stopSupplierPaymentsListener = listenToSupplierPayments(
-    (payments) => {
+    (payments, metadata) => {
       replaceSupplierPayments(payments);
+      markCloudUpdated("Supplier payments synced", { listenerName: "Supplier payment", fromCache: metadata.fromCache });
     },
     (error) => {
       handleCloudListenerError("Supplier payment", error);
@@ -693,18 +789,24 @@ function isReadyForProtectedCloudSync() {
 async function ensureAuthenticatedCloudSync() {
   if (!isReadyForProtectedCloudSync()) {
     stopCloudListeners();
-    setCloudStatus({ connected: false, message: "Sign in to sync data" });
+    setCloudIdleStatus("Sign in to sync data");
     return false;
   }
 
   if (!cloudSyncPromise) {
     cloudSyncPromise = (async () => {
       try {
-        setCloudStatus({ connected: false, message: "Connecting to Firestore" });
+        setCloudStatus({ connected: false, isConnecting: true, isReconnecting: cloudStatus.isReconnecting, message: "Connecting to Firestore" });
         await startCloudProductSync();
         return true;
       } catch (error) {
-        setCloudStatus({ connected: false, message: "Cloud sync needs attention" });
+        setCloudStatus({
+          connected: false,
+          isConnecting: false,
+          isReconnecting: false,
+          message: "Cloud sync needs attention",
+          failedListenerNames: ["Cloud sync"]
+        });
         logAppError("Cloud startup sync failed", error);
         return false;
       } finally {
@@ -721,10 +823,26 @@ async function waitForInitialCloudSync() {
     return false;
   }
 
+  let initialSyncFinished = false;
+  const initialSync = ensureAuthenticatedCloudSync().finally(() => {
+    initialSyncFinished = true;
+  });
+
   return Promise.race([
-    ensureAuthenticatedCloudSync(),
+    initialSync,
     wait(INITIAL_SYNC_WAIT_MS).then(() => {
-      setCloudStatus({ connected: false, message: "Ready" });
+      if (initialSyncFinished) {
+        return true;
+      }
+
+      // Keep listener tracking intact: the startup request can still receive
+      // a server-confirmed snapshot after the shell becomes available.
+      setCloudStatus({
+        connected: false,
+        isConnecting: false,
+        isReconnecting: false,
+        message: "Syncing in background"
+      });
       return false;
     })
   ]);
@@ -1025,7 +1143,7 @@ async function logout() {
   state.user = null;
   state.sessionUser = null;
   saveState();
-  setCloudStatus({ connected: false, message: "Sign in to sync data" });
+  setCloudIdleStatus("Sign in to sync data");
   renderLogin();
 }
 
@@ -1135,7 +1253,7 @@ function renderDashboardShell() {
       </aside>
       <section class="jyaano-stage">
         <header class="jyaano-topbar">
-          ${currentPage === DASHBOARD_PAGE ? '<p><span class="jyaano-live-dot"></span>Live business overview</p>' : ""}
+          ${currentPage === DASHBOARD_PAGE ? '<span id="dashboardConnectionBadge" class="jyaano-connection-badge" role="status" aria-live="polite" aria-atomic="true"><span class="jyaano-connection-badge-dot" aria-hidden="true"></span><span class="jyaano-connection-badge-label"></span></span>' : ""}
           <div class="jyaano-user"><span>${initial}</span><div><strong>${escapeShellHtml(displayName)}</strong><small>${escapeShellHtml(state.user?.role || "Staff")}</small></div><button type="button" onclick="navigate('dashboard')" aria-label="Go to Dashboard">⌂</button></div>
         </header>
         <main id="page"></main>
@@ -1153,6 +1271,7 @@ function renderDashboardShell() {
       </div>
     </div>
   `;
+  updateDashboardConnectionBadge();
 }
 
 function toggleMobileMore(forceOpen) {
@@ -1384,7 +1503,7 @@ function allocateStockFromBatches(productId, quantityNeeded) {
 
 async function refreshFromCloud() {
   if (!isReadyForProtectedCloudSync()) {
-    setCloudStatus({ connected: false, message: "Sign in to refresh data" });
+    setCloudIdleStatus("Sign in to refresh data");
     navigate("login");
     return false;
   }
@@ -1392,13 +1511,18 @@ async function refreshFromCloud() {
   const pageToRefresh = currentPage;
 
   try {
-    setCloudStatus({ connected: false, message: "Refreshing from Firestore" });
+    setCloudStatus({ connected: false, isConnecting: true, isReconnecting: false, message: "Refreshing from Firestore" });
     await startCloudProductSync({ forceReplaceProducts: true });
-    markCloudUpdated("Cloud data refreshed");
     navigate(pageToRefresh);
     return true;
   } catch (error) {
-    setCloudStatus({ connected: false, message: "Cloud refresh needs attention" });
+    setCloudStatus({
+      connected: false,
+      isConnecting: false,
+      isReconnecting: false,
+      message: "Cloud refresh needs attention",
+      failedListenerNames: ["Cloud refresh"]
+    });
     logAppError("Cloud refresh failed", error);
     alert(toUserMessage(error, "Unable to refresh from Firebase right now. Please check your connection and try again."));
     return false;
@@ -1532,7 +1656,7 @@ observeAuthState(async (firebaseUser) => {
         state.sessionUser = null;
         saveState();
       }
-      setCloudStatus({ connected: false, message: "Sign in to sync data" });
+      setCloudIdleStatus("Sign in to sync data");
       authReadyResolver?.();
       authReadyResolver = null;
       return;
@@ -1546,7 +1670,7 @@ observeAuthState(async (firebaseUser) => {
     state.user = null;
     state.sessionUser = null;
     saveState();
-    setCloudStatus({ connected: false, message: "Sign in to sync data" });
+    setCloudIdleStatus("Sign in to sync data");
   } finally {
     authReadyResolver?.();
     authReadyResolver = null;
@@ -1562,20 +1686,27 @@ async function bootApp() {
   if (isLoggedIn()) {
     await waitForInitialCloudSync();
   } else {
-    setCloudStatus({ connected: false, message: "Ready" });
+    setCloudIdleStatus("Ready");
   }
 
   renderCurrentEntryPage();
 }
 
 window.addEventListener("online", () => {
-  setCloudStatus({ connected: false, message: "Reconnecting to Firestore" });
+  setCloudStatus({
+    connected: false,
+    isConnecting: true,
+    isReconnecting: true,
+    message: "Reconnecting to Firestore",
+    confirmedListenerNames: [],
+    failedListenerNames: []
+  });
   void retryPendingSalesSync();
   void ensureAuthenticatedCloudSync();
 });
 
 window.addEventListener("offline", () => {
-  setCloudStatus({ connected: false, message: "Offline mode" });
+  setCloudStatus({ connected: false, isConnecting: false, isReconnecting: false, message: "Offline mode" });
 });
 
 const salesSyncIntervalMs = Math.max(state.settings?.salesSyncIntervalMs || 30000, 5000);
