@@ -137,6 +137,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Secure receiving writes these only through receiveSecureStock.
+    match /receiveRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
     match /settings/{settingId} {
       allow read: if signedIn();
       allow create, update, delete: if canManageSettings();

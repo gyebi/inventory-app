@@ -1,8 +1,8 @@
 # Secure-sales staging rehearsal
 
-This is a staging-only checkout rehearsal for `jyaano-staging`. It does not
-authorize a production rollout, production data copy, or a receiving/adjustment
-cutover.
+This is a staging-only secure checkout and receiving rehearsal for
+`jyaano-staging`. It does not authorize a production rollout, production data
+copy, or an adjustment/returns cutover.
 
 ## Preconditions
 
@@ -42,7 +42,8 @@ npm --prefix functions run verify
 npm run emulators:check
 npm run emulators:secure-sales
 
-# Deploy the callable implementation first. This includes quoteSecureSale and submitSecureSale.
+# Deploy the callable implementation first. This includes quoteSecureSale,
+# submitSecureSale, and receiveSecureStock.
 npm run deploy:staging:functions
 
 # Deploy the secure-mode denial rules and the checked-in index definition together.
@@ -90,17 +91,21 @@ npm --prefix functions run reconcile:secure
 ```
 
 Sign in as the synthetic sales user and verify the server quote, tax breakdown,
-stale-quote renewal, idempotent retry, and immutable receipt unit label. Do not
-copy production users, inventory, sales, suppliers, receipts, or Auth records.
+stale-quote renewal, idempotent retry, and immutable receipt unit label. Sign in
+as the synthetic storekeeper to verify secure receiving, its idempotent retry,
+server-confirmed stock, and a follow-up sale from the received batch. Do not copy
+production users, inventory, sales, suppliers, receipts, or Auth records.
 
 ## Explicit operational limits
 
 With secure sales enabled, legacy client receiving, stock adjustment, product
-stock mutation, and stock-receipt writes are intentionally denied. Returns are
-also not implemented as server-authoritative batch transactions. This rehearsal
-therefore proves checkout only; it is not a complete operational inventory
-rollout. Disable staging secure sales before using any of those legacy workflows,
-or wait for server-authoritative receiving, returns, and adjustments.
+stock mutation, and stock-receipt writes are intentionally denied. Receiving is
+available only through `receiveSecureStock`; it does not update approved selling
+prices. Returns and stock adjustments are still not implemented as
+server-authoritative batch transactions. This rehearsal therefore proves secure
+checkout and receiving, not a complete operational inventory rollout. Disable
+staging secure sales before using those legacy workflows, or wait for
+server-authoritative returns and adjustments.
 
 ## Linux printer rehearsal
 
