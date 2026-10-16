@@ -390,8 +390,10 @@ exports.clearRequiredPasswordChange = onCall({ cors: ALLOWED_ORIGINS }, async (r
   };
 });
 
-// This callable is intentionally not connected to the current browser checkout.
-// It is deployed only after the product-price policy and Firestore-rule cutover are approved.
+exports.quoteSecureSale = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  return secureSalesService.quoteSecureSale(request);
+});
+
 exports.submitSecureSale = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
   return secureSalesService.submitSecureSale(request);
 });

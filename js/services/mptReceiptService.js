@@ -92,7 +92,7 @@ function renderReceiptItems(items = []) {
       <div class="mpt-row">
         <span>
           ${Number(item.quantity || 0)}
-          ${escapeHtml(item.unit || "")}
+          ${escapeHtml(item.unitLabel || item.unit || "")}
           x ${formatReceiptCurrency(item.unitPrice)}
         </span>
 
@@ -124,7 +124,7 @@ async function sendReceiptToMptPrinter(sale) {
     items: (sale.items || []).map((item) => ({
       name: item.name || "Item",
       quantity: Number(item.quantity || 0),
-      unit: item.unit || "",
+      unit: item.unitLabel || item.unit || "",
       unitPrice: Number(item.unitPrice || 0),
       total: Number(item.total || 0),
     })),

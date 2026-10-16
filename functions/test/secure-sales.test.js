@@ -76,7 +76,7 @@ function seed(overrides = {}) {
     "settings/secureSales": { enabled: true },
     "settings/tax": { enabled: true, vatRate: 15, nhilRate: 2.5, getfundRate: 2.5, withholdingVatRate: 7, taxMode: "standard", effectiveDate: "2026-10-01" },
     "users/sales-user": { uid: "sales-user", role: "sales", active: true, fullName: "Sales User", username: "sales.user" },
-    "products/water": { name: "Water", active: true, inventorySchemaVersion: 2, pricingStatus: "approved", sellingPricePesewas: 600, bulkSellingPricePesewas: 6000, unitsPerBulk: 10, quantity: 10, sellableQuantity: 10 },
+    "products/water": { name: "Water", active: true, baseUnit: "Bottle", bulkUnit: "Carton", inventorySchemaVersion: 2, pricingStatus: "approved", sellingPricePesewas: 600, bulkSellingPricePesewas: 6000, unitsPerBulk: 10, quantity: 10, sellableQuantity: 10 },
     "stockBatches/batch-a": batch("batch-a"),
     ...overrides
   };
@@ -86,9 +86,14 @@ function service(overrides = {}) {
   return { db, service: createSecureSalesService({ db, FieldValue, HttpsError: FakeHttpsError, now: fixedNow }) };
 }
 function request(overrides = {}) {
-  return { auth: { uid: "sales-user" }, data: { idempotencyKey: "sale-request-000001", items: [{ productId: "water", quantity: 2, unit: "base" }], paymentMethod: "cash", ...overrides } };
+  return { auth: { uid: "sales-user" }, data: { idempotencyKey: "sale-request-000001", items: [{ productId: "water", quantity: 2, unit: "base" }], paymentMethod: "cash", expectedQuoteFingerprint: "a".repeat(64), ...overrides } };
 }
 async function reject(action, code) { await assert.rejects(action, (error) => error instanceof FakeHttpsError && error.code === code); }
+async function submitQuoted(secureSales, input = request()) {
+  const { idempotencyKey, expectedQuoteFingerprint, ...quoteData } = input.data;
+  const quote = await secureSales.quoteSecureSale({ auth: input.auth, data: quoteData });
+  return secureSales.submitSecureSale({ auth: input.auth, data: { ...input.data, expectedQuoteFingerprint: quote.quoteFingerprint } });
+}
 
 test("commits immutable server-priced sale, FEFO allocations, movements, and exact fractional batch cost", async () => {
   const { db, service: secureSales } = service({
@@ -98,7 +103,7 @@ test("commits immutable server-priced sale, FEFO allocations, movements, and exa
     "stockBatches/batch-a": undefined
   });
   db.documents.delete("stockBatches/batch-a");
-  const result = await secureSales.submitSecureSale(request({ items: [{ productId: "water", quantity: 7, unit: "base" }] }));
+  const result = await submitQuoted(secureSales, request({ items: [{ productId: "water", quantity: 7, unit: "base" }] }));
   assert.equal(result.items[0].unitPricePesewas, 600);
   assert.equal(result.items[0].lineTotalPesewas, 4200);
   assert.deepEqual(result.items[0].batchAllocations.map((entry) => [entry.batchId, entry.baseQuantity]), [["fefo", 6], ["fifo", 1]]);
@@ -114,11 +119,11 @@ test("commits immutable server-priced sale, FEFO allocations, movements, and exa
 
 test("idempotent retry returns the original result and conflicting payload is rejected", async () => {
   const { db, service: secureSales } = service();
-  const first = await secureSales.submitSecureSale(request());
-  const second = await secureSales.submitSecureSale(request());
+  const first = await submitQuoted(secureSales);
+  const second = await secureSales.submitSecureSale(request({ expectedQuoteFingerprint: first.quoteFingerprint }));
   assert.deepEqual(second, first);
   assert.equal(db.documents.get("products/water").quantity, 8);
-  await reject(() => secureSales.submitSecureSale(request({ items: [{ productId: "water", quantity: 1, unit: "base" }] })), "already-exists");
+  await reject(() => secureSales.submitSecureSale(request({ items: [{ productId: "water", quantity: 1, unit: "base" }], expectedQuoteFingerprint: first.quoteFingerprint })), "already-exists");
 });
 
 test("concurrent last-stock requests cannot oversell batches or aggregate quantity", async () => {
@@ -127,8 +132,8 @@ test("concurrent last-stock requests cannot oversell batches or aggregate quanti
     "stockBatches/batch-a": batch("batch-a", { originalBaseQuantity: 1, remainingBaseQuantity: 1, totalLandedCostPesewas: 125 })
   });
   const results = await Promise.allSettled([
-    secureSales.submitSecureSale(request({ idempotencyKey: "concurrent-last-stock-1", items: [{ productId: "water", quantity: 1, unit: "base" }] })),
-    secureSales.submitSecureSale(request({ idempotencyKey: "concurrent-last-stock-2", items: [{ productId: "water", quantity: 1, unit: "base" }] }))
+    submitQuoted(secureSales, request({ idempotencyKey: "concurrent-last-stock-1", items: [{ productId: "water", quantity: 1, unit: "base" }] })),
+    submitQuoted(secureSales, request({ idempotencyKey: "concurrent-last-stock-2", items: [{ productId: "water", quantity: 1, unit: "base" }] }))
   ]);
   assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);
   assert.equal(results.filter((item) => item.status === "rejected")[0].reason.code, "failed-precondition");
@@ -150,7 +155,7 @@ test("uses Accra expiry boundary, FIFO for undated stock, and blocks malformed e
     "stockBatches/batch-a": batch("batch-a", { originalBaseQuantity: 1, remainingBaseQuantity: 1, expiryBusinessDate: "2026-10-15" }),
     "stockBatches/on-date": batch("on-date", { originalBaseQuantity: 1, remainingBaseQuantity: 1, expiryBusinessDate: "2026-10-16" })
   });
-  await onExpiry.service.submitSecureSale(request({ items: [{ productId: "water", quantity: 1, unit: "base" }] }));
+  await submitQuoted(onExpiry.service, request({ items: [{ productId: "water", quantity: 1, unit: "base" }] }));
   assert.equal(onExpiry.db.documents.get("stockBatches/on-date").remainingBaseQuantity, 0);
   await reject(() => service({
     "products/water": { name: "Water", active: true, inventorySchemaVersion: 2, pricingStatus: "approved", sellingPricePesewas: 600, unitsPerBulk: 10, quantity: 10, sellableQuantity: 10 },
@@ -171,4 +176,29 @@ test("rejects invalid conversions, insufficient sellable stock, and leaves all d
   assert.equal(insufficient.db.documents.get("products/water").quantity, 10);
   assert.equal([...insufficient.db.documents.keys()].some((key) => key.startsWith("sales/")), false);
   assert.equal([...insufficient.db.documents.keys()].some((key) => key.startsWith("stockMovements/")), false);
+});
+
+test("returns a taxed server quote with immutable unit labels and rejects stale price or tax quotes before writing", async () => {
+  const { db, service: secureSales } = service();
+  const quote = await secureSales.quoteSecureSale({ auth: { uid: "sales-user" }, data: { items: [{ productId: "water", quantity: 1, unit: "bulk" }], paymentMethod: "cash" } });
+  assert.equal(quote.committed, false);
+  assert.equal(quote.items[0].unitLabel, "Carton");
+  assert.equal(quote.subtotalPesewas, 6000);
+  assert.equal(quote.taxBreakdown.vatAmountPesewas, 900);
+  assert.equal(quote.taxBreakdown.nhilAmountPesewas, 150);
+  assert.equal(quote.taxBreakdown.getfundAmountPesewas, 150);
+  assert.equal(quote.totalAmountPesewas, 7200);
+  db.documents.set("products/water", { ...db.documents.get("products/water"), bulkSellingPricePesewas: 6500 });
+  await reject(() => secureSales.submitSecureSale(request({ items: [{ productId: "water", quantity: 1, unit: "bulk" }], expectedQuoteFingerprint: quote.quoteFingerprint })), "failed-precondition");
+  assert.equal([...db.documents.keys()].some((key) => key.startsWith("sales/")), false);
+
+  const freshQuote = await secureSales.quoteSecureSale({ auth: { uid: "sales-user" }, data: { items: [{ productId: "water", quantity: 1, unit: "bulk" }], paymentMethod: "cash" } });
+  db.documents.set("settings/tax", { ...db.documents.get("settings/tax"), vatRate: 12.5 });
+  await reject(() => secureSales.submitSecureSale(request({ idempotencyKey: "sale-request-tax-0001", items: [{ productId: "water", quantity: 1, unit: "bulk" }], expectedQuoteFingerprint: freshQuote.quoteFingerprint })), "failed-precondition");
+  assert.equal([...db.documents.keys()].some((key) => key.startsWith("sales/")), false);
+
+  const postTaxQuote = await secureSales.quoteSecureSale({ auth: { uid: "sales-user" }, data: { items: [{ productId: "water", quantity: 1, unit: "bulk" }], paymentMethod: "cash" } });
+  db.documents.set("settings/tax", { ...db.documents.get("settings/tax"), withholdingVatRate: 9 });
+  await reject(() => secureSales.submitSecureSale(request({ idempotencyKey: "sale-request-withholding-0001", items: [{ productId: "water", quantity: 1, unit: "bulk" }], expectedQuoteFingerprint: postTaxQuote.quoteFingerprint })), "failed-precondition");
+  assert.equal([...db.documents.keys()].some((key) => key.startsWith("sales/")), false);
 });

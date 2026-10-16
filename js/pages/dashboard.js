@@ -51,7 +51,6 @@ function renderDashboard() {
   const activeProducts = products.filter(isActiveProduct).length;
   const todaySales = selectTodaySales(sales, now);
   const stockValuation = selectStockValuation(products);
-  const userName = getDashboardFirstName(state.user?.fullName || state.user?.username || state.user?.email);
   const canViewBusinessOverview = hasPermission("view_dashboard");
   const canManageStock = hasPermission("manage_stock");
   const canAddProducts = hasPermission("add_product");
@@ -107,7 +106,7 @@ function renderDashboard() {
         <img class="jyaano-dashboard-mobile-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano">
         <div>
           <p class="jyaano-eyebrow">Business overview</p>
-          <h2>Good ${getTimeGreeting(now)},<br>${escapeHtml(userName)}!</h2>
+          <h2>Good ${getTimeGreeting(now)}!</h2>
           <p>Here’s what’s happening in your business today.</p>
         </div>
         <div class="jyaano-banner-pattern" aria-hidden="true"></div>
@@ -193,16 +192,11 @@ function formatShortDate(value) {
   return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(value);
 }
 
-function getDashboardFirstName(value) {
-  const name = String(value || "there").trim();
-  return name.split(/\s+/)[0] || "there";
-}
-
 function getTimeGreeting(date) {
   const hour = date.getHours();
-  if (hour < 12) return "morning";
-  if (hour < 18) return "afternoon";
-  return "evening";
+  if (hour < 12) return "Morning";
+  if (hour < 18) return "Afternoon";
+  return "Evening";
 }
 
 function renderReportsPage() {

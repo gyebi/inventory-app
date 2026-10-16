@@ -107,6 +107,9 @@ test("Hosting deployment rejects environment and Firebase target mismatches", ()
     () => validateDeploymentRequest("production", "hosting", {}),
     /JYAANO_ALLOW_PRODUCTION_DEPLOY=yes/
   );
+  assert.doesNotThrow(() => validateDeploymentRequest("staging", "firestore", {
+    FIREBASE_STAGING_PROJECT_ID: "jyaano-staging"
+  }));
 });
 
 test("Firebase Hosting predeploy verifies the explicit artifact instead of rebuilding it", () => {
@@ -116,5 +119,6 @@ test("Firebase Hosting predeploy verifies the explicit artifact instead of rebui
   assert.deepEqual(firebaseConfig.hosting.predeploy, ["node scripts/verify-hosting-artifact.mjs"]);
   assert.doesNotMatch(firebaseConfig.hosting.predeploy.join(" "), /npm run build/);
   assert.match(packageJson.scripts["deploy:staging:hosting"], /npm run build:staging/);
+  assert.match(packageJson.scripts["deploy:staging:firestore"], /staging firestore/);
   assert.match(packageJson.scripts["deploy:hosting"], /npm run build:production/);
 });

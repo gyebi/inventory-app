@@ -46,7 +46,7 @@ function getTaxBreakdown(sale) {
 }
 
 function formatReceiptItemLine(item) {
-  return `${item.name} x${item.quantity} ${item.unit}`;
+  return `${item.name} x${item.quantity} ${item.unitLabel || item.unit}`;
 }
 
 export const generateReceiptText = (sale) => {
@@ -88,7 +88,7 @@ function getReceiptItemsMarkup(items = []) {
   return items.map((item) => `
     <tr>
       <td>${formatReceiptItemLine(item)}</td>
-      <td>${item.quantity} ${item.unit}</td>
+      <td>${item.quantity} ${item.unitLabel || item.unit}</td>
       <td>${formatReceiptCurrency(item.unitPrice)}</td>
       <td>${formatReceiptCurrency(item.total)}</td>
     </tr>

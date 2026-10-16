@@ -4,7 +4,9 @@
 
 `inventory-app-19d04` is the production Firebase project. Before this change, the repository had Firebase CLI scripts and live Hosting configuration, but no GitHub deployment workflow. CI runs on pushes and pull requests; it does not deploy Firebase. The controlled deployment workflow added here is manual (`workflow_dispatch`) and deploys Hosting only.
 
-The staging project proposal, `jyaano-staging`, is **not confirmed**. A read-only `gcloud projects describe jyaano-staging` lookup returned the Google Cloud ambiguous no-access-or-not-found response. Do not set it as an alias or deploy to it until a project administrator confirms availability and creates a separate Firebase project.
+`jyaano-staging` is an active, separate Firebase project with its own Hosting
+site and web app. It is not an alias for `inventory-app-19d04`. The full secure
+checkout rehearsal sequence is in `docs/staging-secure-sales-rehearsal.md`.
 
 ## Local development and verification
 
@@ -24,10 +26,10 @@ An organization/project administrator must first:
 3. Register a separate staging web app and Hosting site, then create `.env.staging` from `.env.staging.example` with only staging web configuration values.
 4. Set `FIREBASE_STAGING_PROJECT_ID` to the provisioned ID. `npm run build:staging` requires every value in `.env.staging` and refuses a production project ID or production domain/bucket fallback.
 5. Create a staging-only Functions environment file from `functions/.env.staging.example`. It must contain only staging Hosting origins. Do not add a staging origin to production's Functions allowlist.
-6. Deploy rules, Functions, and indexes to staging manually and only after reviewing their impact. The GitHub workflow does not do this automatically.
+6. Deploy rules, Functions, and indexes to staging manually and only after reviewing their impact. Use the guarded `npm run deploy:staging:functions` and `npm run deploy:staging:firestore` commands. The GitHub workflow does not do this automatically.
 7. Seed only synthetic users, products, suppliers, and sales. Never copy production customer, staff, sales, or inventory data into staging.
 
-The local printer bridge is loopback-only and checks `INVENTORY_ALLOWED_ORIGINS`. A staging desktop requires a separate local installation/configuration with its exact staging HTTPS origin passed to `printer-bridge/deployment/install-linux.sh --origin ...`; do not add the staging origin to the production machine’s allowlist.
+The local printer bridge is loopback-only and checks `INVENTORY_ALLOWED_ORIGINS`. A staging desktop requires a separate local installation/configuration with `https://jyaano-staging.web.app`; do not add that origin to the production machine’s allowlist or alter the Ghana production printer.
 
 ## Deployment controls
 

@@ -1,5 +1,6 @@
 import { renderReceiptPage } from "../services/receiptService.js";
-import { createSale } from "../services/salesService.js";
+import { createSale, getCheckoutConfirmation } from "../services/salesService.js";
+import { getUnresolvedSecureCheckout } from "../services/secureCheckoutService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 import { hasPermission } from "../services/authService.js";
 import { fetchPrinterBridgeStatus } from "../services/printerBridgeService.js";
@@ -13,6 +14,8 @@ let selectedProductId = "";
 let selectedSaleUnit = "bulk";
 let selectedSalePaymentMethod = "Cash";
 let posPrinterStatus = { checked: false, loading: false, ready: null, message: "" };
+let saleSubmissionInFlight = false;
+let pendingCheckoutQuote = null;
 
 function formatSaleStock(product) {
   return app.formatStock(product);
@@ -141,6 +144,23 @@ function renderCartItems() {
 
 function renderSales(error = "") {
   ensureStockState();
+  const unresolvedCheckout = getUnresolvedSecureCheckout();
+
+  // An uncertain callable response can still have committed. Restore its exact
+  // persisted request after a refresh so the cashier can only retry that key.
+  if (unresolvedCheckout && saleCart.length === 0) {
+    const payload = JSON.parse(unresolvedCheckout.payloadJson);
+    saleCart = payload.items.map((item) => {
+      const product = state.products.find((entry) => entry.id === item.productId);
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        saleUnit: item.unit,
+        unit: getProductUnitLabel(product, item.unit)
+      };
+    });
+    selectedSalePaymentMethod = ({ cash: "Cash", mobile_money: "MoMo", card: "Card" })[payload.paymentMethod] || "Cash";
+  }
 
   if (state.products.length === 0) {
     renderPage(`
@@ -199,6 +219,7 @@ function renderSales(error = "") {
     </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
+    ${unresolvedCheckout ? `<div class="message error">A secure checkout is awaiting confirmation. Its cart cannot be changed. Use “Review & complete sale” to retry the same server request.</div>` : ""}
 
     <div class="sale-panel sale-pos-layout">
       <div class="sale-summary">
@@ -232,7 +253,7 @@ function renderSales(error = "") {
           <input id="qty" class="number-field" type="number" inputmode="numeric" min="1" step="1" enterkeyhint="done">
         </div>
 
-        <button class="sale-add-button" type="button" onclick="addSaleCartItem()">Add to cart</button>
+        <button class="sale-add-button" type="button" onclick="addSaleCartItem()" ${unresolvedCheckout ? "disabled" : ""}>Add to cart</button>
       </div>
 
       <div class="sale-cart">
@@ -245,10 +266,10 @@ function renderSales(error = "") {
         </div>
         <div class="sale-payment-methods" role="group" aria-label="Payment method">
           <span>Payment method</span>
-          ${["Cash", "MoMo", "Card"].map((method) => `<button class="${selectedSalePaymentMethod === method ? "is-selected" : ""}" type="button" aria-pressed="${selectedSalePaymentMethod === method}" onclick="setSalePaymentMethod('${method}')">${method}</button>`).join("")}
+          ${["Cash", "MoMo", "Card"].map((method) => `<button class="${selectedSalePaymentMethod === method ? "is-selected" : ""}" type="button" aria-pressed="${selectedSalePaymentMethod === method}" onclick="setSalePaymentMethod('${method}')" ${unresolvedCheckout ? "disabled" : ""}>${method}</button>`).join("")}
         </div>
         <div class="sale-checkout-total"><span>Cart total</span><strong>${window.app.formatReceiptCurrency(getCartTotal())}</strong></div>
-        <button id="completeSaleButton" class="sale-complete-button" onclick="confirmSale()" ${saleCart.length ? "" : "disabled"}>Review & complete sale</button>
+        <button id="completeSaleButton" class="sale-complete-button" onclick="confirmSale()" ${saleCart.length ? "" : "disabled"}>${unresolvedCheckout ? "Retry secure checkout" : "Review & complete sale"}</button>
         <div class="sale-printer-status"><span class="${localPrinter && posPrinterStatus.ready === true ? "is-ready" : ""}">● ${printerMessage}</span>${canManagePrinter ? '<button type="button" onclick="navigate(\'printerSettings\')">Printer & reconnect</button>' : '<small>Printer settings are managed by authorized staff.</small>'}</div>
       </div>
     </div>
@@ -329,6 +350,7 @@ function updateSalePreview() {
 
 function addSaleCartItem() {
   ensureStockState();
+  if (getUnresolvedSecureCheckout()) return;
 
   const productId = document.getElementById("productIndex")?.value;
   const saleUnit = document.getElementById("saleUnit")?.value || "bulk";
@@ -377,11 +399,13 @@ function addSaleCartItem() {
 }
 
 function removeSaleCartItem(index) {
+  if (getUnresolvedSecureCheckout()) return;
   saleCart.splice(index, 1);
   renderSales();
 }
 
 function adjustSaleCartItem(index, change) {
+  if (getUnresolvedSecureCheckout()) return;
   const item = saleCart[index];
   const product = state.products.find((candidate) => candidate.id === item?.productId);
   if (!item || !product) return;
@@ -416,25 +440,51 @@ function filterSaleProducts(query = "") {
 }
 
 function setSalePaymentMethod(method) {
+  if (getUnresolvedSecureCheckout()) return;
   selectedSalePaymentMethod = method;
   renderSales();
 }
 
-function confirmSale() {
+async function confirmSale() {
   if (saleCart.length === 0) {
     renderSales("Add at least one product before completing the sale.");
     return;
   }
-  app.openModal(`
+  if (saleSubmissionInFlight) return;
+  try {
+    saleSubmissionInFlight = true;
+    setSaleProcessing(true);
+    const confirmation = /** @type {any} */ (await getCheckoutConfirmation(saleCart, selectedSalePaymentMethod));
+    pendingCheckoutQuote = confirmation.secure ? confirmation : null;
+    const tax = confirmation.sale?.taxBreakdown;
+    const authoritativeTotals = confirmation.secure ? `
+      <div class="sale-confirmation-totals">
+        <span>Server subtotal <b>${app.formatReceiptCurrency(confirmation.sale.subtotalAmount)}</b></span>
+        <span>NHIL (${Number(tax.nhilRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.nhilAmount)}</b></span>
+        <span>GETFund (${Number(tax.getfundRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.getfundAmount)}</b></span>
+        <span>VAT (${Number(tax.vatRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.vatAmount)}</b></span>
+        <strong>Final payable total <b>${app.formatReceiptCurrency(confirmation.sale.totalAmount)}</b></strong>
+      </div>
+      <small>These server-authoritative prices and taxes are what will be charged. If they change, you must review and confirm again.</small>
+    ` : `<strong>${app.formatReceiptCurrency(getCartTotal())}</strong>`;
+    app.openModal(`
     <section class="sale-confirmation">
       <p class="jyaano-eyebrow">Checkout confirmation</p>
       <h3>Complete this sale?</h3>
       <p>${saleCart.length} line item${saleCart.length === 1 ? "" : "s"} · ${selectedSalePaymentMethod}</p>
-      <strong>${app.formatReceiptCurrency(getCartTotal())}</strong>
+      ${authoritativeTotals}
       <small>Confirm once to record the sale. Receipt delivery is selected after the completed sale.</small>
       <div><button type="button" onclick="closeModal()">Keep editing</button><button id="confirmSaleButton" class="sale-complete-button" type="button" onclick="recordSale()">Confirm & complete</button></div>
     </section>
   `);
+  } catch (error) {
+    pendingCheckoutQuote = null;
+    logAppError("Checkout quote failed", error);
+    renderSales(toUserMessage(error, "Unable to prepare the secure checkout. Reconnect and try again."));
+  } finally {
+    saleSubmissionInFlight = false;
+    setSaleProcessing(false);
+  }
 }
 
 async function recordSale() {
@@ -445,13 +495,17 @@ async function recordSale() {
     return;
   }
 
+  if (saleSubmissionInFlight) return;
   try {
+    saleSubmissionInFlight = true;
     setSaleProcessing(true);
     document.getElementById("confirmSaleButton")?.setAttribute("disabled", "disabled");
-    const sale = await createSale(saleCart);
+    const sale = await createSale(saleCart, selectedSalePaymentMethod, pendingCheckoutQuote?.quoteFingerprint || "");
 
+    if (!state.sales.some((entry) => entry.id === sale.id)) state.sales.push(sale);
     app.saveState();
     saleCart = [];
+    pendingCheckoutQuote = null;
     app.closeModal();
 
     const printerType = getSelectedPrinterType();
@@ -465,9 +519,12 @@ async function recordSale() {
     }
 
   } catch (error) {
+    if (/Prices or taxes changed before this sale was submitted/i.test(toUserMessage(error))) pendingCheckoutQuote = null;
     setSaleProcessing(false);
     logAppError("Sale completion failed", error);
     renderSales(toUserMessage(error, "Unable to complete the sale. Check stock availability and try again."));
+  } finally {
+    saleSubmissionInFlight = false;
   }
 }
 

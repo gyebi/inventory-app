@@ -2,10 +2,13 @@
 
 ## Status
 
-This is an additive, server-controlled foundation. The existing browser checkout is
-not connected to it and production remains disabled unless
-`settings/secureSales.enabled == true`. An absent flag is disabled. No deployed
-environment or production document is changed by this branch.
+This is an additive, server-controlled checkout. When
+`settings/secureSales.enabled == true`, browser checkout first obtains a
+server-authoritative quote and displays its subtotal, tax breakdown, and final
+payable amount before confirmation. Submission must include that quote's
+fingerprint; any price or tax change requires a new confirmation. An absent flag
+is disabled. Production remains disabled and no production document is changed
+by this branch.
 
 ## Authoritative model
 
@@ -63,7 +66,9 @@ call failure.
 
 Secure receiving, returns, and adjustments require their own server transaction
 before secure mode can be used operationally. They are intentionally blocked now
-instead of diverging from batch authority.
+instead of diverging from batch authority. Staging secure-sales testing is a
+checkout rehearsal, not a complete operational rollout; see
+`docs/staging-secure-sales-rehearsal.md`.
 
 ## Rehearsal and reconciliation
 
@@ -87,7 +92,7 @@ No composite index is required.
 1. Migrate and reconcile products/batches in staging, including quarantined data.
 2. Obtain manager approval for every canonical product price.
 3. Implement server-authoritative receiving, returns, and adjustments.
-4. Integrate the existing checkout behind a rollout flag with durable idempotency
+4. Complete a staging quote/confirmation rehearsal with durable idempotency
    drafts and no fallback on failure.
 5. Verify printers and legacy receipt rendering against secure-sale documents.
 6. Deploy rules and Functions only through an approved cutover; do not enable the

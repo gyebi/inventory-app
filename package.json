@@ -11,6 +11,7 @@
     "build:production": "node scripts/build-hosting.mjs production",
     "deploy:staging:hosting": "npm run build:staging && node scripts/deploy-firebase.mjs staging hosting",
     "deploy:staging:functions": "node scripts/deploy-firebase.mjs staging functions",
+    "deploy:staging:firestore": "node scripts/deploy-firebase.mjs staging firestore",
     "deploy:rules": "node scripts/deploy-firebase.mjs production firestore:rules",
     "deploy:functions": "node scripts/deploy-firebase.mjs production functions",
     "deploy:hosting": "npm run build:production && node scripts/deploy-firebase.mjs production hosting",

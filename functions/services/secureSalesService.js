@@ -36,11 +36,11 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
     if (!fields.has(key)) fail("invalid-argument", `${field}.${key} is not supported.`);
   });
 
-  function normalizeRequest(data) {
+  function normalizeRequest(data, { requireIdempotencyKey = true, requireQuoteFingerprint = false } = {}) {
     const request = object(data, "request");
-    allowed(request, new Set(["idempotencyKey", "items", "paymentMethod"]), "request");
+    allowed(request, new Set(["idempotencyKey", "items", "paymentMethod", "expectedQuoteFingerprint"]), "request");
     const idempotencyKey = String(request.idempotencyKey || "").trim();
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{15,127}$/.test(idempotencyKey)) fail("invalid-argument", "idempotencyKey must be 16-128 URL-safe characters and be persisted before submission.");
+    if (requireIdempotencyKey && !/^[A-Za-z0-9][A-Za-z0-9._-]{15,127}$/.test(idempotencyKey)) fail("invalid-argument", "idempotencyKey must be 16-128 URL-safe characters and be persisted before submission.");
     if (!Array.isArray(request.items) || request.items.length < 1 || request.items.length > MAX_ITEMS_PER_SALE) fail("invalid-argument", `items must contain between 1 and ${MAX_ITEMS_PER_SALE} items.`);
     const ids = new Set();
     const items = request.items.map((raw, index) => {
@@ -57,7 +57,10 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
     });
     const paymentMethod = request.paymentMethod === undefined || request.paymentMethod === null || request.paymentMethod === "" ? null : String(request.paymentMethod).trim().toLowerCase();
     if (paymentMethod !== null && !PAYMENT_METHODS.has(paymentMethod)) fail("invalid-argument", "paymentMethod is not supported.");
-    return { idempotencyKey, items, paymentMethod };
+    const expectedQuoteFingerprint = String(request.expectedQuoteFingerprint || "").trim();
+    if (requireQuoteFingerprint && !/^[a-f0-9]{64}$/.test(expectedQuoteFingerprint)) fail("failed-precondition", "A current secure checkout quote is required before submission.");
+    if (!requireQuoteFingerprint && expectedQuoteFingerprint) fail("invalid-argument", "Quotes cannot include an expectedQuoteFingerprint.");
+    return { idempotencyKey, items, paymentMethod, expectedQuoteFingerprint };
   }
 
   function normalizedTax(data = {}) {
@@ -167,21 +170,36 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
     };
   }
 
-  async function submitSecureSale(request) {
+  function createQuoteFingerprint({ paymentMethod, items, subtotalPesewas, taxBreakdown, totalAmountPesewas }) {
+    return hash(JSON.stringify({
+      paymentMethod, subtotalPesewas, totalAmountPesewas,
+      taxBreakdown: {
+        enabled: taxBreakdown.enabled, taxMode: taxBreakdown.taxMode, effectiveDate: taxBreakdown.effectiveDate,
+        vatRateBasisPoints: taxBreakdown.vatRateBasisPoints, nhilRateBasisPoints: taxBreakdown.nhilRateBasisPoints,
+        getfundRateBasisPoints: taxBreakdown.getfundRateBasisPoints, withholdingVatRateBasisPoints: taxBreakdown.withholdingVatRateBasisPoints,
+        taxAmountPesewas: taxBreakdown.taxAmountPesewas
+      },
+      items: items.map((item) => ({ productId: item.productId, quantity: item.quantity, unit: item.saleUnit, unitPricePesewas: item.unitPricePesewas, lineTotalPesewas: item.lineTotalPesewas }))
+    }));
+  }
+
+  async function processSecureSale(request, { commit }) {
     if (!request.auth?.uid) fail("unauthenticated", "You must be signed in to submit a sale.");
     const uid = request.auth.uid;
-    const payload = normalizeRequest(request.data);
-    const requestFingerprint = hash(JSON.stringify(payload));
-    const requestHash = hash(`${uid}\u0000${payload.idempotencyKey}`);
-    const requestRef = db.collection("saleRequests").doc(requestHash);
-    const saleRef = db.collection("sales").doc(`SEC-${requestHash.slice(0, 32)}`);
+    const payload = normalizeRequest(request.data, { requireIdempotencyKey: commit, requireQuoteFingerprint: commit });
+    const requestFingerprint = commit ? hash(JSON.stringify(payload)) : null;
+    const requestHash = commit ? hash(`${uid}\u0000${payload.idempotencyKey}`) : null;
+    const requestRef = commit ? db.collection("saleRequests").doc(requestHash) : null;
+    const saleRef = commit ? db.collection("sales").doc(`SEC-${requestHash.slice(0, 32)}`) : null;
 
     return db.runTransaction(async (transaction) => {
-      const existing = await transaction.get(requestRef);
-      if (existing.exists) {
-        const saved = existing.data() || {};
-        if (saved.uid !== uid || saved.requestFingerprint !== requestFingerprint || !saved.response) fail("already-exists", "This idempotencyKey has already been used for a different sale request.");
-        return saved.response;
+      if (commit) {
+        const existing = await transaction.get(requestRef);
+        if (existing.exists) {
+          const saved = existing.data() || {};
+          if (saved.uid !== uid || saved.requestFingerprint !== requestFingerprint || !saved.response) fail("already-exists", "This idempotencyKey has already been used for a different sale request.");
+          return saved.response;
+        }
       }
       const [profileSnapshot, taxSnapshot, modeSnapshot] = await Promise.all([
         transaction.get(db.collection("users").doc(uid)),
@@ -228,7 +246,8 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
           batchId: entry.batch.id, baseQuantity: entry.baseQuantity, quantity: entry.baseQuantity, expiryBusinessDate: entry.batch.expiry.date || null, expiryDate: entry.batch.expiry.date || "", allocatedCostPesewas: entry.allocatedCostPesewas, receivedAt: entry.batch.receivedAt
         }));
         items.push({
-          productId: item.productId, name: String(product.name || item.productId), productNameSnapshot: String(product.name || item.productId), quantity: item.quantity, unit: item.unit, saleUnit: item.unit, baseQuantity, actualQtySold: baseQuantity,
+          productId: item.productId, name: String(product.name || item.productId), productNameSnapshot: String(product.name || item.productId), quantity: item.quantity, unit: item.unit, saleUnit: item.unit,
+          unitLabel: String(item.unit === "base" ? (product.baseUnit || "base unit") : (product.bulkUnit || "bulk unit")), baseQuantity, actualQtySold: baseQuantity,
           unitsPerBulk: productPricing.unitsPerBulk, unitPricePesewas: productPricing.unitPricePesewas, basePricePesewas: productPricing.basePricePesewas, bulkPricePesewas: productPricing.bulkPricePesewas, lineTotalPesewas,
           unitPrice: productPricing.unitPricePesewas / 100, total: lineTotalPesewas / 100, batchAllocations
         });
@@ -239,7 +258,12 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
       const taxBreakdown = calculateTax(subtotalPesewas, tax);
       const committedAt = now().toISOString();
       const createdBy = { uid, fullName: profile.fullName || profile.displayName || profile.username || uid, username: profile.username || "", role: profile.role };
-      const response = { saleId: saleRef.id, committed: true, committedAt, currency: "GHS", paymentMethod: payload.paymentMethod, createdBy, items, subtotalPesewas, taxBreakdown, totalAmountPesewas: taxBreakdown.totalAmountPesewas };
+      const quoteFingerprint = createQuoteFingerprint({ paymentMethod: payload.paymentMethod, items, subtotalPesewas, taxBreakdown, totalAmountPesewas: taxBreakdown.totalAmountPesewas });
+      const returnedSale = { id: saleRef?.id || null, committed: commit, createdAt: committedAt, committedAt, currency: "GHS", paymentMethod: payload.paymentMethod, createdBy, items, subtotalPesewas, taxBreakdown, totalAmountPesewas: taxBreakdown.totalAmountPesewas, quoteFingerprint };
+      const response = { saleId: saleRef?.id || null, committed: commit, committedAt, currency: "GHS", paymentMethod: payload.paymentMethod, createdBy, items, subtotalPesewas, taxBreakdown, totalAmountPesewas: taxBreakdown.totalAmountPesewas, quoteFingerprint, sale: returnedSale };
+
+      if (!commit) return response;
+      if (payload.expectedQuoteFingerprint !== quoteFingerprint) fail("failed-precondition", "Prices or taxes changed after the checkout quote. Review the updated server totals and confirm again.");
 
       productUpdates.forEach((entry) => transaction.update(entry.productRef, { quantity: entry.quantity, sellableQuantity: entry.sellableQuantity, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid }));
       allocationWrites.forEach(({ productId, entry }) => {
@@ -261,7 +285,9 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
       return response;
     });
   }
-  return { submitSecureSale };
+  async function submitSecureSale(request) { return processSecureSale(request, { commit: true }); }
+  async function quoteSecureSale(request) { return processSecureSale(request, { commit: false }); }
+  return { submitSecureSale, quoteSecureSale };
 }
 
 module.exports = { BUSINESS_TIME_ZONE, DEFAULT_TAX_SETTINGS, MAX_BATCHES_PER_PRODUCT, MAX_ITEMS_PER_SALE, createSecureSalesService };
