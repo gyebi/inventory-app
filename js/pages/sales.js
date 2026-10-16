@@ -40,6 +40,23 @@ function getSaleUnitPrice(product, saleUnit = "bulk") {
     return 0;
   }
 
+  // Approved v2 prices are stored in pesewas; legacy prices are in cedis.
+  if (product.inventorySchemaVersion === 2 && product.pricingStatus === "approved") {
+    const base = product.sellingPricePesewas;
+    const conversion = product.unitsPerBulk;
+    const explicitBulk = product.bulkSellingPricePesewas;
+    const baseValid = Number.isSafeInteger(base) && base > 0;
+    const conversionValid = Number.isSafeInteger(conversion) && conversion > 0;
+    const bulk = explicitBulk == null
+      ? (baseValid && conversionValid ? base * conversion : NaN)
+      : explicitBulk;
+    const price = saleUnit === "base" ? base : bulk;
+
+    if (baseValid && Number.isSafeInteger(price) && price > 0) {
+      return price / 100;
+    }
+  }
+
   const resolveCurrentSellingPrice = window.app?.resolveCurrentSellingPrice;
 
   if (typeof resolveCurrentSellingPrice === "function") {
