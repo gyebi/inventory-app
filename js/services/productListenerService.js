@@ -4,12 +4,16 @@ import { collection, onSnapshot } from "firebase/firestore";
 function listenToCollection(path, onChange, onError) {
   return onSnapshot(
     collection(db, path),
+    { includeMetadataChanges: true },
     (snapshot) => {
       const records = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data()
       }));
-      onChange(records);
+      onChange(records, {
+        fromCache: snapshot.metadata.fromCache,
+        hasPendingWrites: snapshot.metadata.hasPendingWrites
+      });
     },
     (error) => {
       if (onError) onError(error);
