@@ -211,7 +211,6 @@ function renderSales(error = "") {
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
   const productCards = state.products
     .filter((product) => Number(product.quantity || 0) > 0)
-    .slice(0, 24)
     .map((product) => {
       const price = getSaleUnitPrice(product, selectedSaleUnit);
       const isSelected = product.id === selectedProduct.id;
