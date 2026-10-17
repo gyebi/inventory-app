@@ -1,7 +1,8 @@
 import { savePriceChangeAndProductToCloud } from "../services/cloudProductService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 
-const { renderPage, saveState, state } = window.app;
+const app = /** @type {any} */ (window).app;
+const { renderPage, saveState, state } = app;
 
 function renderSellingPriceChanges(error = "", success = "") {
   const products = state.products
@@ -92,6 +93,11 @@ function previewPriceChangeBatches() {
     return;
   }
 
+  if (Number(product.inventorySchemaVersion) === 2) {
+    renderSellingPriceChanges("Approved v2 prices are authoritative server fields and cannot be changed through the legacy price-change workflow.");
+    return;
+  }
+
   const affectedBatches = getAffectedBatches(productId);
   const currentSellingPrice = window.app?.resolveCurrentSellingPrice?.(product, "base") || Number(product.sellingPrice || 0);
   const currentBulkSellingPrice = window.app?.resolveCurrentSellingPrice?.(product, "bulk") || Number(product.bulkSellingPrice || 0);
@@ -118,6 +124,11 @@ async function saveSellingPriceChange(event) {
 
   if (!product) {
     renderSellingPriceChanges("Choose a product before saving the price change.");
+    return;
+  }
+
+  if (Number(product.inventorySchemaVersion) === 2) {
+    renderSellingPriceChanges("Approved v2 prices are authoritative server fields and cannot be changed through the legacy price-change workflow.");
     return;
   }
 
@@ -187,7 +198,7 @@ async function saveSellingPriceChange(event) {
 function getAffectedBatches(productId, effectiveDate = "") {
   const cutoff = effectiveDate ? new Date(`${effectiveDate}T00:00:00`) : null;
 
-  return (state.stock || []).filter((batch) => {
+  return (app.getDisplayStockBatches?.() || []).filter((batch) => {
     if (batch.productId !== productId || Number(batch.quantity || 0) <= 0) {
       return false;
     }

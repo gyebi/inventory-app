@@ -2,6 +2,7 @@ import { db } from "../firebase.js";
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   runTransaction,
@@ -10,25 +11,48 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { createAppError, ERROR_FLAGS, normalizeFirebaseError } from "../utils/errorUtils.js";
+import { getClientWritableQuantityProjection } from "./authoritativeInventory.js";
 
 const productsCollection = collection(db, "products");
 const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
+const stockBatchesCollection = collection(db, "stockBatches");
 const priceChangesCollection = collection(db, "priceChanges");
+const secureSalesSettingsRef = doc(db, "settings", "secureSales");
+
+export async function assertLegacyStockWriteAllowed() {
+  const snapshot = await getDoc(secureSalesSettingsRef);
+
+  if (snapshot.exists() && snapshot.data()?.enabled === true) {
+    throw createAppError(
+      "Secure inventory mode is enabled. This legacy stock-writing path is unavailable until the secure receiving and adjustment workflow is used.",
+      {
+        code: "secure-sales/legacy-stock-write-disabled",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      }
+    );
+  }
+}
 
 const toOptionalPositiveNumber = (value) => {
   const amount = Number(value);
   return Number.isFinite(amount) && amount > 0 ? amount : undefined;
 };
 
-const toCloudProduct = (product) => ({
+export const toCloudProduct = (product) => ({
   name: product.name,
   category: product.category || "",
   baseUnit: product.baseUnit || "Bottle",
   bulkUnit: product.bulkUnit || "Carton",
   unitsPerBulk: Number(product.unitsPerBulk || 1),
-  quantity: Number(product.quantity || 0),
   lowStockThreshold: Number(product.lowStockThreshold || 10),
+  // quantity and sellableQuantity are server-authoritative projections for v2.
+  // Omit them from all browser product writes so a local reconstruction cannot
+  // persist an aggregate back over the server value.
+  ...(Number(product.inventorySchemaVersion) === 2 ? {
+    inventorySchemaVersion: 2
+  } : {}),
+  ...getClientWritableQuantityProjection(product),
   ...(toOptionalPositiveNumber(product.costPrice) !== undefined ? { costPrice: toOptionalPositiveNumber(product.costPrice) } : {}),
   ...(toOptionalPositiveNumber(product.bulkCostPrice) !== undefined ? { bulkCostPrice: toOptionalPositiveNumber(product.bulkCostPrice) } : {}),
   ...(toOptionalPositiveNumber(product.sellingPrice) !== undefined ? { sellingPrice: toOptionalPositiveNumber(product.sellingPrice) } : {}),
@@ -44,6 +68,7 @@ const fromCloudProduct = (snapshot) => ({
 });
 
 export async function saveProductToCloud(product) {
+  await assertLegacyStockWriteAllowed();
   const productRef = doc(db, "products", product.id);
 
   try {
@@ -80,6 +105,18 @@ export async function fetchStockReceiptsFromCloud() {
     }));
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to load stock receipts from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function fetchStockBatchesFromCloud() {
+  try {
+    const snapshot = await getDocs(stockBatchesCollection);
+    return snapshot.docs.map((entry) => ({
+      id: entry.id,
+      ...entry.data()
+    }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load authoritative stock batches from Firestore. Check your connection and try again.");
   }
 }
 
@@ -166,6 +203,7 @@ export async function receiveStockInCloudTransaction({
   quantityReceived,
   receipt
 }) {
+  await assertLegacyStockWriteAllowed();
   const productRef = doc(db, "products", productId);
   const receiptRef = doc(stockReceiptsCollection);
   const receivedQuantity = Number(quantityReceived || 0);
@@ -198,6 +236,7 @@ export async function receiveStockInCloudTransaction({
 }
 
 export async function receivePurchaseInCloudTransaction({ lines = [] }) {
+  await assertLegacyStockWriteAllowed();
   const batch = writeBatch(db);
   const savedLines = [];
 
@@ -242,6 +281,7 @@ export async function submitSaleToCloudTransaction({
   sale,
   stockDeductions
 }) {
+  await assertLegacyStockWriteAllowed();
   const saleRef = doc(db, "sales", sale.id);
   const deductionsByProduct = stockDeductions.reduce((map, deduction) => {
     map.set(

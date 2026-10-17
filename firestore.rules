@@ -51,6 +51,31 @@ service cloud.firestore {
       );
     }
 
+    function secureSalesEnabled() {
+      return exists(/databases/$(database)/documents/settings/secureSales) &&
+        get(/databases/$(database)/documents/settings/secureSales).data.enabled == true;
+    }
+
+    function doesNotChangeAuthoritativeStock() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        "quantity",
+        "sellableQuantity",
+        "inventorySchemaVersion"
+      ]);
+    }
+
+    function canUpdateSecureProduct() {
+      return canManageStock() && doesNotChangeAuthoritativeStock() && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          "pricingStatus",
+          "sellingPricePesewas",
+          "bulkSellingPricePesewas",
+          "pricingApprovedAt",
+          "pricingApprovedBy"
+        ]) || canManageSettings()
+      );
+    }
+
     function canUpdateProductStockForSale() {
       return canCreateSale() &&
         request.resource.data.diff(resource.data).affectedKeys()
@@ -69,14 +94,15 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if signedIn();
-      allow create, delete: if canManageStock();
-      allow update: if canManageStock()
-        || canUpdateProductStockForSale();
+      allow create, delete: if !secureSalesEnabled() && canManageStock();
+      allow update: if (!secureSalesEnabled() && (canManageStock()
+        || canUpdateProductStockForSale()))
+        || (secureSalesEnabled() && canUpdateSecureProduct());
     }
 
     match /stockReceipts/{receiptId} {
       allow read: if signedIn();
-      allow create, update, delete: if canManageStock();
+      allow create, update, delete: if !secureSalesEnabled() && canManageStock();
     }
 
     match /suppliers/{supplierId} {
@@ -91,8 +117,34 @@ service cloud.firestore {
 
     match /sales/{saleId} {
       allow read: if signedIn();
-      allow create: if canCreateSale();
-      allow update, delete: if isAdmin();
+      allow create: if !secureSalesEnabled() && canCreateSale();
+      allow update, delete: if !secureSalesEnabled() && isAdmin();
+    }
+
+    // The Admin SDK in the callable Function is the only writer once secure mode is enabled.
+    match /stockBatches/{batchId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    match /saleRequests/{requestId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    // Secure receiving writes these only through receiveSecureStock.
+    match /receiveRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
     }
 
     match /settings/{settingId} {

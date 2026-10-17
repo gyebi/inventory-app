@@ -5,6 +5,20 @@ export function formatReceiptCurrency(value) {
   return `Ghs ${amount.toFixed(2)}`;
 }
 
+// This is deliberately a presentation value. The full sale ID remains the
+// Firestore ID and idempotency key result, and must be used for any lookup.
+export function formatReceiptReference(saleOrId) {
+  const rawId = typeof saleOrId === "object" && saleOrId !== null
+    ? saleOrId.id
+    : saleOrId;
+  const id = rawId == null ? "" : String(rawId).trim();
+  const secureSale = /^SEC-([a-f0-9]+)$/i.exec(id);
+
+  return secureSale
+    ? `SEC-${secureSale[1].slice(0, 12).toUpperCase()}`
+    : (id || "N/A");
+}
+
 function formatReceiptDateTime(value) {
   if (!value) {
     return "N/A";
@@ -46,7 +60,7 @@ function getTaxBreakdown(sale) {
 }
 
 function formatReceiptItemLine(item) {
-  return `${item.name} x${item.quantity} ${item.unit}`;
+  return `${item.name} x${item.quantity} ${item.unitLabel || item.unit}`;
 }
 
 export const generateReceiptText = (sale) => {
@@ -70,7 +84,7 @@ export const generateReceiptText = (sale) => {
   }
   lines.push(`TOTAL: ${formatReceiptCurrency(sale.totalAmount)}`);
   lines.push(`DATE: ${formatReceiptDateTime(sale.createdAt)}`);
-  lines.push(`RECEIPT ID: ${sale.id}`);
+  lines.push(`RECEIPT REF: ${formatReceiptReference(sale)}`);
   lines.push(`SERVED BY: ${getReceiptCashierName(sale)}`);
 
   return lines.join("\n");
@@ -88,7 +102,7 @@ function getReceiptItemsMarkup(items = []) {
   return items.map((item) => `
     <tr>
       <td>${formatReceiptItemLine(item)}</td>
-      <td>${item.quantity} ${item.unit}</td>
+      <td>${item.quantity} ${item.unitLabel || item.unit}</td>
       <td>${formatReceiptCurrency(item.unitPrice)}</td>
       <td>${formatReceiptCurrency(item.total)}</td>
     </tr>
@@ -106,7 +120,7 @@ function buildReceiptMarkup(sale) {
 
       <div class="card receipt-card">
         <strong>Business Name:</strong> ${RECEIPT_BUSINESS_NAME}<br>
-        <strong>Receipt ID:</strong> ${sale.id}<br>
+        <strong>Receipt reference:</strong> ${formatReceiptReference(sale)}<br>
         <strong>Date/Time:</strong> ${formatReceiptDateTime(sale.createdAt)}<br>
         <strong>Cashier:</strong> ${getReceiptCashierName(sale)}<br>
         <hr>

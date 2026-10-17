@@ -6,6 +6,8 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getAllowedOrigins } = require("./runtime-config");
+const { createSecureSalesService } = require("./services/secureSalesService");
+const { createSecureReceivingService } = require("./services/secureReceivingService");
 
 initializeApp();
 
@@ -14,6 +16,8 @@ const db = getFirestore();
 const ALLOWED_ROLES = new Set(["admin", "manager", "sales", "storekeeper"]);
 const ALLOWED_ORIGINS = getAllowedOrigins();
 const DEFAULT_PASSWORD_SETUP_URL = ALLOWED_ORIGINS[0];
+const secureSalesService = createSecureSalesService({ db, FieldValue, HttpsError });
+const secureReceivingService = createSecureReceivingService({ db, FieldValue, HttpsError });
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -386,4 +390,16 @@ exports.clearRequiredPasswordChange = onCall({ cors: ALLOWED_ORIGINS }, async (r
       mustChangePassword: false
     }
   };
+});
+
+exports.quoteSecureSale = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  return secureSalesService.quoteSecureSale(request);
+});
+
+exports.submitSecureSale = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  return secureSalesService.submitSecureSale(request);
+});
+
+exports.receiveSecureStock = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  return secureReceivingService.receiveSecureStock(request);
 });

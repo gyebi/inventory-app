@@ -27,6 +27,7 @@ const defaultState = {
 
   products: [],
   stock: [],
+  authoritativeStockBatches: { status: "idle", batches: [], error: null },
   sales: [],
   suppliers: [],
   stockReceipts: [],
@@ -68,6 +69,10 @@ if (!state.suppliers) {
 
 if (!Array.isArray(state.stock)) {
   state.stock = [];
+}
+
+if (!state.authoritativeStockBatches || typeof state.authoritativeStockBatches !== "object") {
+  state.authoritativeStockBatches = { status: "idle", batches: [], error: null };
 }
 
 if (!state.stockReceipts) {

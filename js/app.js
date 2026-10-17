@@ -13,6 +13,7 @@ import {
   fetchProductsFromCloud,
   fetchPriceChangesFromCloud,
   fetchSalesFromCloud,
+  fetchStockBatchesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
 import {
@@ -24,6 +25,7 @@ import {
   listenToProducts,
   listenToPriceChanges,
   listenToSales,
+  listenToStockBatches,
   listenToStockReceipts,
   listenToSupplierPayments,
   listenToSuppliers,
@@ -42,6 +44,14 @@ import {
   normalizeNavigationPage
 } from "./utils/hubNavigation.js";
 import { getCloudConnectionBadgeState } from "./utils/cloudConnectionStatus.js";
+import {
+  getAuthoritativeBatchStatus,
+  getAuthoritativeDisplayBatches,
+  getPhysicalQuantity,
+  getSellableQuantity,
+  isAuthoritativeV2Product,
+  shouldUseLegacyStockReconstruction
+} from "./services/authoritativeInventory.js";
 
 
 const app = document.getElementById("app");
@@ -56,6 +66,7 @@ const defaultState = {
   users: [],
   products: [],
   stock: [],
+  authoritativeStockBatches: { status: "idle", batches: [], error: null },
   sales: [],
   suppliers: [],
   stockReceipts: [],
@@ -85,6 +96,7 @@ setSharedState(state);
 let stopProductsListener = null;
 let stopPriceChangesListener = null;
 let stopStockReceiptsListener = null;
+let stopStockBatchesListener = null;
 let stopSalesListener = null;
 let stopUsersListener = null;
 let stopSuppliersListener = null;
@@ -291,6 +303,7 @@ function replaceProducts(products = []) {
   const changed = Array.isArray(state.stock) && state.stock.length > 0
     ? syncProductSellingPricesFromStock()
     : false;
+  rebuildStockFromCloudReceipts();
   if (changed) {
     saveState();
     return;
@@ -353,6 +366,8 @@ function canSyncAllUsers() {
 }
 
 function rebuildStockFromCloudReceipts() {
+  const productsById = new Map(state.products.map((product) => [product.id, product]));
+  const isLegacyReceipt = (receipt) => shouldUseLegacyStockReconstruction(productsById.get(receipt.productId));
   const soldByBatch = new Map();
   const adjustedByBatch = new Map();
 
@@ -386,7 +401,7 @@ function rebuildStockFromCloudReceipts() {
     }
   });
 
-  const receiptStock = state.stockReceipts.map((receipt) => {
+  const receiptStock = state.stockReceipts.filter(isLegacyReceipt).map((receipt) => {
     const originalQuantity = Number(receipt.quantityReceived || 0);
     const soldQuantity = soldByBatch.get(receipt.batchId) || 0;
     const adjustedQuantity = adjustedByBatch.get(receipt.batchId) || 0;
@@ -414,7 +429,7 @@ function rebuildStockFromCloudReceipts() {
 
   const productsWithReceipts = new Set(state.stockReceipts.map((receipt) => receipt.productId));
   const syntheticStock = state.products
-    .filter((product) => !productsWithReceipts.has(product.id) && Number(product.quantity || 0) > 0)
+    .filter((product) => shouldUseLegacyStockReconstruction(product) && !productsWithReceipts.has(product.id) && Number(product.quantity || 0) > 0)
     .map((product) => ({
       id: `cloud_initial_${product.id}`,
       productId: product.id,
@@ -440,7 +455,9 @@ function rebuildStockFromCloudReceipts() {
   syncProductSellingPricesFromStock();
 
   state.products.forEach((product) => {
-    product.quantity = getSellableStockQuantity(product.id);
+    if (shouldUseLegacyStockReconstruction(product)) {
+      product.quantity = getSellableStockQuantity(product.id);
+    }
   });
 }
 
@@ -522,6 +539,18 @@ function resolveCurrentSellingPrice(productOrProductId, saleUnit = "base") {
     return 0;
   }
 
+  if (isAuthoritativeV2Product(product) && product.pricingStatus === "approved") {
+    const basePricePesewas = Number(product.sellingPricePesewas);
+    const unitsPerBulk = Number(product.unitsPerBulk || 1);
+    const bulkPricePesewas = Number(product.bulkSellingPricePesewas);
+    if (Number.isSafeInteger(basePricePesewas) && basePricePesewas > 0) {
+      if (saleUnit === "base") return basePricePesewas / 100;
+      if (Number.isSafeInteger(bulkPricePesewas) && bulkPricePesewas > 0) return bulkPricePesewas / 100;
+      if (Number.isSafeInteger(unitsPerBulk) && unitsPerBulk > 0) return (basePricePesewas * unitsPerBulk) / 100;
+    }
+    return 0;
+  }
+
   const unitsPerBulk = Number(product.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk || 1) : 1;
   const sellableBatches = getSellableBatches(product.id)
     .slice()
@@ -560,6 +589,7 @@ function syncProductSellingPricesFromStock() {
   let changed = false;
 
   state.products.forEach((product) => {
+    if (isAuthoritativeV2Product(product)) return;
     const unitPrice = resolveCurrentSellingPrice(product, "base");
 
     if (unitPrice > 0) {
@@ -599,6 +629,24 @@ function replacePriceChanges(priceChanges = []) {
 function replaceSales(sales = []) {
   state.sales = sales;
   rebuildStockFromCloudReceipts();
+  saveState();
+}
+
+function setAuthoritativeStockBatchStatus(status, error = null) {
+  const previous = state.authoritativeStockBatches || {};
+  state.authoritativeStockBatches = {
+    status,
+    batches: status === "ready" ? (previous.batches || []) : [],
+    error: error ? String(error.message || error) : null
+  };
+}
+
+function replaceAuthoritativeStockBatches(batches = []) {
+  state.authoritativeStockBatches = {
+    status: "ready",
+    batches: Array.isArray(batches) ? batches : [],
+    error: null
+  };
   saveState();
 }
 
@@ -644,6 +692,11 @@ function stopCloudListeners() {
     stopStockReceiptsListener = null;
   }
 
+  if (stopStockBatchesListener) {
+    stopStockBatchesListener();
+    stopStockBatchesListener = null;
+  }
+
   if (stopSalesListener) {
     stopSalesListener();
     stopSalesListener = null;
@@ -670,22 +723,26 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     "Product",
     "Price change",
     "Stock receipt",
+    "Stock batch",
     "Sales",
     ...(canSyncAllUsers() ? ["User"] : []),
     "Supplier",
     "Supplier payment"
   ];
   startCloudListenerTracking(listenerNames);
+  setAuthoritativeStockBatchStatus("loading");
+  saveState();
   await migrateLocalProductsToCloudOnce();
   await migrateLocalSuppliersToCloudOnce();
 
   const syncUsers = canSyncAllUsers();
 
-  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
+  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudStockBatches, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
     fetchProductsFromCloud(),
     fetchPriceChangesFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
+    fetchStockBatchesFromCloud(),
     syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
     fetchSuppliersFromCloud(),
     fetchSupplierPaymentsFromCloud()
@@ -698,6 +755,7 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   replacePriceChanges(cloudPriceChanges);
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
+  replaceAuthoritativeStockBatches(cloudStockBatches);
   if (syncUsers) {
     replaceUsers(cloudUsers);
   } else {
@@ -736,6 +794,25 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     },
     (error) => {
       handleCloudListenerError("Stock receipt", error);
+    }
+  );
+
+  stopStockBatchesListener = listenToStockBatches(
+    (batches, metadata) => {
+      if (metadata.fromCache) {
+        // A cache snapshot may be partial or stale. Do not present it as a
+        // confirmed authoritative batch ledger while waiting for the server.
+        setAuthoritativeStockBatchStatus("loading");
+        saveState();
+      } else {
+        replaceAuthoritativeStockBatches(batches);
+      }
+      markCloudUpdated("Authoritative stock batches synced", { listenerName: "Stock batch", fromCache: metadata.fromCache });
+    },
+    (error) => {
+      setAuthoritativeStockBatchStatus("error", error);
+      saveState();
+      handleCloudListenerError("Stock batch", error);
     }
   );
 
@@ -980,13 +1057,13 @@ function renderLogin(error = "") {
         <img class="login-brand-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano logo featuring a Ghanaian Kente hat">
         <div class="login-brand-copy">
           <p>Inventory made practical</p>
-          <h1>Keep your business flowing.</h1>
-          <span>Manage stock, sales, suppliers, and receipts from one secure workspace.</span>
+          <h1>Making your business profitable</h1>
+          <span>Track every pesewa by managing stock, sales, suppliers, and receipts from one secure workspace.</span>
         </div>
         <div class="login-brand-highlights" aria-label="Application features">
           <span><b aria-hidden="true">✓</b>Stock control</span>
           <span><b aria-hidden="true">✓</b>Fast sales</span>
-          <span><b aria-hidden="true">✓</b>Cloud sync</span>
+          <span><b aria-hidden="true">✓</b>Every Device</span>
         </div>
       </aside>
 
@@ -1341,11 +1418,24 @@ function isBatchExpired(expiryDate, referenceDate = new Date()) {
 }
 
 function getBatchesByProductId(productId) {
-  if (!Array.isArray(state.stock)) {
-    return [];
+  const product = state.products.find((candidate) => candidate.id === productId);
+
+  if (isAuthoritativeV2Product(product)) {
+    return getAuthoritativeDisplayBatches(state, productId)
+      .filter((batch) => Number(batch.remainingBaseQuantity || 0) > 0);
   }
 
-  return state.stock.filter((batch) => batch.productId === productId && (batch.quantity || 0) > 0);
+  return Array.isArray(state.stock)
+    ? state.stock.filter((batch) => batch.productId === productId && (batch.quantity || 0) > 0)
+    : [];
+}
+
+function getDisplayStockBatches() {
+  const productsById = new Map(state.products.map((product) => [product.id, product]));
+  const legacyBatches = Array.isArray(state.stock)
+    ? state.stock.filter((batch) => shouldUseLegacyStockReconstruction(productsById.get(batch.productId)))
+    : [];
+  return [...legacyBatches, ...getAuthoritativeDisplayBatches(state)];
 }
 
 function getSellableBatches(productId) {
@@ -1361,6 +1451,8 @@ function getBatchQuantityTotal(batches) {
 }
 
 function getSellableStockQuantity(productId) {
+  const product = state.products.find((candidate) => candidate.id === productId);
+  if (isAuthoritativeV2Product(product)) return getSellableQuantity(product);
   return getBatchQuantityTotal(getSellableBatches(productId));
 }
 
@@ -1376,6 +1468,7 @@ function syncProductQuantities() {
   let changed = false;
 
   state.products.forEach((product) => {
+    if (isAuthoritativeV2Product(product)) return;
     const sellableQuantity = getSellableStockQuantity(product.id);
 
     if (product.quantity !== sellableQuantity) {
@@ -1425,6 +1518,7 @@ function ensureStockState() {
   }
 
   state.products.forEach((product) => {
+    if (isAuthoritativeV2Product(product)) return;
     const trackedQuantity = getBatchQuantityTotal(getBatchesByProductId(product.id));
 
     if (product.quantity > trackedQuantity) {
@@ -1453,6 +1547,13 @@ function ensureStockState() {
 }
 
 function allocateStockFromBatches(productId, quantityNeeded) {
+  const product = state.products.find((candidate) => candidate.id === productId);
+  if (isAuthoritativeV2Product(product)) {
+    throw createAppError("Authoritative v2 stock can only be allocated by the secure checkout service.", {
+      code: "inventory/authoritative-v2-client-deduction-blocked",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
+  }
   const batches = getSellableBatches(productId).slice().sort((left, right) => {
     const leftExpiry = parseExpiryDate(left.expiryDate);
     const rightExpiry = parseExpiryDate(right.expiryDate);
@@ -1586,11 +1687,15 @@ window.app = {
   ensureStockState,
   formatStock: window.formatStock,
   getBatchesByProductId,
+  getDisplayStockBatches,
   getSellableBatches,
   getExpiredBatches,
   parseExpiryDate,
   getExpiredStockQuantity,
   getSellableStockQuantity,
+  getPhysicalQuantity,
+  getSellableQuantity,
+  getAuthoritativeBatchStatus: () => getAuthoritativeBatchStatus(state),
   syncProductQuantities,
   allocateStockFromBatches,
   createStockBatchId,

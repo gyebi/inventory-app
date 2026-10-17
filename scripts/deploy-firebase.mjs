@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 
 export const PRODUCTION_PROJECT_ID = "inventory-app-19d04";
-const ALLOWED_SCOPES = new Set(["hosting", "functions", "firestore:rules"]);
+const ALLOWED_SCOPES = new Set(["hosting", "functions", "firestore:rules", "firestore:indexes", "firestore"]);
 
 export function validateDeploymentRequest(environment, scope, environmentVariables = process.env) {
   if (environment === "emulator") {
@@ -9,7 +9,7 @@ export function validateDeploymentRequest(environment, scope, environmentVariabl
   }
 
   if (!new Set(["staging", "production"]).has(environment) || !ALLOWED_SCOPES.has(scope)) {
-    throw new Error("Usage: node scripts/deploy-firebase.mjs <staging|production> <hosting|functions|firestore:rules>");
+    throw new Error("Usage: node scripts/deploy-firebase.mjs <staging|production> <hosting|functions|firestore:rules|firestore:indexes|firestore>");
   }
 
   const projectId = environment === "production"
@@ -40,8 +40,9 @@ function main() {
     JYAANO_HOSTING_DEPLOY_PROJECT_ID: projectId
   };
 
-  console.log(`Deploying ${scope} to explicitly selected ${environment} project ${projectId}.`);
-  execFileSync("firebase", ["deploy", "--project", projectId, "--only", scope], {
+  const firebaseScope = scope === "firestore" ? "firestore:rules,firestore:indexes" : scope;
+  console.log(`Deploying ${firebaseScope} to explicitly selected ${environment} project ${projectId}.`);
+  execFileSync("firebase", ["deploy", "--project", projectId, "--only", firebaseScope], {
     env: deploymentEnvironment,
     stdio: "inherit"
   });

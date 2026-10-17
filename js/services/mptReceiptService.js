@@ -1,6 +1,7 @@
 import {
   RECEIPT_BUSINESS_NAME,
   formatReceiptCurrency,
+  formatReceiptReference,
 } from "./receiptService.js";
 import {
   fetchPrinterBridgeStatus,
@@ -92,7 +93,7 @@ function renderReceiptItems(items = []) {
       <div class="mpt-row">
         <span>
           ${Number(item.quantity || 0)}
-          ${escapeHtml(item.unit || "")}
+          ${escapeHtml(item.unitLabel || item.unit || "")}
           x ${formatReceiptCurrency(item.unitPrice)}
         </span>
 
@@ -117,14 +118,14 @@ async function sendReceiptToMptPrinter(sale) {
     businessPhone: "+233-000-000-0000",
     businessEmail: "kay-flowent@gmail.com",
 
-    receiptId: sale.id,
+    receiptId: formatReceiptReference(sale),
     date: formatReceiptDateTime(sale.createdAt),
     cashier: getReceiptCashierName(sale),
 
     items: (sale.items || []).map((item) => ({
       name: item.name || "Item",
       quantity: Number(item.quantity || 0),
-      unit: item.unit || "",
+      unit: item.unitLabel || item.unit || "",
       unitPrice: Number(item.unitPrice || 0),
       total: Number(item.total || 0),
     })),
@@ -192,7 +193,7 @@ function buildMptReceiptMarkup(sale, { webSerial = false } = {}) {
         <div class="mpt-meta">
           <div>
             <span>Receipt</span>
-            <span>${escapeHtml(sale.id)}</span>
+            <span>${escapeHtml(formatReceiptReference(sale))}</span>
           </div>
 
           <div>

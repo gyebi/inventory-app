@@ -4,6 +4,7 @@ import { getDisplayUnit, toBaseUnit } from "../utils/unitConverter.js";
 import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
 import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
+import { isSecureSalesEnabled, quoteSecureCheckout, submitSecureCheckout } from "./secureCheckoutService.js";
 
 const createSaleId = () => {
   return `CDV-${Date.now()}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
@@ -221,7 +222,7 @@ const resolveSaleUnitType = (product, unit) => {
   });
 };
 
-export const createSale = (cartItems = []) => {
+const createLegacySale = (cartItems = []) => {
   const state = getState();
   const currentUser = getCurrentUser();
   const stockBatches = Array.isArray(state.stock) ? state.stock : [];
@@ -244,6 +245,13 @@ export const createSale = (cartItems = []) => {
     if (!product) {
       throw createAppError("One of the selected products could not be found. Refresh inventory and try again.", {
         code: "sale/product-not-found",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
+    }
+
+    if (Number(product.inventorySchemaVersion) === 2) {
+      throw createAppError("Authoritative v2 stock can only be sold through secure checkout.", {
+        code: "inventory/authoritative-v2-legacy-sale-blocked",
         source: ERROR_FLAGS.SOURCE_VALIDATION
       });
     }
@@ -367,6 +375,17 @@ export const createSale = (cartItems = []) => {
 
     return sale;
   });
+};
+
+// Secure mode never falls back to legacy writes or its asynchronous sync queue.
+export const getCheckoutConfirmation = async (cartItems = [], paymentMethod = "Cash") => {
+  if (await isSecureSalesEnabled()) return { secure: true, ...(await quoteSecureCheckout({ cartItems, paymentMethod })) };
+  return { secure: false };
+};
+
+export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "") => {
+  if (expectedQuoteFingerprint || await isSecureSalesEnabled()) return submitSecureCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
+  return createLegacySale(cartItems);
 };
 
 export const recordSale = ({ productId, quantity, saleUnit }) => {

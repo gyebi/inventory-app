@@ -5,21 +5,25 @@ import {
   getSalesTrend as selectSalesTrend,
   getStockValuation as selectStockValuation,
   getTodaySales as selectTodaySales,
+  getSellableProductQuantity,
   isActiveProduct
 } from "../dashboardSelectors.js";
 import { hasPermission } from "../services/authService.js";
 import { canAccessReportAction } from "../utils/hubNavigation.js";
 
+const app = /** @type {any} */ (window).app;
 const {
   ensureStockState,
   formatReceiptCurrency,
   getCurrentPage,
+  getDisplayStockBatches,
   getExpiredStockQuantity,
+  getSellableQuantity,
   openModal,
   refreshFromCloud,
   renderPage,
   state
-} = window.app;
+} = app;
 
 const dateFilterReportTypes = new Set([
   "salesByProduct",
@@ -45,13 +49,12 @@ function renderDashboard() {
   const products = Array.isArray(state.products) ? state.products : [];
   const sales = Array.isArray(state.sales) ? state.sales : [];
   const lowStockProducts = selectLowStockProducts(products, state.settings || {});
-  const expiryAlerts = selectExpiryAlerts(state.stock || [], products, now);
+  const expiryAlerts = selectExpiryAlerts(getDisplayStockBatches(), products, now);
   const salesTrend = selectSalesTrend(sales, now);
   const recentSales = selectRecentSales(sales);
   const activeProducts = products.filter(isActiveProduct).length;
   const todaySales = selectTodaySales(sales, now);
   const stockValuation = selectStockValuation(products);
-  const userName = getDashboardFirstName(state.user?.fullName || state.user?.username || state.user?.email);
   const canViewBusinessOverview = hasPermission("view_dashboard");
   const canManageStock = hasPermission("manage_stock");
   const canAddProducts = hasPermission("add_product");
@@ -107,7 +110,7 @@ function renderDashboard() {
         <img class="jyaano-dashboard-mobile-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano">
         <div>
           <p class="jyaano-eyebrow">Business overview</p>
-          <h2>Good ${getTimeGreeting(now)},<br>${escapeHtml(userName)}!</h2>
+          <h2>Good ${getTimeGreeting(now)}!</h2>
           <p>Here’s what’s happening in your business today.</p>
         </div>
         <div class="jyaano-banner-pattern" aria-hidden="true"></div>
@@ -182,7 +185,7 @@ function getDashboardSaleAmount(sale) {
 }
 
 function formatStockQuantity(product) {
-  return `${Number(product.quantity || 0)} ${product.baseUnit || "units"}`;
+  return `${getSellableQuantity(product)} ${product.baseUnit || "units"}`;
 }
 
 function formatStockBatchQuantity(batch) {
@@ -193,16 +196,11 @@ function formatShortDate(value) {
   return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(value);
 }
 
-function getDashboardFirstName(value) {
-  const name = String(value || "there").trim();
-  return name.split(/\s+/)[0] || "there";
-}
-
 function getTimeGreeting(date) {
   const hour = date.getHours();
-  if (hour < 12) return "morning";
-  if (hour < 18) return "afternoon";
-  return "evening";
+  if (hour < 12) return "Morning";
+  if (hour < 18) return "Afternoon";
+  return "Evening";
 }
 
 function renderReportsPage() {
@@ -463,7 +461,7 @@ function buildLowStockReport() {
     ["Product", "Current Stock", "Threshold", "Expired Stock", "Action"],
     lowStockProducts.map((product) => [
       product.name,
-      `${product.quantity} ${product.baseUnit}(s)`,
+      `${getSellableQuantity(product)} ${product.baseUnit}(s)`,
       `${getProductLowStockThreshold(product)} ${product.baseUnit}(s)`,
       `${getExpiredStockQuantity(product.id)} ${product.baseUnit}(s)`,
       "Restock soon"
@@ -473,7 +471,7 @@ function buildLowStockReport() {
 
 function buildReorderReport() {
   const reorderProducts = state.products
-    .filter((product) => Number(product.quantity || 0) <= getProductLowStockThreshold(product))
+    .filter((product) => getSellableProductQuantity(product) <= getProductLowStockThreshold(product))
     .sort((left, right) => left.name.localeCompare(right.name));
 
   if (reorderProducts.length === 0) {
@@ -484,12 +482,13 @@ function buildReorderReport() {
     ["Product", "Current Stock", "Reorder Level", "Suggested Order", "Supplier"],
     reorderProducts.map((product) => {
       const reorderLevel = getProductLowStockThreshold(product);
-      const suggestedOrder = Math.max((reorderLevel * 2) - Number(product.quantity || 0), 0);
+      const sellableQuantity = getSellableProductQuantity(product);
+      const suggestedOrder = Math.max((reorderLevel * 2) - sellableQuantity, 0);
       const recentSupplier = getLatestSupplierForProduct(product.id);
 
       return [
         product.name,
-        `${product.quantity} ${product.baseUnit}(s)`,
+        `${sellableQuantity} ${product.baseUnit}(s)`,
         `${reorderLevel} ${product.baseUnit}(s)`,
         `${suggestedOrder} ${product.baseUnit}(s)`,
         recentSupplier || "N/A"
@@ -604,7 +603,7 @@ function buildStockMovementReport() {
 }
 
 function buildBatchStockReport() {
-  const batches = (state.stock || [])
+  const batches = getDisplayStockBatches()
     .slice()
     .sort((left, right) => {
       const leftReceived = getReportTime(left.receivedAt || left.purchaseDate || left.createdAt);
@@ -632,10 +631,13 @@ function buildBatchStockReport() {
 
   const rows = batches.map((batch) => {
     const receipt = getReceiptByBatchId(batch.id);
-    const originalQuantity = Number(receipt?.quantityReceived ?? batch.quantity ?? 0);
-    const remainingQuantity = Number(batch.quantity || 0);
+    const originalQuantity = Number(batch.originalBaseQuantity ?? receipt?.quantityReceived ?? batch.quantity ?? 0);
+    const remainingQuantity = Number(batch.isAuthoritativeV2 ? batch.remainingBaseQuantity : batch.quantity || 0);
     const unitCost = Number(batch.unitCost ?? receipt?.unitCost ?? 0);
-    const sellingPrice = Number(batch.unitSellingPrice ?? receipt?.unitSellingPrice ?? 0);
+    const product = getProductById(batch.productId);
+    const sellingPrice = batch.isAuthoritativeV2
+      ? Number(app.resolveCurrentSellingPrice?.(product, "base") || 0)
+      : Number(batch.unitSellingPrice ?? receipt?.unitSellingPrice ?? 0);
     const landedCost = Number(batch.totalLandedCost ?? receipt?.totalLandedCost ?? receipt?.lineTotal ?? (originalQuantity * unitCost));
 
     return [
@@ -655,7 +657,7 @@ function buildBatchStockReport() {
 
   const totalRemainingValue = batches.reduce((sum, batch) => {
     const receipt = getReceiptByBatchId(batch.id);
-    const remainingQuantity = Number(batch.quantity || 0);
+    const remainingQuantity = Number(batch.isAuthoritativeV2 ? batch.remainingBaseQuantity : batch.quantity || 0);
     const unitCost = Number(batch.unitCost ?? receipt?.unitCost ?? 0);
     return sum + (remainingQuantity * unitCost);
   }, 0);
@@ -931,7 +933,7 @@ function buildTableMarkup(headers, rows) {
 }
 
 function getLowStockProducts() {
-  return state.products.filter((product) => Number(product.quantity || 0) <= getProductLowStockThreshold(product));
+  return state.products.filter((product) => getSellableProductQuantity(product) <= getProductLowStockThreshold(product));
 }
 
 function getProductLowStockThreshold(product) {
@@ -985,10 +987,10 @@ function getReceiptLandedCost(receipt) {
 }
 
 function getInventoryValueSummary(productId) {
-  const batches = (state.stock || []).filter((batch) => batch.productId === productId);
+  const batches = getDisplayStockBatches().filter((batch) => batch.productId === productId);
 
   return batches.reduce((summary, batch) => {
-    const quantity = Number(batch.quantity || 0);
+    const quantity = Number(batch.isAuthoritativeV2 ? batch.remainingBaseQuantity : batch.quantity || 0);
     const unitCost = Number(batch.unitCost ?? getReceiptUnitCost(getReceiptByBatchId(batch.id)));
     summary.quantity += quantity;
     summary.stockValue += quantity * unitCost;
