@@ -249,6 +249,13 @@ const createLegacySale = (cartItems = []) => {
       });
     }
 
+    if (Number(product.inventorySchemaVersion) === 2) {
+      throw createAppError("Authoritative v2 stock can only be sold through secure checkout.", {
+        code: "inventory/authoritative-v2-legacy-sale-blocked",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
+    }
+
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw createAppError("Quantity must be a whole number greater than zero.", {
         code: "sale/invalid-quantity",

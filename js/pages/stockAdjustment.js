@@ -162,6 +162,11 @@ async function recordStockAdjustment() {
     return;
   }
 
+  if (Number(product.inventorySchemaVersion) === 2) {
+    renderStockAdjustment("Authoritative v2 stock adjustments must be made by the secure server workflow.", values);
+    return;
+  }
+
   if (!Number.isInteger(quantityAffected) || quantityAffected <= 0) {
     renderStockAdjustment("Quantity affected must be a whole number greater than zero.", values);
     return;

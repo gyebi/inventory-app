@@ -35,8 +35,14 @@ export function getProductLowStockThreshold(product, settings = {}) {
 export function getLowStockProducts(products = [], settings = {}) {
   return products
     .filter(isActiveProduct)
-    .filter((product) => asNumber(product.quantity) <= getProductLowStockThreshold(product, settings))
-    .sort((left, right) => asNumber(left.quantity) - asNumber(right.quantity) || String(left.name).localeCompare(String(right.name)));
+    .filter((product) => getSellableProductQuantity(product) <= getProductLowStockThreshold(product, settings))
+    .sort((left, right) => getSellableProductQuantity(left) - getSellableProductQuantity(right) || String(left.name).localeCompare(String(right.name)));
+}
+
+export function getSellableProductQuantity(product) {
+  return Number(product?.inventorySchemaVersion) === 2
+    ? asNumber(product?.sellableQuantity)
+    : asNumber(product?.quantity);
 }
 
 export function getTodaySales(sales = [], referenceDate = new Date()) {

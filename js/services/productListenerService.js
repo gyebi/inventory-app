@@ -29,6 +29,10 @@ export function listenToStockReceipts(onChange, onError) {
   return listenToCollection("stockReceipts", onChange, onError);
 }
 
+export function listenToStockBatches(onChange, onError) {
+  return listenToCollection("stockBatches", onChange, onError);
+}
+
 export function listenToSales(onChange, onError) {
   return listenToCollection("sales", onChange, onError);
 }

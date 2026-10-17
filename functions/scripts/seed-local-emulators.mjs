@@ -134,6 +134,23 @@ async function seed() {
       createdAt: seededAt,
       updatedAt: seededAt
     }, { merge: true }),
+    db.collection("products").doc("demo-v2-authoritative-regression").set({
+      name: "Synthetic Authoritative Packs",
+      category: "Test",
+      baseUnit: "Each",
+      bulkUnit: "Pack",
+      unitsPerBulk: 5,
+      quantity: 3,
+      sellableQuantity: 3,
+      inventorySchemaVersion: 2,
+      pricingStatus: "approved",
+      sellingPricePesewas: 125,
+      bulkSellingPricePesewas: 625,
+      lowStockThreshold: 2,
+      active: true,
+      createdAt: seededAt,
+      updatedAt: seededAt
+    }, { merge: true }),
     db.collection("stockReceipts").doc("demo-receipt-001").set({
       productId: "demo-water",
       product: "Demo Mineral Water",
@@ -157,6 +174,23 @@ async function seed() {
       unitsPerBulk: 12,
       receivedAt: "2026-10-01T08:00:00.000Z",
       expiryBusinessDate: "2099-01-01",
+      inventoryStatus: "active",
+      createdAt: seededAt,
+      updatedAt: seededAt
+    }, { merge: true }),
+    db.collection("stockBatches").doc("demo-v2-authoritative-opening").set({
+      schemaVersion: 2,
+      productId: "demo-v2-authoritative-regression",
+      receiptId: "",
+      originalBaseQuantity: 3,
+      remainingBaseQuantity: 3,
+      costAllocatedBaseQuantity: 0,
+      totalLandedCostPesewas: 300,
+      baseUnit: "Each",
+      bulkUnit: "Pack",
+      unitsPerBulk: 5,
+      receivedAt: "2026-10-01T08:00:00.000Z",
+      expiryBusinessDate: "",
       inventoryStatus: "active",
       createdAt: seededAt,
       updatedAt: seededAt

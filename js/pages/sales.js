@@ -18,11 +18,13 @@ let saleSubmissionInFlight = false;
 let pendingCheckoutQuote = null;
 
 function formatSaleStock(product) {
-  return app.formatStock(product);
+  const quantity = getCommittedBaseQuantity(product);
+  const unitsPerBulk = Number(product?.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk) : 1;
+  return `${Math.floor(quantity / unitsPerBulk)} ${product?.bulkUnit || "bulk unit"}(s) and ${quantity % unitsPerBulk} ${product?.baseUnit || "base unit"}(s)`;
 }
 
 function getCommittedBaseQuantity(product) {
-  return Number(product?.quantity || 0);
+  return app.getSellableQuantity(product);
 }
 
 function getProductUnitLabel(product, saleUnit = "bulk") {
@@ -210,7 +212,7 @@ function renderSales(error = "") {
     unitLabel: quantityUnitLabel
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
   const productCards = state.products
-    .filter((product) => Number(product.quantity || 0) > 0)
+    .filter((product) => getCommittedBaseQuantity(product) > 0)
     .map((product) => {
       const price = getSaleUnitPrice(product, selectedSaleUnit);
       const isSelected = product.id === selectedProduct.id;
@@ -390,7 +392,7 @@ function addSaleCartItem() {
   const existingCartItem = saleCart.find((item) => item.productId === productId && item.saleUnit === saleUnit);
   const existingBaseQuantity = getCartProductBaseQuantity(product);
 
-  if (requestedBaseQuantity + existingBaseQuantity > Number(product.quantity || 0)) {
+  if (requestedBaseQuantity + existingBaseQuantity > getCommittedBaseQuantity(product)) {
     renderSales(`Not enough stock available for ${product.name}. Reduce the quantity or refresh inventory before trying again.`);
     return;
   }
@@ -434,7 +436,7 @@ function adjustSaleCartItem(index, change) {
     .filter((_, itemIndex) => itemIndex !== index)
     .filter((candidate) => candidate.productId === product.id)
     .reduce((sum, candidate) => sum + toBaseQuantity(product, candidate.quantity, candidate.saleUnit), 0);
-  if (toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > Number(product.quantity || 0)) {
+  if (toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > getCommittedBaseQuantity(product)) {
     renderSales(`Not enough stock available for ${product.name}.`);
     return;
   }

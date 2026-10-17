@@ -11,10 +11,12 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { createAppError, ERROR_FLAGS, normalizeFirebaseError } from "../utils/errorUtils.js";
+import { getClientWritableQuantityProjection } from "./authoritativeInventory.js";
 
 const productsCollection = collection(db, "products");
 const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
+const stockBatchesCollection = collection(db, "stockBatches");
 const priceChangesCollection = collection(db, "priceChanges");
 const secureSalesSettingsRef = doc(db, "settings", "secureSales");
 
@@ -37,14 +39,20 @@ const toOptionalPositiveNumber = (value) => {
   return Number.isFinite(amount) && amount > 0 ? amount : undefined;
 };
 
-const toCloudProduct = (product) => ({
+export const toCloudProduct = (product) => ({
   name: product.name,
   category: product.category || "",
   baseUnit: product.baseUnit || "Bottle",
   bulkUnit: product.bulkUnit || "Carton",
   unitsPerBulk: Number(product.unitsPerBulk || 1),
-  quantity: Number(product.quantity || 0),
   lowStockThreshold: Number(product.lowStockThreshold || 10),
+  // quantity and sellableQuantity are server-authoritative projections for v2.
+  // Omit them from all browser product writes so a local reconstruction cannot
+  // persist an aggregate back over the server value.
+  ...(Number(product.inventorySchemaVersion) === 2 ? {
+    inventorySchemaVersion: 2
+  } : {}),
+  ...getClientWritableQuantityProjection(product),
   ...(toOptionalPositiveNumber(product.costPrice) !== undefined ? { costPrice: toOptionalPositiveNumber(product.costPrice) } : {}),
   ...(toOptionalPositiveNumber(product.bulkCostPrice) !== undefined ? { bulkCostPrice: toOptionalPositiveNumber(product.bulkCostPrice) } : {}),
   ...(toOptionalPositiveNumber(product.sellingPrice) !== undefined ? { sellingPrice: toOptionalPositiveNumber(product.sellingPrice) } : {}),
@@ -97,6 +105,18 @@ export async function fetchStockReceiptsFromCloud() {
     }));
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to load stock receipts from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function fetchStockBatchesFromCloud() {
+  try {
+    const snapshot = await getDocs(stockBatchesCollection);
+    return snapshot.docs.map((entry) => ({
+      id: entry.id,
+      ...entry.data()
+    }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load authoritative stock batches from Firestore. Check your connection and try again.");
   }
 }
 

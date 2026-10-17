@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc, getFirestore, setDoc, terminate } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, setDoc, terminate } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 import { DEMO_EMULATOR_PROJECT_ID, LOCAL_EMULATOR_ENDPOINTS, SYNTHETIC_EMULATOR_FIREBASE_CONFIG, assertLocalEmulatorTarget } from "../js/utils/emulatorConfig.mjs";
 
@@ -23,7 +23,7 @@ const receivePayload = {
   idempotencyKey: receiveKey,
   purchase: {
     supplier: "Synthetic Secure Supplier", invoiceNumber: `SYN-${Date.now()}`, purchaseDate: "2026-10-16T09:00", paymentStatus: "Credit", dueDate: "2026-11-01", notes: "Synthetic emulator receipt", receivedByNote: "Storekeeper",
-    lines: [{ productId: "demo-water", quantity: 2, unit: "bulk", totalBulkCostPesewas: 9601, additionalExpensesPesewas: 199, expiryBusinessDate: "2026-10-16" }]
+    lines: [{ productId: "demo-water", quantity: 2, unit: "bulk", totalBulkCostPesewas: 9601, additionalExpensesPesewas: 199, expiryBusinessDate: "2026-12-31" }]
   }
 };
 const received = await receive(receivePayload);
@@ -36,10 +36,45 @@ assert.equal(receivedBatch.data().remainingBaseQuantity, 24);
 const receivedReceipt = await getDoc(doc(db, "stockReceipts", received.data.lines[0].receiptId));
 assert.equal(receivedReceipt.data().paymentStatus, "Credit");
 
+const regressionProductId = "demo-v2-authoritative-regression";
+const regressionReceive = await receive({
+  idempotencyKey: `emulator-v2-authoritative-receive-${Date.now()}`,
+  purchase: {
+    supplier: "Synthetic Authoritative Supplier", invoiceNumber: `V2-${Date.now()}`, purchaseDate: "2026-10-16T09:00", paymentStatus: "Paid in Full", dueDate: "", notes: "3 existing + 10 received regression", receivedByNote: "Storekeeper",
+    lines: [{ productId: regressionProductId, quantity: 2, unit: "bulk", totalBulkCostPesewas: 1000, additionalExpensesPesewas: 0, expiryBusinessDate: "" }]
+  }
+});
+assert.equal(regressionReceive.data.lines[0].baseQuantity, 10);
+const afterRegressionReceive = await getDoc(doc(db, "products", regressionProductId));
+assert.equal(afterRegressionReceive.data().quantity, 13);
+assert.equal(afterRegressionReceive.data().sellableQuantity, 13);
+const afterRegressionReceiveBatches = await getDocs(collection(db, "stockBatches"));
+assert.equal(afterRegressionReceiveBatches.docs
+  .filter((entry) => entry.data().productId === regressionProductId)
+  .reduce((sum, entry) => sum + Number(entry.data().remainingBaseQuantity || 0), 0), 13, "synthetic emulator v2 batches reconcile to 2 Packs + 3 Each");
+
 await signOut(auth);
 await signInWithEmailAndPassword(auth, "sales@demo.jyaano.test", "DemoPass!123");
 const waterProduct = await getDoc(doc(db, "products", "demo-water"));
 const bulkUnitLabel = waterProduct.data().bulkUnit;
+const regressionQuote = await quote({
+  items: [{ productId: regressionProductId, quantity: 1, unit: "base" }],
+  paymentMethod: "cash"
+});
+const regressionSale = await submit({
+  idempotencyKey: `emulator-v2-authoritative-sale-${Date.now()}`,
+  items: [{ productId: regressionProductId, quantity: 1, unit: "base" }],
+  paymentMethod: "cash",
+  expectedQuoteFingerprint: regressionQuote.data.quoteFingerprint
+});
+assert.equal(regressionSale.data.committed, true);
+const afterRegressionSale = await getDoc(doc(db, "products", regressionProductId));
+assert.equal(afterRegressionSale.data().quantity, 12);
+assert.equal(afterRegressionSale.data().sellableQuantity, 12);
+const afterRegressionSaleBatches = await getDocs(collection(db, "stockBatches"));
+assert.equal(afterRegressionSaleBatches.docs
+  .filter((entry) => entry.data().productId === regressionProductId)
+  .reduce((sum, entry) => sum + Number(entry.data().remainingBaseQuantity || 0), 0), 12);
 const quoteResponse = await quote({
   items: [{ productId: "demo-water", quantity: 1, unit: "base" }],
   paymentMethod: "cash"

@@ -400,6 +400,12 @@ async function receiveStock() {
 }
 
 async function saveLegacyPurchase(values, lines) {
+  if (lines.some((line) => Number(getProductById(line.productId)?.inventorySchemaVersion) === 2)) {
+    throw createAppError("Authoritative v2 stock must be received through the secure receiving workflow.", {
+      code: "inventory/authoritative-v2-legacy-receive-blocked",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
+  }
   const purchaseId = createPurchaseId();
   const receipts = lines.map((line) => buildLegacyReceipt(values, line, purchaseId));
   const totalAmount = receipts.reduce((sum, receipt) => sum + Number(receipt.totalLandedCost || 0), 0);
