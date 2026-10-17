@@ -1057,13 +1057,13 @@ function renderLogin(error = "") {
         <img class="login-brand-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano logo featuring a Ghanaian Kente hat">
         <div class="login-brand-copy">
           <p>Inventory made practical</p>
-          <h1>Keep your business flowing.</h1>
-          <span>Manage stock, sales, suppliers, and receipts from one secure workspace.</span>
+          <h1>Making your business profitable</h1>
+          <span>Track every pesewa by managing stock, sales, suppliers, and receipts from one secure workspace.</span>
         </div>
         <div class="login-brand-highlights" aria-label="Application features">
           <span><b aria-hidden="true">✓</b>Stock control</span>
           <span><b aria-hidden="true">✓</b>Fast sales</span>
-          <span><b aria-hidden="true">✓</b>Cloud sync</span>
+          <span><b aria-hidden="true">✓</b>Every Device</span>
         </div>
       </aside>
 

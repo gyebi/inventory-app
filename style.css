@@ -1744,8 +1744,22 @@ p {
 .mpt-meta > div,
 .mpt-row {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.mpt-meta > div > span,
+.mpt-row > span,
+.mpt-item-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mpt-meta > div > span:last-child,
+.mpt-row > span:last-child {
+  text-align: right;
 }
 
 .mpt-meta > div {
@@ -1842,8 +1856,13 @@ p {
   .receipt-table td,
   .report-table th,
   .report-table td {
+    overflow-wrap: anywhere;
     padding: 6px 0;
     text-align: left;
+  }
+
+  .receipt-table {
+    table-layout: fixed;
   }
 
   body.printing-mpt-receipt #app {
@@ -1889,6 +1908,7 @@ body.printing-mpt-receipt .mpt-meta > div {
 
 body.printing-mpt-receipt .mpt-meta span {
   display: block;
+  max-width: 100%;
 }
 
 body.printing-mpt-receipt .mpt-item {

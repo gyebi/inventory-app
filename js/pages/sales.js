@@ -477,13 +477,12 @@ async function confirmSale() {
     const tax = confirmation.sale?.taxBreakdown;
     const authoritativeTotals = confirmation.secure ? `
       <div class="sale-confirmation-totals">
-        <span>Server subtotal <b>${app.formatReceiptCurrency(confirmation.sale.subtotalAmount)}</b></span>
+        <span>Subtotal <b>${app.formatReceiptCurrency(confirmation.sale.subtotalAmount)}</b></span>
         <span>NHIL (${Number(tax.nhilRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.nhilAmount)}</b></span>
         <span>GETFund (${Number(tax.getfundRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.getfundAmount)}</b></span>
         <span>VAT (${Number(tax.vatRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.vatAmount)}</b></span>
         <strong>Final payable total <b>${app.formatReceiptCurrency(confirmation.sale.totalAmount)}</b></strong>
       </div>
-      <small>These server-authoritative prices and taxes are what will be charged. If they change, you must review and confirm again.</small>
     ` : `<strong>${app.formatReceiptCurrency(getCartTotal())}</strong>`;
     app.openModal(`
     <section class="sale-confirmation">
@@ -492,7 +491,7 @@ async function confirmSale() {
       <p>${saleCart.length} line item${saleCart.length === 1 ? "" : "s"} · ${selectedSalePaymentMethod}</p>
       ${authoritativeTotals}
       <small>Confirm once to record the sale. Receipt delivery is selected after the completed sale.</small>
-      <div><button type="button" onclick="closeModal()">Keep editing</button><button id="confirmSaleButton" class="sale-complete-button" type="button" onclick="recordSale()">Confirm & complete</button></div>
+      <div><button id="confirmSaleButton" class="sale-complete-button" type="button" onclick="recordSale()">Confirm & complete</button></div>
     </section>
   `);
   } catch (error) {

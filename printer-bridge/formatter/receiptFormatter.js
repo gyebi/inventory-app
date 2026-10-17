@@ -3,11 +3,45 @@ function getLineWidth(paperWidthMm) {
   return Number(paperWidthMm) >= 80 ? 48 : 32;
 }
 
-function cleanText(value, maxLength = 100) {
+function cleanText(value) {
   return String(value ?? "")
     .replace(/[\r\n\t]/g, " ")
-    .trim()
-    .slice(0, maxLength);
+    .trim();
+}
+
+function wrapText(value, lineWidth) {
+  const text = cleanText(value);
+  const width = Math.max(1, Number(lineWidth) || getLineWidth());
+
+  if (!text) return [""];
+
+  const lines = [];
+  let line = "";
+
+  for (const word of text.split(/\s+/)) {
+    if (word.length > width) {
+      if (line) {
+        lines.push(line);
+        line = "";
+      }
+      for (let index = 0; index < word.length; index += width) {
+        lines.push(word.slice(index, index + width));
+      }
+      continue;
+    }
+
+    if (!line) {
+      line = word;
+    } else if (line.length + word.length + 1 <= width) {
+      line += ` ${word}`;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+
+  if (line) lines.push(line);
+  return lines;
 }
 
 function money(value) {
@@ -15,38 +49,26 @@ function money(value) {
 }
 
 function center(text, lineWidth) {
-  const value = cleanText(text, lineWidth || getLineWidth());
   const width = lineWidth || getLineWidth();
-
-  if (value.length >= width) {
-    return value;
-  }
-
-  const spaces = Math.floor((width - value.length) / 2);
-
-  return " ".repeat(spaces) + value;
+  return wrapText(text, width)
+    .map((value) => " ".repeat(Math.floor((width - value.length) / 2)) + value)
+    .join("\n");
 }
 
 function leftRight(left, right, lineWidth) {
   const width = lineWidth || getLineWidth();
-  left = cleanText(left, width);
-  right = cleanText(right, width);
+  const rightText = cleanText(right);
 
-  const availableLeft = Math.max(
-    1,
-    width - right.length - 1
-  );
-
-  if (left.length > availableLeft) {
-    left = left.slice(0, availableLeft);
+  if (rightText.length > width - 2) {
+    return [...wrapText(left, width), ...wrapText(rightText, width)].join("\n");
   }
 
-  const spaces = Math.max(
-    1,
-    width - left.length - right.length
-  );
+  const availableLeft = Math.max(1, width - rightText.length - 1);
+  const leftLines = wrapText(left, availableLeft);
+  const finalLeft = leftLines.pop() || "";
+  const spaces = Math.max(1, width - finalLeft.length - rightText.length);
 
-  return left + " ".repeat(spaces) + right;
+  return [...leftLines, finalLeft + " ".repeat(spaces) + rightText].join("\n");
 }
 
 function buildReceipt(receipt) {
@@ -73,14 +95,14 @@ function buildReceipt(receipt) {
   lines.push("-".repeat(lineWidth));
 
   lines.push("Receipt:");
-  lines.push(cleanText(receipt.receiptId, lineWidth));
+  lines.push(...wrapText(receipt.receiptId, lineWidth));
 
   lines.push(
-    leftRight("Date:", cleanText(receipt.date, 20), lineWidth)
+    leftRight("Date:", receipt.date, lineWidth)
   );
 
   lines.push(
-    leftRight("Cashier:", cleanText(receipt.cashier, 18), lineWidth)
+    leftRight("Cashier:", receipt.cashier, lineWidth)
   );
 
   lines.push("-".repeat(lineWidth));
@@ -91,11 +113,11 @@ function buildReceipt(receipt) {
 
   for (const item of items) {
     lines.push(
-      cleanText(item.name || "Item", lineWidth)
+      ...wrapText(item.name || "Item", lineWidth)
     );
 
     const quantity = Number(item.quantity) || 0;
-    const unit = cleanText(item.unit, 8);
+    const unit = cleanText(item.unit);
     const unitPrice = Number(item.unitPrice) || 0;
     const total = Number(item.total) || 0;
 

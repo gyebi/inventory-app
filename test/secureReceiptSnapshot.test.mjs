@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateReceiptText } from "../js/services/receiptService.js";
+import { formatReceiptReference, generateReceiptText } from "../js/services/receiptService.js";
 
 test("receipt uses the immutable server bulk-unit label rather than the canonical bulk token", () => {
   const text = generateReceiptText({
@@ -11,4 +11,13 @@ test("receipt uses the immutable server bulk-unit label rather than the canonica
   assert.match(text, /Synthetic Water x1 Carton/);
   assert.doesNotMatch(text, /Synthetic Water x1 bulk/);
   assert.match(text, /TOTAL: Ghs 72\.00/);
+});
+
+test("secure sale receipts display a compact reference without changing legacy IDs", () => {
+  const secureId = "SEC-61136997edb1f4aa44770011cc22dd33";
+
+  assert.equal(formatReceiptReference(secureId), "SEC-61136997EDB1");
+  assert.equal(formatReceiptReference("legacy-sale-1234567890"), "legacy-sale-1234567890");
+  assert.equal(formatReceiptReference({}), "N/A");
+  assert.match(generateReceiptText({ id: secureId, items: [], totalAmount: 0 }), /RECEIPT REF: SEC-61136997EDB1/);
 });

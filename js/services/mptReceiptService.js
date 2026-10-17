@@ -1,6 +1,7 @@
 import {
   RECEIPT_BUSINESS_NAME,
   formatReceiptCurrency,
+  formatReceiptReference,
 } from "./receiptService.js";
 import {
   fetchPrinterBridgeStatus,
@@ -117,7 +118,7 @@ async function sendReceiptToMptPrinter(sale) {
     businessPhone: "+233-000-000-0000",
     businessEmail: "kay-flowent@gmail.com",
 
-    receiptId: sale.id,
+    receiptId: formatReceiptReference(sale),
     date: formatReceiptDateTime(sale.createdAt),
     cashier: getReceiptCashierName(sale),
 
@@ -192,7 +193,7 @@ function buildMptReceiptMarkup(sale, { webSerial = false } = {}) {
         <div class="mpt-meta">
           <div>
             <span>Receipt</span>
-            <span>${escapeHtml(sale.id)}</span>
+            <span>${escapeHtml(formatReceiptReference(sale))}</span>
           </div>
 
           <div>
