@@ -1,6 +1,7 @@
 const app = /** @type {any} */ (window).app;
 const {
   ensureStockState,
+  getBatchesByProductId,
   getExpiredBatches,
   getExpiredStockQuantity,
   getAuthoritativeBatchStatus,
@@ -77,16 +78,20 @@ function renderInventory() {
   html += `<div class="inventory-mobile-summary"><span>${filteredProducts.length} product${filteredProducts.length === 1 ? "" : "s"}</span><span class="${lowStockCount ? "is-alert" : ""}">${lowStockCount} low stock</span></div><div class="inventory-list">`;
 
   filteredProducts.forEach((p) => {
+    const isV2 = Number(p.inventorySchemaVersion) === 2;
     const activeBatches = getSellableBatches(p.id);
     const expiredBatches = getExpiredBatches(p.id);
     const physicalStock = getPhysicalStock(p);
+    const physicalQuantity = physicalStock.quantity;
+    const unverifiedStock = isV2 ? 0 : getBatchesByProductId(p.id)
+      .filter((batch) => batch.inventoryStatus === "unverified")
+      .reduce((sum, batch) => sum + Number(batch.quantity || 0), 0);
     const nextExpiry = activeBatches
       .map((batch) => parseExpiryDate(batch.expiryDate))
       .filter(Boolean)
       .sort((left, right) => left.getTime() - right.getTime())[0];
 
     const sellableQuantity = getSellableQuantity(p);
-    const isV2 = Number(p.inventorySchemaVersion) === 2;
     const v2BatchStatus = getAuthoritativeBatchStatus();
     const lowStock = sellableQuantity <= Number(p.lowStockThreshold ?? state.settings?.lowStockThreshold ?? 0);
     html += `
@@ -96,10 +101,11 @@ function renderInventory() {
         <details class="inventory-details"><summary>Product details <span aria-hidden="true">⌄</span></summary><div class="inventory-details-grid">
           <div><strong>Bulk units</strong><span>${physicalStock.fullBulk} ${escapeHtml(p.bulkUnit || "bulk unit")}(s)</span></div>
           <div><strong>Loose units</strong><span>${physicalStock.remainder} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
-          <div><strong>Physical base units</strong><span>${p.quantity} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
+          <div><strong>Physical base units</strong><span>${physicalQuantity} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
           <div><strong>Sellable base units</strong><span>${sellableQuantity} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
           <div><strong>Conversion</strong><span>1 ${escapeHtml(p.bulkUnit || "bulk")} = ${physicalStock.unitsPerBulk} ${escapeHtml(p.baseUnit || "base")}(s)</span></div>
           <div><strong>Expired stock</strong><span>${getExpiredStockQuantity(p.id)} ${escapeHtml(p.baseUnit || "base unit")}(s)</span></div>
+          ${unverifiedStock ? `<div><strong>Unverified stocktake surplus</strong><span>${unverifiedStock} ${escapeHtml(p.baseUnit || "base unit")}(s) — not sellable until reconciled</span></div>` : ""}
           <div><strong>Active / expired batches</strong><span>${activeBatches.length} / ${expiredBatches.length}</span></div>
           <div><strong>Next expiry</strong><span>${nextExpiry ? nextExpiry.toLocaleDateString() : "N/A"}</span></div>
           <div><strong>Base cost / selling</strong><span>${formatOptionalCurrency(p.costPrice)} / ${formatOptionalCurrency(getProductSellingPrice(p))}</span></div>
@@ -142,10 +148,13 @@ function formatOptionalCurrency(value) {
 
 function getPhysicalStock(product) {
   const unitsPerBulk = getUnitsPerBulk(product);
-  const quantity = Number(product.quantity || 0);
+  const quantity = Number(product.inventorySchemaVersion) === 2
+    ? Number(product.quantity || 0)
+    : getBatchesByProductId(product.id).reduce((sum, batch) => sum + Number(batch.quantity || 0), 0);
 
   return {
     unitsPerBulk,
+    quantity,
     fullBulk: Math.floor(quantity / unitsPerBulk),
     remainder: quantity % unitsPerBulk
   };

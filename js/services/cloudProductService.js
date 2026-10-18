@@ -18,7 +18,9 @@ const salesCollection = collection(db, "sales");
 const stockReceiptsCollection = collection(db, "stockReceipts");
 const stockBatchesCollection = collection(db, "stockBatches");
 const priceChangesCollection = collection(db, "priceChanges");
+const stockAdjustmentsCollection = collection(db, "stockAdjustments");
 const secureSalesSettingsRef = doc(db, "settings", "secureSales");
+const weeklyStocktakingSettingsRef = doc(db, "settings", "weeklyStocktaking");
 
 export async function assertLegacyStockWriteAllowed() {
   const snapshot = await getDoc(secureSalesSettingsRef);
@@ -129,6 +131,24 @@ export async function fetchSalesFromCloud() {
     }));
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to load sales from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function fetchStockAdjustmentsFromCloud() {
+  try {
+    const snapshot = await getDocs(stockAdjustmentsCollection);
+    return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load stock adjustments from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function fetchWeeklyStocktakingSettingsFromCloud() {
+  try {
+    const snapshot = await getDoc(weeklyStocktakingSettingsRef);
+    return snapshot.exists() ? snapshot.data() : null;
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load weekly stocktaking settings from Firestore.");
   }
 }
 

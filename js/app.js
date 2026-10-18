@@ -13,6 +13,8 @@ import {
   fetchProductsFromCloud,
   fetchPriceChangesFromCloud,
   fetchSalesFromCloud,
+  fetchStockAdjustmentsFromCloud,
+  fetchWeeklyStocktakingSettingsFromCloud,
   fetchStockBatchesFromCloud,
   fetchStockReceiptsFromCloud
 } from "./services/cloudProductService.js";
@@ -25,6 +27,9 @@ import {
   listenToProducts,
   listenToPriceChanges,
   listenToSales,
+  listenToStockAdjustments,
+  listenToStocktakeSessions,
+  listenToWeeklyStocktakingSettings,
   listenToStockBatches,
   listenToStockReceipts,
   listenToSupplierPayments,
@@ -71,6 +76,8 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   stockAdjustments: [],
+  stocktakeSessions: [],
+  weeklyStocktakingSettings: null,
   priceChanges: [],
   supplierPayments: [],
     settings: {
@@ -98,6 +105,9 @@ let stopPriceChangesListener = null;
 let stopStockReceiptsListener = null;
 let stopStockBatchesListener = null;
 let stopSalesListener = null;
+let stopStockAdjustmentsListener = null;
+let stopStocktakeSessionsListener = null;
+let stopWeeklyStocktakingSettingsListener = null;
 let stopUsersListener = null;
 let stopSuppliersListener = null;
 let stopSupplierPaymentsListener = null;
@@ -370,6 +380,7 @@ function rebuildStockFromCloudReceipts() {
   const isLegacyReceipt = (receipt) => shouldUseLegacyStockReconstruction(productsById.get(receipt.productId));
   const soldByBatch = new Map();
   const adjustedByBatch = new Map();
+  const stocktakeSurpluses = [];
 
   state.sales.forEach((sale) => {
     (sale.items || []).forEach((item) => {
@@ -383,6 +394,24 @@ function rebuildStockFromCloudReceipts() {
   });
 
   (state.stockAdjustments || []).forEach((adjustment) => {
+    if (adjustment.effectDirection === "increase") {
+      // A surplus has no fabricated supplier batch, expiry, or cost. It is
+      // visible as physical quarantined stock and excluded from POS until a
+      // deliberate receiving/reconciliation process establishes provenance.
+      stocktakeSurpluses.push({
+        id: `stocktake_surplus_${adjustment.id}`,
+        productId: adjustment.productId,
+        productName: adjustment.productName,
+        quantity: Number(adjustment.baseQuantityAffected || adjustment.quantityAffected || 0),
+        expiryDate: "",
+        receivedAt: adjustment.createdAt || null,
+        inventoryStatus: adjustment.inventoryStatus || "unverified",
+        isStocktakeSurplus: true,
+        unitCost: null,
+        totalLandedCost: null
+      });
+      return;
+    }
     if (Array.isArray(adjustment.batchAllocations) && adjustment.batchAllocations.length > 0) {
       adjustment.batchAllocations.forEach((allocation) => {
         adjustedByBatch.set(
@@ -450,7 +479,7 @@ function rebuildStockFromCloudReceipts() {
       isCloudInitial: true
     }));
 
-  state.stock = [...receiptStock, ...syntheticStock];
+  state.stock = [...receiptStock, ...syntheticStock, ...stocktakeSurpluses];
   applyPriceChangeHistoryToStock();
   syncProductSellingPricesFromStock();
 
@@ -632,6 +661,22 @@ function replaceSales(sales = []) {
   saveState();
 }
 
+function replaceStockAdjustments(adjustments = []) {
+  state.stockAdjustments = Array.isArray(adjustments) ? adjustments : [];
+  rebuildStockFromCloudReceipts();
+  saveState();
+}
+
+function replaceStocktakeSessions(sessions = []) {
+  state.stocktakeSessions = Array.isArray(sessions) ? sessions : [];
+  saveState();
+}
+
+function replaceWeeklyStocktakingSettings(settings = null) {
+  state.weeklyStocktakingSettings = settings;
+  saveState();
+}
+
 function setAuthoritativeStockBatchStatus(status, error = null) {
   const previous = state.authoritativeStockBatches || {};
   state.authoritativeStockBatches = {
@@ -702,6 +747,20 @@ function stopCloudListeners() {
     stopSalesListener = null;
   }
 
+  if (stopStockAdjustmentsListener) {
+    stopStockAdjustmentsListener();
+    stopStockAdjustmentsListener = null;
+  }
+
+  if (stopStocktakeSessionsListener) {
+    stopStocktakeSessionsListener();
+    stopStocktakeSessionsListener = null;
+  }
+  if (stopWeeklyStocktakingSettingsListener) {
+    stopWeeklyStocktakingSettingsListener();
+    stopWeeklyStocktakingSettingsListener = null;
+  }
+
   if (stopUsersListener) {
     stopUsersListener();
     stopUsersListener = null;
@@ -725,6 +784,9 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     "Stock receipt",
     "Stock batch",
     "Sales",
+    "Stock adjustment",
+    "Stocktake session",
+    "Stocktaking schedule",
     ...(canSyncAllUsers() ? ["User"] : []),
     "Supplier",
     "Supplier payment"
@@ -737,11 +799,13 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
 
   const syncUsers = canSyncAllUsers();
 
-  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudStockBatches, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
+  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudAdjustments, cloudWeeklyStocktakingSettings, cloudStockBatches, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
     fetchProductsFromCloud(),
     fetchPriceChangesFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
+    fetchStockAdjustmentsFromCloud(),
+    fetchWeeklyStocktakingSettingsFromCloud(),
     fetchStockBatchesFromCloud(),
     syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
     fetchSuppliersFromCloud(),
@@ -755,6 +819,8 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   replacePriceChanges(cloudPriceChanges);
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
+  replaceStockAdjustments(cloudAdjustments);
+  replaceWeeklyStocktakingSettings(cloudWeeklyStocktakingSettings);
   replaceAuthoritativeStockBatches(cloudStockBatches);
   if (syncUsers) {
     replaceUsers(cloudUsers);
@@ -824,6 +890,30 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     (error) => {
       handleCloudListenerError("Sales", error);
     }
+  );
+
+  stopStockAdjustmentsListener = listenToStockAdjustments(
+    (adjustments, metadata) => {
+      replaceStockAdjustments(adjustments);
+      markCloudUpdated("Stock adjustments synced", { listenerName: "Stock adjustment", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Stock adjustment", error)
+  );
+
+  stopStocktakeSessionsListener = listenToStocktakeSessions(
+    (sessions, metadata) => {
+      replaceStocktakeSessions(sessions);
+      markCloudUpdated("Stocktaking sessions synced", { listenerName: "Stocktake session", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Stocktake session", error)
+  );
+
+  stopWeeklyStocktakingSettingsListener = listenToWeeklyStocktakingSettings(
+    (settings, metadata) => {
+      replaceWeeklyStocktakingSettings(settings);
+      markCloudUpdated("Stocktaking schedule synced", { listenerName: "Stocktaking schedule", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Stocktaking schedule", error)
   );
 
   if (syncUsers) {
@@ -936,7 +1026,7 @@ const dashboardNavItems = [
   { page: "suppliers", icon: "♧", title: "Suppliers" },
   { page: "priceChanges", icon: "₵", title: "Price Changes" },
   { page: "reports", icon: "▥", title: "Reports" },
-  { page: "stocktakingPrototype", icon: "✓", title: "Stocktaking prototype" },
+  { page: "stocktakingPrototype", icon: "✓", title: "Weekly stocktaking" },
   { page: "receiptDeliveryPrototype", icon: "✉", title: "Receipt delivery prototype" },
   { page: "categorySettings", icon: "◇", title: "Categories" },
   { page: "taxSettings", icon: "⚙", title: "Settings" },
@@ -1439,7 +1529,7 @@ function getDisplayStockBatches() {
 }
 
 function getSellableBatches(productId) {
-  return getBatchesByProductId(productId).filter((batch) => !isBatchExpired(batch.expiryDate));
+  return getBatchesByProductId(productId).filter((batch) => !isBatchExpired(batch.expiryDate) && (!batch.inventoryStatus || batch.inventoryStatus === "active"));
 }
 
 function getExpiredBatches(productId) {
