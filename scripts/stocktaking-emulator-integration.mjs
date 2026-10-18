@@ -33,12 +33,24 @@ const keeperA = await client("simple-stocktake-keeper-a", "storekeeper@demo.jyaa
 const keeperB = await client("simple-stocktake-keeper-b", "storekeeper@demo.jyaano.test");
 const sales = await client("simple-stocktake-sales", "sales@demo.jyaano.test");
 const category = `Simple stocktake ${suffix}`;
-const ids = { water: `simple-water-${suffix}`, moving: `simple-moving-${suffix}`, conversion: `simple-conversion-${suffix}`, v2: `simple-v2-${suffix}`, unrelated: `simple-unrelated-${suffix}` };
+const ids = { water: `simple-water-${suffix}`, moving: `simple-moving-${suffix}`, conversion: `simple-conversion-${suffix}`, v2: `simple-v2-${suffix}`, unrelated: `simple-unrelated-${suffix}`, zero: `simple-zero-product-${suffix}` };
 let originalSecure = null;
 
 try {
   const secureRef = doc(admin.db, "settings", "secureSales"); const secureSnapshot = await getDoc(secureRef); originalSecure = secureSnapshot.exists() ? secureSnapshot.data() : null;
   await setDoc(secureRef, { enabled: false, syntheticStocktakingIntegration: suffix }, { merge: true });
+  const staffClients = { admin, manager, storekeeper: keeperA, sales };
+  const staffRoles = await Promise.all(Object.entries(staffClients).map(async ([id, participant]) => ({
+    id,
+    role: (await getDoc(doc(participant.db, "users", participant.auth.currentUser.uid))).data()?.role,
+  })));
+  assert.deepEqual(staffRoles, [{ id: "admin", role: "admin" }, { id: "manager", role: "manager" }, { id: "storekeeper", role: "storekeeper" }, { id: "sales", role: "sales" }]);
+  // This mirrors Add Product's legacy, zero-stock record: no receipt is
+  // manufactured, and secure mode was explicitly confirmed disabled above.
+  await setDoc(doc(admin.db, "products", ids.zero), { ...product("Zero-stock legacy product", `Navigation ${suffix}`, 0), syntheticNavigationFixture: true });
+  const zeroProduct = await getDoc(doc(keeperB.db, "products", ids.zero));
+  assert.equal(zeroProduct.data()?.quantity, 0);
+  assert.notEqual(Number(zeroProduct.data()?.inventorySchemaVersion), 2);
   await fixture(admin, keeperA, ids.water, "Simple Water", category, 10);
   await fixture(admin, keeperA, ids.moving, "Moving Water", `${category} moving`, 5);
   await fixture(admin, keeperA, ids.conversion, "Conversion Water", `${category} conversion`, 6);
@@ -47,8 +59,11 @@ try {
 
   // Existing legacy direct sale/receiving transaction shape remains usable.
   await runTransaction(sales.db, async (transaction) => { const snapshot = await transaction.get(doc(sales.db, "products", ids.unrelated)); transaction.update(snapshot.ref, { quantity: Number(snapshot.data().quantity) - 1, updatedAt: new Date().toISOString() }); transaction.set(doc(sales.db, "sales", `legacy-sale-${suffix}`), { productId: ids.unrelated, items: [], totalAmount: 4, createdAt: new Date().toISOString() }); });
-  await runTransaction(keeperA.db, async (transaction) => { const snapshot = await transaction.get(doc(keeperA.db, "products", ids.unrelated)); transaction.update(snapshot.ref, { quantity: Number(snapshot.data().quantity) + 2, updatedAt: new Date().toISOString() }); transaction.set(doc(keeperA.db, "stockReceipts", `legacy-receipt-${suffix}`), { productId: ids.unrelated, batchId: `legacy-batch-${suffix}`, quantityReceived: 2, receivedAt: new Date().toISOString() }); });
-  assert.equal((await getDoc(doc(admin.db, "products", ids.unrelated))).data().quantity, 5);
+  await runTransaction(keeperA.db, async (transaction) => { const snapshot = await transaction.get(doc(keeperA.db, "products", ids.unrelated)); transaction.update(snapshot.ref, { quantity: Number(snapshot.data().quantity) + 27, updatedAt: new Date().toISOString() }); transaction.set(doc(keeperA.db, "stockReceipts", `legacy-receipt-${suffix}`), { productId: ids.unrelated, batchId: `legacy-batch-${suffix}`, bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, unitsPerBulk: 12, receivedQuantityBreakdown: { bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, unitsPerBulk: 12, totalBaseQuantity: 27 }, quantityReceived: 27, receivedAt: new Date().toISOString() }); });
+  const mixedLegacyReceipt = await getDoc(doc(admin.db, "stockReceipts", `legacy-receipt-${suffix}`));
+  assert.equal(mixedLegacyReceipt.data().quantityReceived, 27);
+  assert.equal(mixedLegacyReceipt.data().looseBaseQuantityReceived, 3);
+  assert.equal((await getDoc(doc(admin.db, "products", ids.unrelated))).data().quantity, 30);
 
   const adjustment = { idempotencyKey: `simple-adjustment-${suffix}`, productId: ids.water, batchId: "", adjustmentType: "Damaged", quantity: 1, unit: "Bottle", reason: "Synthetic breakage", location: "Test shop", occurredAt: "2026-10-18T10:00" };
   const first = await keeperA.call("recordLegacyStockAdjustment")(adjustment);

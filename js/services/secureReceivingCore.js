@@ -48,13 +48,20 @@ export function normalizeSecureReceivePayload(purchase = {}) {
   const productIds = new Set();
   const lines = purchase.lines.map((line) => {
     const productId = String(line?.productId || "").trim();
-    const quantity = Number(line?.quantity);
-    const unit = String(line?.unit || "").trim().toLowerCase();
-    const totalBulkCostPesewas = Number(line?.totalBulkCostPesewas);
+    const hasBreakdown = Object.hasOwn(line || {}, "bulkQuantityReceived") || Object.hasOwn(line || {}, "looseBaseQuantityReceived");
+    const bulkQuantityReceived = hasBreakdown
+      ? Number(line?.bulkQuantityReceived ?? 0)
+      : (String(line?.unit || "").trim().toLowerCase() === "bulk" ? Number(line?.quantity) : 0);
+    const looseBaseQuantityReceived = hasBreakdown
+      ? Number(line?.looseBaseQuantityReceived ?? 0)
+      : (String(line?.unit || "").trim().toLowerCase() === "base" ? Number(line?.quantity) : 0);
+    const suppliedPurchaseCost = line?.totalPurchaseCostPesewas;
+    const suppliedLegacyCost = line?.totalBulkCostPesewas;
+    const totalPurchaseCostPesewas = Number(suppliedPurchaseCost ?? suppliedLegacyCost);
     const additionalExpensesPesewas = Number(line?.additionalExpensesPesewas);
 
-    if (!productId || !Number.isSafeInteger(quantity) || quantity < 1 || (unit !== "base" && unit !== "bulk") || !Number.isSafeInteger(totalBulkCostPesewas) || totalBulkCostPesewas < 0 || !Number.isSafeInteger(additionalExpensesPesewas) || additionalExpensesPesewas < 0) {
-      throw createAppError("Each secure receiving line needs a product, a whole quantity, and costs expressed in whole pesewas.", { code: "secure-receiving/invalid-line", source: ERROR_FLAGS.SOURCE_VALIDATION });
+    if (!productId || !Number.isSafeInteger(bulkQuantityReceived) || bulkQuantityReceived < 0 || !Number.isSafeInteger(looseBaseQuantityReceived) || looseBaseQuantityReceived < 0 || (bulkQuantityReceived === 0 && looseBaseQuantityReceived === 0) || !Number.isSafeInteger(totalPurchaseCostPesewas) || totalPurchaseCostPesewas < 0 || !Number.isSafeInteger(additionalExpensesPesewas) || additionalExpensesPesewas < 0 || (suppliedPurchaseCost !== undefined && suppliedLegacyCost !== undefined && Number(suppliedPurchaseCost) !== Number(suppliedLegacyCost))) {
+      throw createAppError("Each secure receiving line needs bulk, loose, or both whole quantities and costs expressed in whole pesewas.", { code: "secure-receiving/invalid-line", source: ERROR_FLAGS.SOURCE_VALIDATION });
     }
     if (productIds.has(productId)) {
       throw createAppError("A product may appear only once in a secure receiving request.", { code: "secure-receiving/duplicate-product", source: ERROR_FLAGS.SOURCE_VALIDATION });
@@ -62,9 +69,11 @@ export function normalizeSecureReceivePayload(purchase = {}) {
     productIds.add(productId);
     return {
       productId,
-      quantity,
-      unit,
-      totalBulkCostPesewas,
+      bulkQuantityReceived,
+      looseBaseQuantityReceived,
+      totalPurchaseCostPesewas,
+      // Preserve this response/payload alias for existing callers and receipts.
+      totalBulkCostPesewas: totalPurchaseCostPesewas,
       additionalExpensesPesewas,
       expiryBusinessDate: String(line?.expiryBusinessDate || "").trim()
     };
@@ -139,7 +148,8 @@ export function mapSecureReceiveResponse(response = {}) {
   purchase.totalLandedCost = Number(response.totalLandedCostPesewas || 0) / 100;
   purchase.lines = (Array.isArray(response.lines) ? response.lines : []).map((line) => ({
     ...line,
-    totalBulkCost: Number(line.totalBulkCostPesewas || 0) / 100,
+    totalPurchaseCost: Number(line.totalPurchaseCostPesewas ?? line.totalBulkCostPesewas ?? 0) / 100,
+    totalBulkCost: Number(line.totalPurchaseCostPesewas ?? line.totalBulkCostPesewas ?? 0) / 100,
     additionalExpenses: Number(line.additionalExpensesPesewas || 0) / 100,
     totalLandedCost: Number(line.totalLandedCostPesewas || 0) / 100,
     unitCost: Number(line.totalLandedCostPesewas || 0) / 100 / Number(line.baseQuantity || 1),

@@ -28,6 +28,22 @@ test("unauthorized direct report destinations and report actions remain blocked"
   assert.equal(canAccessPageWithPermission("staff", salesPermissions), false);
 });
 
+test("Products and Sales (POS) keep their distinct role boundaries", () => {
+  const admin = permits(["all"]);
+  const manager = permits(["view_dashboard", "view_reports", "manage_stock", "manage_settings"]);
+  const storekeeper = permits(["add_product", "manage_stock"]);
+  const sales = permits(["create_sale", "view_dashboard"]);
+
+  assert.equal(canAccessPageWithPermission("addProduct", admin), true);
+  assert.equal(canAccessPageWithPermission("sales", admin), true);
+  assert.equal(canAccessPageWithPermission("addProduct", manager), false);
+  assert.equal(canAccessPageWithPermission("sales", manager), false);
+  assert.equal(canAccessPageWithPermission("addProduct", storekeeper), true);
+  assert.equal(canAccessPageWithPermission("sales", storekeeper), false);
+  assert.equal(canAccessPageWithPermission("addProduct", sales), false);
+  assert.equal(canAccessPageWithPermission("sales", sales), true);
+});
+
 test("legacy home navigation aliases to Dashboard", () => {
   assert.equal(normalizeNavigationPage("home"), DASHBOARD_PAGE);
   assert.equal(normalizeNavigationPage("dashboard"), DASHBOARD_PAGE);

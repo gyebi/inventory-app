@@ -773,7 +773,7 @@ function buildPurchaseReport() {
         receipt.dueDate || "N/A",
         receipt.product || getProductName(receipt.productId),
         `${Number(receipt.bulkQuantityReceived ?? receipt.bulkUnitsReceived ?? 0)} ${receipt.bulkUnit || getProductBulkUnit(receipt.productId)}(s)`,
-        `${Number(receipt.quantityReceived || 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
+        `${Number(receipt.looseBaseQuantityReceived ?? 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
         `${Number(receipt.quantityReceived || 0)} ${getProductBaseUnit(receipt.productId)}(s)`,
         formatReceiptCurrency(getReceiptUnitCost(receipt)),
         formatReceiptCurrency(getReceiptLandedCost(receipt)),
