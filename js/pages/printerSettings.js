@@ -11,6 +11,11 @@ import {
   webSerialPrinter,
 } from "../services/webSerialPrinterService.js";
 
+import {
+  ANDROID_RAWBT_OUTPUT_MODE,
+  printAndroidRawBtReceipt,
+} from "../services/androidRawBtPrinterService.js";
+
 const { renderPage } = window.app;
 
 const printerSettingsState = {
@@ -39,13 +44,13 @@ function describePrinterError(error, fallback) {
 
 function getReceiptOutputMode() {
   const mode = localStorage.getItem("receiptPrinterType");
-  return ["browser", "mpt58", WEB_SERIAL_OUTPUT_MODE].includes(mode) ? mode : "browser";
+  return ["browser", "mpt58", WEB_SERIAL_OUTPUT_MODE, ANDROID_RAWBT_OUTPUT_MODE].includes(mode) ? mode : "browser";
 }
 
 function setReceiptOutputMode(mode) {
   localStorage.setItem(
     "receiptPrinterType",
-    ["mpt58", WEB_SERIAL_OUTPUT_MODE].includes(mode) ? mode : "browser",
+    ["mpt58", WEB_SERIAL_OUTPUT_MODE, ANDROID_RAWBT_OUTPUT_MODE].includes(mode) ? mode : "browser",
   );
 }
 
@@ -141,7 +146,7 @@ function renderPrinterSettings(error = "", success = "") {
     ${error ? `<div class="message error">${error}</div>` : ""}
     ${success ? `<div class="message success">${success}</div>` : ""}
 
-    <div class="card">
+    <div id="printerConnectionSummary" class="card" style="${receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? 'display:none;' : ''}">
       <strong>Printer</strong><br>
       ${escapeHtml(displayName)}<br>
       <strong>Connection:</strong> ${printerTypeName}<br>
@@ -154,6 +159,7 @@ function renderPrinterSettings(error = "", success = "") {
       <div class="form-row">
         <label for="receiptOutputMode">Receipt Output</label>
         <select id="receiptOutputMode" onchange="togglePrinterServicePanel()">
+          <option value="${ANDROID_RAWBT_OUTPUT_MODE}" ${receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "selected" : ""}>Android / RawBT (58 mm)</option>
           <option value="browser" ${receiptOutputMode === "browser" ? "selected" : ""}>Browser / PDF Receipt</option>
           <option value="mpt58" ${receiptOutputMode === "mpt58" ? "selected" : ""}>Local Print Service</option>
           <option value="${WEB_SERIAL_OUTPUT_MODE}" ${receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "selected" : ""}>Bluetooth / Web Serial Printer (Chrome)</option>
@@ -209,6 +215,13 @@ function renderPrinterSettings(error = "", success = "") {
             <option value="80" ${paperWidthMm === 80 ? "selected" : ""}>80 mm</option>
           </select>
         </div>
+      </div>
+
+      <div id="androidRawBtPanel" style="${receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "" : "display:none;"}">
+        <strong>Android / RawBT</strong>
+        <p>Pair your 58 mm printer and select it in RawBT once. Receipts open RawBT directly.</p>
+        <button type="button" onclick="testAndroidRawBtPrinter()">Test print</button>
+        <p class="field-hint">Check the paper after printing. Opening RawBT does not confirm that the printer finished.</p>
       </div>
 
       <div id="webSerialPrinterPanel" style="${receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "" : "display:none;"}">
@@ -308,6 +321,17 @@ function togglePrinterServicePanel() {
   const receiptOutputMode = document.getElementById("receiptOutputMode")?.value || "browser";
   const servicePanel = document.getElementById("printerServicePanel");
   const webSerialPanel = document.getElementById("webSerialPrinterPanel");
+  const androidPanel = document.getElementById("androidRawBtPanel");
+  const summary = document.getElementById("printerConnectionSummary");
+
+  if (androidPanel) {
+    androidPanel.style.display =
+      receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "block" : "none";
+  }
+  if (summary) {
+    summary.style.display =
+      receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "none" : "block";
+  }
 
   if (servicePanel) {
     servicePanel.style.display = receiptOutputMode === "mpt58" ? "block" : "none";
@@ -336,7 +360,17 @@ async function savePrinterSettings(event) {
   event?.preventDefault?.();
 
   const receiptOutputMode = document.getElementById("receiptOutputMode")?.value || "browser";
+  if (receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE &&
+      !/Android/i.test(navigator.userAgent)) {
+    renderPrinterSettings("Android / RawBT requires an Android phone or tablet.");
+    return;
+  }
   setReceiptOutputMode(receiptOutputMode);
+
+  if (receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE) {
+    renderPrinterSettings("", "Android / RawBT receipt printing saved.");
+    return;
+  }
 
   if (receiptOutputMode === WEB_SERIAL_OUTPUT_MODE) {
     const baudRate = Number((/** @type {HTMLInputElement | null} */ (document.getElementById("webSerialBaudRate")))?.value || 0);
@@ -467,3 +501,44 @@ const appWindow = /** @type {any} */ (window);
 appWindow.connectWebSerialPrinter = connectWebSerialPrinter;
 appWindow.disconnectWebSerialPrinter = disconnectWebSerialPrinter;
 appWindow.testWebSerialPrinterSettings = testWebSerialPrinterSettings;
+
+let androidTestSubmitted = false;
+
+function testAndroidRawBtPrinter() {
+  if (androidTestSubmitted &&
+      !window.confirm("Print another copy of the test receipt? Check the printer first.")) {
+    return;
+  }
+  try {
+    printAndroidRawBtReceipt({
+      id: "TEST-ANDROID-NOT-A-SALE",
+      createdAt: new Date().toISOString(),
+      createdBy: { fullName: "PRINTER TEST" },
+      items: [{
+        name: "TEST ONLY - NOT A SALE - Long product name wrapping check",
+        quantity: 2,
+        unit: "Bottle",
+        unitPrice: 3,
+        total: 6
+      }],
+      subtotalAmount: 6,
+      totalAmount: 7.20,
+      taxBreakdown: {
+        enabled: true,
+        subtotal: 6,
+        vatRate: 15,
+        nhilRate: 2.5,
+        getfundRate: 2.5,
+        vatAmount: 0.90,
+        nhilAmount: 0.15,
+        getfundAmount: 0.15,
+        taxAmount: 1.20
+      }
+    });
+    androidTestSubmitted = true;
+  } catch (error) {
+    renderPrinterSettings(error.message || "Unable to open RawBT.");
+  }
+}
+
+(/** @type {any} */ (window)).testAndroidRawBtPrinter = testAndroidRawBtPrinter;
