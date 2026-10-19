@@ -10,6 +10,7 @@ import {
 } from "../dashboardSelectors.js";
 import { hasPermission } from "../services/authService.js";
 import { canAccessReportAction } from "../utils/hubNavigation.js";
+import { getWeeklyStocktakingAlert } from "../utils/weeklyStocktakingSchedule.js";
 
 const app = /** @type {any} */ (window).app;
 const {
@@ -61,6 +62,7 @@ function renderDashboard() {
   const canCreateSales = hasPermission("create_sale");
   const canViewReports = canAccessReportAction(hasPermission);
   const canViewInventoryData = canManageStock || canAddProducts;
+  const stocktakingAlert = canManageStock ? getWeeklyStocktakingAlert(state) : null;
   const kpis = [
     canViewBusinessOverview
       ? renderKpiCard("sales", "Today’s Sales", formatReceiptCurrency(todaySales), "Sales completed today", canCreateSales ? "sales" : (canViewReports ? "reports" : ""))
@@ -82,6 +84,7 @@ function renderDashboard() {
     canViewReports ? renderQuickAction("View Reports", "reports", "▥") : ""
   ].filter(Boolean).join("");
   const stockPanels = canManageStock ? `
+    ${stocktakingAlert ? `<section class="jyaano-panel jyaano-expiry-panel"><div class="jyaano-panel-heading"><div><h3>Weekly stocktaking</h3><p>${escapeHtml(stocktakingAlert.message)}</p></div><button class="jyaano-text-button" type="button" onclick="navigate('stocktakingPrototype')">Open stocktaking</button></div></section>` : ""}
     <section class="jyaano-panel">
       <div class="jyaano-panel-heading"><div><h3>Low Stock Items</h3><p>Items at or below their reorder level</p></div><button class="jyaano-text-button" type="button" onclick="navigate('inventory')">View all</button></div>
       ${renderLowStockTable(lowStockProducts)}
@@ -770,7 +773,7 @@ function buildPurchaseReport() {
         receipt.dueDate || "N/A",
         receipt.product || getProductName(receipt.productId),
         `${Number(receipt.bulkQuantityReceived ?? receipt.bulkUnitsReceived ?? 0)} ${receipt.bulkUnit || getProductBulkUnit(receipt.productId)}(s)`,
-        `${Number(receipt.quantityReceived || 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
+        `${Number(receipt.looseBaseQuantityReceived ?? 0)} ${receipt.baseUnit || getProductBaseUnit(receipt.productId)}(s)`,
         `${Number(receipt.quantityReceived || 0)} ${getProductBaseUnit(receipt.productId)}(s)`,
         formatReceiptCurrency(getReceiptUnitCost(receipt)),
         formatReceiptCurrency(getReceiptLandedCost(receipt)),

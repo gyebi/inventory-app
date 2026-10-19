@@ -1,5 +1,4 @@
-import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
-import { assertLegacyStockWriteAllowed } from "../services/cloudProductService.js";
+import { persistLegacyStockAdjustment, createPersistedRequestKey } from "../services/legacyStocktakingService.js";
 
 const {
   ensureStockState,
@@ -147,13 +146,6 @@ async function recordStockAdjustment() {
 
   const values = collectStockAdjustmentValues();
 
-  try {
-    await assertLegacyStockWriteAllowed();
-  } catch (error) {
-    renderStockAdjustment(error?.message || "Secure inventory mode blocks legacy stock adjustments.", values);
-    return;
-  }
-
   const product = getSelectedProduct(values.productId);
   const quantityAffected = Number(values.quantityAffected);
 
@@ -200,46 +192,32 @@ async function recordStockAdjustment() {
     return;
   }
 
-  const allocations = deductAdjustedStock(product.id, baseQuantityAffected, values.batchId);
-  const primaryBatch = values.batchId ? getBatchById(values.batchId) : getBatchById(allocations[0]?.batchId);
-  const costPrice = Number(product.costPrice || 0);
-  const totalLossValue = baseQuantityAffected * costPrice;
-  const adjustment = {
-    id: createAdjustmentId(),
-    date: values.date,
+  const payload = {
     productId: product.id,
-    productName: product.name,
-    category: product.category || "",
-    quantityAffected,
-    baseQuantityAffected,
-    unit: values.unit || product.baseUnit || "base unit",
-    adjustmentType: values.adjustmentType,
-    reason: values.reason.trim(),
-    costPrice,
-    totalLossValue,
     batchId: values.batchId || "",
-    batchNumber: values.batchId || "",
-    batchAllocations: allocations,
-    expiryDate: primaryBatch?.expiryDate || "",
-    recordedBy: {
-      id: state.user?.id || state.user?.uid || "",
-      fullName: state.user?.fullName || state.user?.username || state.user?.email || "Unknown",
-      username: state.user?.username || "",
-      role: state.user?.role || ""
-    },
-    branch: values.location.trim(),
-    createdAt: new Date().toISOString()
+    adjustmentType: values.adjustmentType,
+    quantity: quantityAffected,
+    unit: values.unit || product.baseUnit || "base unit",
+    reason: values.reason.trim(),
+    location: values.location.trim(),
+    occurredAt: values.date
   };
-
-  product.quantity = Math.max(Number(product.quantity || 0) - baseQuantityAffected, 0);
-
-  if (!Array.isArray(state.stockAdjustments)) {
-    state.stockAdjustments = [];
-  }
-
-  state.stockAdjustments.push(adjustment);
+  const previous = state.pendingStockAdjustmentRequest;
+  const idempotencyKey = previous && JSON.stringify(previous.payload) === JSON.stringify(payload)
+    ? previous.idempotencyKey
+    : createPersistedRequestKey("adjustment");
+  // Persist before calling the server. A timeout has an unknown outcome, and a
+  // retry after reload must reuse this exact request rather than deduct again.
+  state.pendingStockAdjustmentRequest = { idempotencyKey, payload, savedAt: new Date().toISOString() };
   saveState();
-  renderStockAdjustmentSaved(adjustment, product);
+  try {
+    const confirmed = await persistLegacyStockAdjustment({ idempotencyKey, ...payload });
+    state.pendingStockAdjustmentRequest = null;
+    saveState();
+    renderStockAdjustmentSaved(confirmed.adjustment, product);
+  } catch (error) {
+    renderStockAdjustment(error?.message || "The adjustment outcome is unknown. Reconnect and retry this exact request.", values);
+  }
 }
 
 function renderStockAdjustmentSaved(adjustment, product) {
@@ -304,53 +282,6 @@ function updateStockAdjustmentPreview() {
   `;
 }
 
-function deductAdjustedStock(productId, quantityNeeded, selectedBatchId = "") {
-  const batches = selectedBatchId
-    ? [getBatchById(selectedBatchId)].filter(Boolean)
-    : getBatchesByProductId(productId).slice().sort(compareBatchesForAdjustment);
-  let remaining = quantityNeeded;
-  const allocations = [];
-
-  for (const batch of batches) {
-    if (remaining <= 0) {
-      break;
-    }
-
-    const quantityTaken = Math.min(Number(batch.quantity || 0), remaining);
-
-    if (quantityTaken <= 0) {
-      continue;
-    }
-
-    batch.quantity -= quantityTaken;
-    remaining -= quantityTaken;
-    allocations.push({
-      batchId: batch.id,
-      quantity: quantityTaken,
-      expiryDate: batch.expiryDate || ""
-    });
-  }
-
-  if (remaining > 0) {
-    throw createAppError("Not enough stock is available for this adjustment. Reduce the quantity or choose another batch.", {
-      code: "inventory/insufficient-adjustment-stock",
-      source: ERROR_FLAGS.SOURCE_VALIDATION
-    });
-  }
-
-  return allocations;
-}
-
-function compareBatchesForAdjustment(left, right) {
-  const leftTime = left.expiryDate ? new Date(left.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-  const rightTime = right.expiryDate ? new Date(right.expiryDate).getTime() : Number.MAX_SAFE_INTEGER;
-
-  if (leftTime !== rightTime) {
-    return leftTime - rightTime;
-  }
-
-  return new Date(left.receivedAt || 0).getTime() - new Date(right.receivedAt || 0).getTime();
-}
 
 function renderBatchOptions(productId, selectedBatchId = "") {
   const batches = productId ? getBatchesByProductId(productId) : [];
@@ -423,9 +354,6 @@ function getCurrentDateTimeValue() {
   return localTime.toISOString().slice(0, 16);
 }
 
-function createAdjustmentId() {
-  return `adj_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-}
 
 function formatCurrency(value) {
   return formatReceiptCurrency

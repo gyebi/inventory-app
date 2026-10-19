@@ -44,6 +44,17 @@ test("secure receiving keeps integer pesewas and maps only confirmed server tota
   assert.equal(confirmed.lines[0].receivedBy, "Storekeeper");
 });
 
+test("secure receiving normalises mixed quantities and includes them in the persisted retry payload", () => {
+  const mixed = { ...purchase(), lines: [{ productId: "water", bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, totalPurchaseCostPesewas: 12001, additionalExpensesPesewas: 199, expiryBusinessDate: "2026-12-01" }] };
+  const normalized = normalizeSecureReceivePayload(mixed);
+  assert.deepEqual(normalized.lines[0], { productId: "water", bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, totalPurchaseCostPesewas: 12001, totalBulkCostPesewas: 12001, additionalExpensesPesewas: 199, expiryBusinessDate: "2026-12-01" });
+  const store = createSecureReceivingAttemptStore({ storage: memoryStorage(), randomUUID: () => "mixed-uuid-00000001" });
+  store.getOrCreate({ actorId: "storekeeper-a", purchase: mixed });
+  const changedLoose = structuredClone(mixed); changedLoose.lines[0].looseBaseQuantityReceived = 4;
+  assert.throws(() => store.getOrCreate({ actorId: "storekeeper-a", purchase: changedLoose }), /may already have been received/);
+  assert.throws(() => normalizeSecureReceivePayload({ ...mixed, lines: [{ ...mixed.lines[0], looseBaseQuantityReceived: 0, bulkQuantityReceived: 0 }] }), /bulk, loose, or both/i);
+});
+
 test("secure receiving accepts blank optional expenses but requires purchase cost and retains only unknown outcomes", () => {
   assert.equal(parsePesewas("", { blankAsZero: true }), 0);
   assert.equal(parsePesewas(""), null);

@@ -121,6 +121,26 @@ service cloud.firestore {
       allow update, delete: if !secureSalesEnabled() && isAdmin();
     }
 
+    // Immutable server-controlled legacy loss and stocktake correction ledger.
+    match /stockAdjustments/{adjustmentId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    // Server-only persisted drafts and final reports.
+    match /stocktakeSessions/{sessionId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    match /adjustmentRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /stocktakeStartRequests/{requestId} {
+      allow read, write: if false;
+    }
+
     // The Admin SDK in the callable Function is the only writer once secure mode is enabled.
     match /stockBatches/{batchId} {
       allow read: if hasUserProfile();
@@ -149,7 +169,8 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if signedIn();
-      allow create, update, delete: if canManageSettings();
+      // Weekly stocktaking cadence is validated by the admin-only callable.
+      allow create, update, delete: if settingId != "weeklyStocktaking" && canManageSettings();
     }
 
     match /priceChanges/{priceChangeId} {

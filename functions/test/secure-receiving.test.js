@@ -79,6 +79,43 @@ test("secure receive is idempotent and conflicting retries never add stock twice
   assert.equal(db.documents.get("products/water").quantity, 24);
 });
 
+test("secure receive persists bulk and loose breakdowns, adds only the total base quantity, and conflicts on changed loose units", async () => {
+  const { db, receiving } = services({
+    "products/water": { ...seed()["products/water"], quantity: 5, sellableQuantity: 5 },
+    "stockBatches/opening": { productId: "water", originalBaseQuantity: 5, remainingBaseQuantity: 5, costAllocatedBaseQuantity: 0, totalLandedCostPesewas: 500, receivedAt: "2026-10-01T08:00:00.000Z", expiryBusinessDate: "", inventoryStatus: "active", baseUnit: "Bottle", bulkUnit: "Carton", unitsPerBulk: 12 }
+  });
+  const mixed = request();
+  mixed.data.idempotencyKey = "receive-mixed-breakdown-1";
+  mixed.data.purchase.lines = [{ productId: "water", bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, totalPurchaseCostPesewas: 12001, additionalExpensesPesewas: 199, expiryBusinessDate: "2026-12-01" }];
+  const received = await receiving.receiveSecureStock(mixed);
+  assert.equal(received.lines[0].quantityReceived, 27);
+  assert.equal(received.lines[0].bulkQuantityReceived, 2);
+  assert.equal(received.lines[0].looseBaseQuantityReceived, 3);
+  assert.deepEqual(received.lines[0].receivedQuantityBreakdown, { bulkQuantityReceived: 2, looseBaseQuantityReceived: 3, unitsPerBulk: 12, totalBaseQuantity: 27 });
+  assert.equal(db.documents.get("products/water").quantity, 32);
+  assert.equal(db.documents.get(`stockReceipts/${received.lines[0].receiptId}`).totalPurchaseCost, 120.01);
+  assert.equal((await receiving.receiveSecureStock(mixed)).lines[0].receiptId, received.lines[0].receiptId);
+  const conflict = structuredClone(mixed); conflict.data.purchase.lines[0].looseBaseQuantityReceived = 4;
+  await reject(() => receiving.receiveSecureStock(conflict), "already-exists");
+  assert.equal(db.documents.get("products/water").quantity, 32);
+});
+
+test("secure receive accepts loose-only lines and rejects zero, fractional, or overflowed breakdowns", async () => {
+  const { db, receiving } = services();
+  const looseOnly = request();
+  looseOnly.data.idempotencyKey = "receive-loose-only-line-1";
+  looseOnly.data.purchase.lines = [{ productId: "water", bulkQuantityReceived: 0, looseBaseQuantityReceived: 3, totalPurchaseCostPesewas: 300, additionalExpensesPesewas: 0, expiryBusinessDate: "" }];
+  assert.equal((await receiving.receiveSecureStock(looseOnly)).lines[0].quantityReceived, 3);
+  assert.equal(db.documents.get("products/water").quantity, 3);
+  const zero = request(); zero.data.idempotencyKey = "receive-zero-breakdown-1"; zero.data.purchase.lines = [{ productId: "water", bulkQuantityReceived: 0, looseBaseQuantityReceived: 0, totalPurchaseCostPesewas: 0, additionalExpensesPesewas: 0, expiryBusinessDate: "" }];
+  await reject(() => receiving.receiveSecureStock(zero), "invalid-argument");
+  const fraction = request(); fraction.data.idempotencyKey = "receive-fraction-breakdown"; fraction.data.purchase.lines = [{ productId: "water", bulkQuantityReceived: 1.5, looseBaseQuantityReceived: 0, totalPurchaseCostPesewas: 0, additionalExpensesPesewas: 0, expiryBusinessDate: "" }];
+  await reject(() => receiving.receiveSecureStock(fraction), "invalid-argument");
+  const overflow = services({ "products/water": { ...seed()["products/water"], unitsPerBulk: Number.MAX_SAFE_INTEGER } });
+  const overflowRequest = request(); overflowRequest.data.purchase.lines = [{ productId: "water", bulkQuantityReceived: 2, looseBaseQuantityReceived: 0, totalPurchaseCostPesewas: 0, additionalExpensesPesewas: 0, expiryBusinessDate: "" }];
+  await reject(() => overflow.receiving.receiveSecureStock(overflowRequest), "failed-precondition");
+});
+
 test("secure receive rejects unauthorized or inactive callers and disabled secure mode", async () => {
   await reject(() => services({ "users/receiver": { role: "sales", active: true } }).receiving.receiveSecureStock(request()), "permission-denied");
   await reject(() => services({ "users/receiver": { role: "manager", active: false } }).receiving.receiveSecureStock(request()), "permission-denied");

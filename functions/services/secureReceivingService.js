@@ -75,17 +75,31 @@ function createSecureReceivingService({ db, FieldValue, HttpsError, now = () => 
     const productIds = new Set();
     const lines = purchase.lines.map((raw, index) => {
       const line = object(raw, `purchase.lines[${index}]`);
-      allowed(line, new Set(["productId", "quantity", "unit", "totalBulkCostPesewas", "additionalExpensesPesewas", "expiryBusinessDate"]), `purchase.lines[${index}]`);
+      allowed(line, new Set(["productId", "quantity", "unit", "bulkQuantityReceived", "looseBaseQuantityReceived", "totalPurchaseCostPesewas", "totalBulkCostPesewas", "additionalExpensesPesewas", "expiryBusinessDate"]), `purchase.lines[${index}]`);
       const productId = string(line.productId, `purchase.lines[${index}].productId`, { required: true, max: 128 });
       if (productId.includes("/")) fail("invalid-argument", "Each productId must be a document ID.");
       if (productIds.has(productId)) fail("invalid-argument", "Each product may appear only once in a receiving request.");
       productIds.add(productId);
-      const quantity = safeInteger(line.quantity, `purchase.lines[${index}].quantity`, { min: 1, max: 1000000 });
-      const unit = string(line.unit, `purchase.lines[${index}].unit`, { required: true, max: 8 }).toLowerCase();
-      if (unit !== "base" && unit !== "bulk") fail("invalid-argument", "Each receiving line unit must be base or bulk.");
-      const totalBulkCostPesewas = safeInteger(line.totalBulkCostPesewas, `purchase.lines[${index}].totalBulkCostPesewas`, { min: 0 });
+      const hasBreakdown = Object.prototype.hasOwnProperty.call(line, "bulkQuantityReceived") || Object.prototype.hasOwnProperty.call(line, "looseBaseQuantityReceived");
+      let bulkQuantityReceived;
+      let looseBaseQuantityReceived;
+      if (hasBreakdown) {
+        bulkQuantityReceived = safeInteger(line.bulkQuantityReceived ?? 0, `purchase.lines[${index}].bulkQuantityReceived`, { min: 0, max: 1000000 });
+        looseBaseQuantityReceived = safeInteger(line.looseBaseQuantityReceived ?? 0, `purchase.lines[${index}].looseBaseQuantityReceived`, { min: 0, max: 1000000 });
+      } else {
+        const quantity = safeInteger(line.quantity, `purchase.lines[${index}].quantity`, { min: 1, max: 1000000 });
+        const unit = string(line.unit, `purchase.lines[${index}].unit`, { required: true, max: 8 }).toLowerCase();
+        if (unit !== "base" && unit !== "bulk") fail("invalid-argument", "Each receiving line unit must be base or bulk.");
+        bulkQuantityReceived = unit === "bulk" ? quantity : 0;
+        looseBaseQuantityReceived = unit === "base" ? quantity : 0;
+      }
+      if (bulkQuantityReceived === 0 && looseBaseQuantityReceived === 0) fail("invalid-argument", "Each receiving line must include bulk, loose, or both quantities.");
+      const suppliedPurchaseCost = line.totalPurchaseCostPesewas;
+      const suppliedLegacyCost = line.totalBulkCostPesewas;
+      if (suppliedPurchaseCost !== undefined && suppliedLegacyCost !== undefined && suppliedPurchaseCost !== suppliedLegacyCost) fail("invalid-argument", "Purchase cost aliases must match when both are supplied.");
+      const totalPurchaseCostPesewas = safeInteger(suppliedPurchaseCost ?? suppliedLegacyCost, `purchase.lines[${index}].totalPurchaseCostPesewas`, { min: 0 });
       const additionalExpensesPesewas = safeInteger(line.additionalExpensesPesewas, `purchase.lines[${index}].additionalExpensesPesewas`, { min: 0 });
-      return { productId, quantity, unit, totalBulkCostPesewas, additionalExpensesPesewas, expiryBusinessDate: validBusinessDate(line.expiryBusinessDate, `purchase.lines[${index}].expiryBusinessDate`, { today }) };
+      return { productId, bulkQuantityReceived, looseBaseQuantityReceived, totalPurchaseCostPesewas, totalBulkCostPesewas: totalPurchaseCostPesewas, additionalExpensesPesewas, expiryBusinessDate: validBusinessDate(line.expiryBusinessDate, `purchase.lines[${index}].expiryBusinessDate`, { today }) };
     });
     return { idempotencyKey, purchase: { supplier, invoiceNumber, purchaseDate, paymentStatus, dueDate, notes: string(purchase.notes, "purchase.notes", { max: 4000 }), receivedByNote: string(purchase.receivedByNote, "purchase.receivedByNote", { max: 240 }), lines } };
   }
@@ -140,10 +154,11 @@ function createSecureReceivingService({ db, FieldValue, HttpsError, now = () => 
         if (product.active === false || product.isActive === false) fail("failed-precondition", `Product ${line.productId} is inactive.`);
         if (product.inventorySchemaVersion !== 2) fail("failed-precondition", `Product ${line.productId} has not been migrated to authoritative batches.`);
         const unitsPerBulk = safeInteger(product.unitsPerBulk, `Product ${line.productId}.unitsPerBulk`, { min: 1 });
-        const baseQuantity = line.unit === "bulk" ? multiply(line.quantity, unitsPerBulk, `Product ${line.productId} base quantity`) : line.quantity;
+        const bulkBaseQuantity = multiply(line.bulkQuantityReceived, unitsPerBulk, `Product ${line.productId} base quantity`);
+        const baseQuantity = add(bulkBaseQuantity, line.looseBaseQuantityReceived, `Product ${line.productId} base quantity`);
         const aggregates = batchesSnapshot.docs.map((snapshot) => parseExistingBatch(snapshot, line.productId, today)).reduce((sum, batch) => ({ quantity: add(sum.quantity, batch.remainingBaseQuantity, `Product ${line.productId} quantity`), sellableQuantity: add(sum.sellableQuantity, batch.sellableQuantity, `Product ${line.productId} sellable quantity`) }), { quantity: 0, sellableQuantity: 0 });
         if (safeInteger(product.quantity, `Product ${line.productId}.quantity`, { min: 0 }) !== aggregates.quantity || safeInteger(product.sellableQuantity, `Product ${line.productId}.sellableQuantity`, { min: 0 }) !== aggregates.sellableQuantity) fail("failed-precondition", `Product ${line.productId} aggregate quantities do not reconcile with stockBatches.`);
-        const totalLandedCostPesewas = add(line.totalBulkCostPesewas, line.additionalExpensesPesewas, `Product ${line.productId} total landed cost`);
+        const totalLandedCostPesewas = add(line.totalPurchaseCostPesewas, line.additionalExpensesPesewas, `Product ${line.productId} total landed cost`);
         preparedLines.push({ line, productRef, product, unitsPerBulk, baseQuantity, totalLandedCostPesewas, nextQuantity: add(aggregates.quantity, baseQuantity, `Product ${line.productId} quantity`), nextSellableQuantity: add(aggregates.sellableQuantity, baseQuantity, `Product ${line.productId} sellable quantity`) });
       }
 
@@ -155,9 +170,9 @@ function createSecureReceivingService({ db, FieldValue, HttpsError, now = () => 
         const { line, product, unitsPerBulk, baseQuantity, totalLandedCostPesewas } = prepared;
         return {
           receiptId, batchId, productId: line.productId, product: String(product.name || line.productId), productNameSnapshot: String(product.name || line.productId), category: String(product.category || ""),
-          unit: line.unit, unitLabel: String(line.unit === "bulk" ? (product.bulkUnit || "bulk unit") : (product.baseUnit || "base unit")), inputQuantity: line.quantity, quantityReceived: baseQuantity, bulkQuantityReceived: line.unit === "bulk" ? line.quantity : null, baseQuantity,
+          unit: line.bulkQuantityReceived && line.looseBaseQuantityReceived ? "mixed" : (line.bulkQuantityReceived ? "bulk" : "base"), unitLabel: String(line.bulkQuantityReceived && line.looseBaseQuantityReceived ? "mixed" : (line.bulkQuantityReceived ? (product.bulkUnit || "bulk unit") : (product.baseUnit || "base unit"))), inputQuantity: line.bulkQuantityReceived && !line.looseBaseQuantityReceived ? line.bulkQuantityReceived : (line.looseBaseQuantityReceived && !line.bulkQuantityReceived ? line.looseBaseQuantityReceived : null), quantityReceived: baseQuantity, bulkQuantityReceived: line.bulkQuantityReceived, looseBaseQuantityReceived: line.looseBaseQuantityReceived, baseQuantity,
           baseUnit: String(product.baseUnit || "base unit"), bulkUnit: String(product.bulkUnit || "bulk unit"), unitsPerBulk,
-          totalBulkCostPesewas: line.totalBulkCostPesewas, additionalExpensesPesewas: line.additionalExpensesPesewas, totalLandedCostPesewas,
+          receivedQuantityBreakdown: { bulkQuantityReceived: line.bulkQuantityReceived, looseBaseQuantityReceived: line.looseBaseQuantityReceived, unitsPerBulk, totalBaseQuantity: baseQuantity }, totalPurchaseCostPesewas: line.totalPurchaseCostPesewas, totalBulkCostPesewas: line.totalPurchaseCostPesewas, additionalExpensesPesewas: line.additionalExpensesPesewas, totalLandedCostPesewas,
           unitCostNumeratorPesewas: totalLandedCostPesewas, unitCostDenominatorBaseQuantity: baseQuantity, expiryBusinessDate: line.expiryBusinessDate || null
         };
       });
@@ -171,15 +186,15 @@ function createSecureReceivingService({ db, FieldValue, HttpsError, now = () => 
         transaction.set(db.collection("stockReceipts").doc(line.receiptId), {
           ...line, id: line.receiptId, purchaseId: purchaseRef.id, batchId: line.batchId, supplier: payload.purchase.supplier, invoiceNumber: payload.purchase.invoiceNumber, invoiceDetails: payload.purchase.invoiceNumber,
           purchaseDate: payload.purchase.purchaseDate, paymentStatus: payload.purchase.paymentStatus, dueDate: payload.purchase.dueDate || null, notes: payload.purchase.notes, receivedBy: createdBy.fullName, createdBy, receivedByNote: payload.purchase.receivedByNote,
-          receivedAt: committedAt, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp(), totalBulkCost: line.totalBulkCostPesewas / 100, additionalExpenses: line.additionalExpensesPesewas / 100, totalLandedCost: line.totalLandedCostPesewas / 100, unitCost: line.totalLandedCostPesewas / 100 / line.baseQuantity, expiryDate: line.expiryBusinessDate || ""
+          receivedAt: committedAt, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp(), baseUnitsReceived: line.baseQuantity, totalPurchaseCost: line.totalPurchaseCostPesewas / 100, totalBulkCost: line.totalPurchaseCostPesewas / 100, additionalExpenses: line.additionalExpensesPesewas / 100, totalLandedCost: line.totalLandedCostPesewas / 100, unitCost: line.totalLandedCostPesewas / 100 / line.baseQuantity, expiryDate: line.expiryBusinessDate || ""
         });
         transaction.set(db.collection("stockBatches").doc(line.batchId), {
           schemaVersion: 2, productId: line.productId, receiptId: line.receiptId, purchaseId: purchaseRef.id, originalBaseQuantity: line.baseQuantity, remainingBaseQuantity: line.baseQuantity, costAllocatedBaseQuantity: 0, totalLandedCostPesewas: line.totalLandedCostPesewas,
-          baseUnit: line.baseUnit, bulkUnit: line.bulkUnit, unitsPerBulk: line.unitsPerBulk, receivedAt: committedAt, purchaseDate: payload.purchase.purchaseDate, expiryBusinessDate: line.expiryBusinessDate || "", inventoryStatus: "active", createdBy, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid
+          baseUnit: line.baseUnit, bulkUnit: line.bulkUnit, unitsPerBulk: line.unitsPerBulk, receivedQuantityBreakdown: line.receivedQuantityBreakdown, receivedAt: committedAt, purchaseDate: payload.purchase.purchaseDate, expiryBusinessDate: line.expiryBusinessDate || "", inventoryStatus: "active", createdBy, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid
         });
         transaction.set(db.collection("stockMovements").doc(`${purchaseRef.id}_${line.batchId}`), {
           schemaVersion: 2, type: "receive", direction: "in", purchaseId: purchaseRef.id, receiptId: line.receiptId, productId: line.productId, batchId: line.batchId, baseQuantityDelta: line.baseQuantity, allocatedCostPesewas: 0, totalLandedCostPesewas: line.totalLandedCostPesewas,
-          batchSnapshot: { receivedAt: committedAt, expiryBusinessDate: line.expiryBusinessDate, unitsPerBulk: line.unitsPerBulk, baseUnit: line.baseUnit, bulkUnit: line.bulkUnit }, createdBy, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp()
+          batchSnapshot: { receivedAt: committedAt, expiryBusinessDate: line.expiryBusinessDate, unitsPerBulk: line.unitsPerBulk, baseUnit: line.baseUnit, bulkUnit: line.bulkUnit, receivedQuantityBreakdown: line.receivedQuantityBreakdown }, createdBy, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp()
         });
       });
       transaction.set(requestRef, { schemaVersion: 2, uid, requestFingerprint, purchaseId: purchaseRef.id, response, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp() });

@@ -2,7 +2,7 @@ import { receivePurchaseInCloudTransaction } from "../services/cloudProductServi
 import { isSecureSalesEnabled } from "../services/secureCheckoutService.js";
 import { getUnresolvedSecureReceive, submitSecureReceive } from "../services/secureReceivingService.js";
 import { parsePesewas, purchaseFromSecureReceiveAttempt } from "../services/secureReceivingCore.js";
-import { applyInitialLegacySellingPrice } from "../services/legacyReceivingCore.js";
+import { applyInitialLegacySellingPrice, calculateLegacyReceivedQuantity } from "../services/legacyReceivingCore.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 12000;
@@ -180,6 +180,9 @@ function renderSupplierOptions(selectedSupplier = "") {
 
 function renderPurchaseLine(index, line = {}, { locked, secureModeEnabled }) {
   const disabled = locked ? "disabled" : "";
+  const product = getProductById(line.productId);
+  const bulkUnit = product?.bulkUnit || "bulk unit";
+  const baseUnit = product?.baseUnit || "base unit";
   const sellingPrice = secureModeEnabled ? "" : `
     <div class="form-row">
       <label for="lineUnitSellingPrice_${index}">Selling Price</label>
@@ -207,13 +210,21 @@ function renderPurchaseLine(index, line = {}, { locked, secureModeEnabled }) {
       </div>
 
       <div class="form-row">
-        <label for="lineBulkQuantity_${index}">Bulk Quantity Received</label>
-        <input id="lineBulkQuantity_${index}" class="number-field line-bulk-quantity" type="number" min="1" step="1" value="${escapeHtml(line.bulkQuantityReceived || "")}" oninput="updatePurchaseSummary()" ${disabled}>
+        <label for="lineBulkQuantity_${index}">Bulk quantity received (${escapeHtml(bulkUnit)})</label>
+        <input id="lineBulkQuantity_${index}" class="number-field line-bulk-quantity" type="number" min="0" step="1" value="${escapeHtml(line.bulkQuantityReceived ?? "")}" oninput="updatePurchaseSummary()" ${disabled}>
+        <small class="field-hint">Blank means zero.</small>
       </div>
 
       <div class="form-row">
-        <label for="lineTotalBulkCost_${index}">Total Bulk Cost</label>
-        <input id="lineTotalBulkCost_${index}" class="number-field line-total-bulk-cost" type="number" min="0" step="0.01" value="${escapeHtml(line.totalBulkCost || "")}" oninput="updatePurchaseSummary()" ${disabled}>
+        <label for="lineLooseBaseQuantity_${index}">Loose base units received (${escapeHtml(baseUnit)})</label>
+        <input id="lineLooseBaseQuantity_${index}" class="number-field line-loose-base-quantity" type="number" min="0" step="1" value="${escapeHtml(line.looseBaseQuantityReceived ?? "")}" oninput="updatePurchaseSummary()" ${disabled}>
+        <small class="field-hint">Blank means zero.</small>
+      </div>
+
+      <div class="form-row">
+        <label for="lineTotalPurchaseCost_${index}">Total purchase cost</label>
+        <input id="lineTotalPurchaseCost_${index}" class="number-field line-total-purchase-cost" type="number" min="0" step="0.01" value="${escapeHtml(line.totalPurchaseCost ?? line.totalBulkCost ?? "")}" oninput="updatePurchaseSummary()" ${disabled}>
+        <small class="field-hint">Total for this entire line, including bulk and loose units; not a per-pack price.</small>
       </div>
 
       <div class="form-row">
@@ -239,6 +250,11 @@ function renderProductOptions(selectedProductId = "") {
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((product) => `<option value="${product.id}" ${product.id === selectedProductId ? "selected" : ""}>${escapeHtml(product.name)}</option>`)
     .join("");
+}
+
+function getLinePurchaseCost(line) {
+  const values = /** @type {any} */ (line);
+  return values?.totalPurchaseCost ?? values?.totalBulkCost;
 }
 
 function addPurchaseLine() {
@@ -274,21 +290,24 @@ function updatePurchaseSummary() {
 
   lines.forEach((line, index) => {
     const product = getProductById(line.productId);
-    const bulkQuantity = Number(line.bulkQuantityReceived || 0);
-    const quantityReceived = bulkQuantity * getUnitsPerBulk(product);
-    const totalLandedCost = Number(line.totalBulkCost || 0) + Number(line.additionalExpenses || 0);
+    let received;
+    try {
+      received = calculateLegacyReceivedQuantity({ ...line, unitsPerBulk: getUnitsPerBulk(product) });
+    } catch {
+      received = { bulkQuantityReceived: Number(line.bulkQuantityReceived || 0), looseBaseQuantityReceived: Number(line.looseBaseQuantityReceived || 0), unitsPerBulk: getUnitsPerBulk(product), quantityReceived: 0 };
+    }
+    const totalLandedCost = Number(getLinePurchaseCost(line) ?? 0) + Number(line.additionalExpenses || 0);
     const preview = document.querySelector(`[data-line-index="${index}"] .line-preview`);
     totalAmount += totalLandedCost;
-    totalBaseUnits += quantityReceived;
+    totalBaseUnits += received.quantityReceived;
 
     if (preview) {
       preview.innerHTML = product ? `
         <strong>${escapeHtml(product.name)}</strong><br>
         Batch: ${escapeHtml(line.batchId || "pending")}<br>
-        Bulk quantity received: ${bulkQuantity} ${escapeHtml(product.bulkUnit || "bulk unit")}(s)<br>
-        Unit quantity: ${quantityReceived} ${escapeHtml(product.baseUnit || "base unit")}(s)<br>
+        ${received.bulkQuantityReceived} ${escapeHtml(product.bulkUnit || "bulk unit")}(s) × ${received.unitsPerBulk} ${escapeHtml(product.baseUnit || "base unit")}(s) + ${received.looseBaseQuantityReceived} loose ${escapeHtml(product.baseUnit || "base unit")}(s) = ${received.quantityReceived} ${escapeHtml(product.baseUnit || "base unit")}(s)<br>
         Total landed cost: ${formatCurrency(totalLandedCost)}<br>
-        Unit cost: ${formatCurrency(quantityReceived ? totalLandedCost / quantityReceived : 0)} = landed cost ÷ quantity
+        Unit cost: ${formatCurrency(received.quantityReceived ? totalLandedCost / received.quantityReceived : 0)} = landed cost ÷ total base quantity
         ${secureMode.enabled === false ? `<br>Selling price: ${formatCurrency(line.unitSellingPrice)}` : ""}
       ` : "Choose a product to preview this line.";
     }
@@ -346,8 +365,8 @@ function renderSavedReceipt(receipt) {
       <div><strong>Date Received:</strong> ${formatReceiptTime(receipt.purchaseDate || receipt.receivedAt)}</div>
       <div><strong>Payment:</strong> ${escapeHtml(receipt.paymentStatus || "N/A")}</div>
       <div><strong>Due Date:</strong> ${escapeHtml(receipt.dueDate || "N/A")}</div>
-      <div><strong>Quantity Received:</strong> ${receipt.baseQuantity || receipt.quantityReceived} ${escapeHtml(receipt.baseUnit || "base unit")}(s)</div>
-      <div><strong>Total Bulk Cost:</strong> ${formatCurrency(receipt.totalBulkCost)}</div>
+      <div><strong>Received:</strong> ${Number(receipt.bulkQuantityReceived || 0)} ${escapeHtml(receipt.bulkUnit || "bulk unit")}(s) + ${Number(receipt.looseBaseQuantityReceived || 0)} ${escapeHtml(receipt.baseUnit || "base unit")}(s) = ${receipt.baseQuantity ?? receipt.quantityReceived} ${escapeHtml(receipt.baseUnit || "base unit")}(s)</div>
+      <div><strong>Total purchase cost:</strong> ${formatCurrency(receipt.totalPurchaseCost ?? receipt.totalBulkCost)}</div>
       <div><strong>Additional Expenses:</strong> ${formatCurrency(receipt.additionalExpenses)}</div>
       <div><strong>Total Landed Cost:</strong> ${formatCurrency(receipt.totalLandedCost)}</div>
       <div><strong>Unit Cost:</strong> ${formatCurrency(receipt.unitCost)}</div>
@@ -432,8 +451,8 @@ function validatePurchase(values, lines, { requireSellingPrice }) {
   for (const [index, line] of lines.entries()) {
     const lineNumber = index + 1;
     if (!getProductById(line.productId)) return `Choose a product for line ${lineNumber}.`;
-    if (!Number.isSafeInteger(Number(line.bulkQuantityReceived)) || Number(line.bulkQuantityReceived) < 1) return `Enter a whole bulk quantity for line ${lineNumber}.`;
-    if (parsePesewas(line.totalBulkCost) === null) return `Enter a valid total bulk cost for line ${lineNumber}.`;
+    try { calculateLegacyReceivedQuantity({ ...line, unitsPerBulk: getUnitsPerBulk(getProductById(line.productId)) }); } catch (error) { return `${error.message} Line ${lineNumber}.`; }
+    if (parsePesewas(getLinePurchaseCost(line)) === null) return `Enter a valid total purchase cost for line ${lineNumber}.`;
     if (parsePesewas(line.additionalExpenses, { blankAsZero: true }) === null) return `Enter valid additional expenses for line ${lineNumber}.`;
     if (requireSellingPrice && (!Number.isFinite(Number(line.unitSellingPrice)) || Number(line.unitSellingPrice) <= 0)) return `Enter a valid unit selling price for line ${lineNumber}.`;
     if (line.expiryDate && isBatchExpired(line.expiryDate)) return `Expiry date on line ${lineNumber} cannot be in the past.`;
@@ -453,9 +472,9 @@ function buildSecurePurchase(values, lines) {
     receivedByNote: values.receivedBy,
     lines: lines.map((line) => ({
       productId: line.productId,
-      quantity: Number(line.bulkQuantityReceived),
-      unit: "bulk",
-      totalBulkCostPesewas: parsePesewas(line.totalBulkCost),
+      bulkQuantityReceived: Number(line.bulkQuantityReceived || 0),
+      looseBaseQuantityReceived: Number(line.looseBaseQuantityReceived || 0),
+      totalPurchaseCostPesewas: parsePesewas(getLinePurchaseCost(line)),
       additionalExpensesPesewas: parsePesewas(line.additionalExpenses, { blankAsZero: true }),
       expiryBusinessDate: line.expiryDate
     }))
@@ -464,11 +483,11 @@ function buildSecurePurchase(values, lines) {
 
 function buildLegacyReceipt(values, line, purchaseId) {
   const product = getProductById(line.productId);
-  const bulkQuantityReceived = Number(line.bulkQuantityReceived);
-  const quantityReceived = bulkQuantityReceived * getUnitsPerBulk(product);
-  const totalBulkCost = Number(line.totalBulkCost);
+  const quantities = calculateLegacyReceivedQuantity({ ...line, unitsPerBulk: getUnitsPerBulk(product) });
+  const { bulkQuantityReceived, looseBaseQuantityReceived, quantityReceived } = quantities;
+  const totalPurchaseCost = Number(getLinePurchaseCost(line));
   const additionalExpenses = Number(line.additionalExpenses || 0);
-  const totalLandedCost = totalBulkCost + additionalExpenses;
+  const totalLandedCost = totalPurchaseCost + additionalExpenses;
   const batchId = line.batchId || createStockBatchId();
 
   return {
@@ -488,8 +507,14 @@ function buildLegacyReceipt(values, line, purchaseId) {
     receivedBy: values.receivedBy,
     receivedAt: values.purchaseDate,
     bulkQuantityReceived,
+    looseBaseQuantityReceived,
+    baseUnitsReceived: quantityReceived,
     quantityReceived,
-    totalBulkCost,
+    unitsPerBulk: quantities.unitsPerBulk,
+    receivedQuantityBreakdown: { bulkQuantityReceived, looseBaseQuantityReceived, unitsPerBulk: quantities.unitsPerBulk, totalBaseQuantity: quantityReceived },
+    totalPurchaseCost,
+    // Legacy reports still read this field; it is the line total, not a per-bulk price.
+    totalBulkCost: totalPurchaseCost,
     additionalExpenses,
     totalLandedCost,
     unitCost: totalLandedCost / quantityReceived,
@@ -538,7 +563,8 @@ function collectPurchaseLines() {
     productId: line.querySelector(".line-product")?.value || "",
     batchId: line.querySelector(".line-batch")?.value || "",
     bulkQuantityReceived: line.querySelector(".line-bulk-quantity")?.value || "",
-    totalBulkCost: line.querySelector(".line-total-bulk-cost")?.value || "",
+    looseBaseQuantityReceived: line.querySelector(".line-loose-base-quantity")?.value || "",
+    totalPurchaseCost: line.querySelector(".line-total-purchase-cost")?.value || "",
     additionalExpenses: line.querySelector(".line-additional-expenses")?.value || "",
     expiryDate: line.querySelector(".line-expiry")?.value || "",
     unitSellingPrice: line.querySelector(".line-unit-selling-price")?.value || ""
@@ -560,8 +586,9 @@ function valuesFromUnresolvedAttempt(attempt) {
     lines: purchase.lines.map((line) => ({
       productId: line.productId,
       batchId: createStockBatchId(),
-      bulkQuantityReceived: line.quantity,
-      totalBulkCost: formatPesewas(line.totalBulkCostPesewas),
+      bulkQuantityReceived: line.bulkQuantityReceived ?? (line.unit === "bulk" ? line.quantity : 0),
+      looseBaseQuantityReceived: line.looseBaseQuantityReceived ?? (line.unit === "base" ? line.quantity : 0),
+      totalPurchaseCost: formatPesewas(line.totalPurchaseCostPesewas ?? line.totalBulkCostPesewas),
       additionalExpenses: formatPesewas(line.additionalExpensesPesewas),
       expiryDate: line.expiryBusinessDate,
       unitSellingPrice: ""
@@ -574,7 +601,8 @@ function createEmptyLine() {
     productId: state.products[0]?.id || "",
     batchId: createStockBatchId(),
     bulkQuantityReceived: "",
-    totalBulkCost: "",
+    looseBaseQuantityReceived: "",
+    totalPurchaseCost: "",
     additionalExpenses: "",
     unitSellingPrice: "",
     expiryDate: ""
