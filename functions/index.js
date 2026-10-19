@@ -9,6 +9,7 @@ const { getAllowedOrigins } = require("./runtime-config");
 const { createSecureSalesService } = require("./services/secureSalesService");
 const { createSecureReceivingService } = require("./services/secureReceivingService");
 const { createLegacyStocktakingService } = require("./services/legacyStocktakingService");
+const { createOpeningStockService } = require("./services/openingStockService");
 
 initializeApp();
 
@@ -20,6 +21,7 @@ const DEFAULT_PASSWORD_SETUP_URL = ALLOWED_ORIGINS[0];
 const secureSalesService = createSecureSalesService({ db, FieldValue, HttpsError });
 const secureReceivingService = createSecureReceivingService({ db, FieldValue, HttpsError });
 const legacyStocktakingService = createLegacyStocktakingService({ db, FieldValue, HttpsError });
+const openingStockService = createOpeningStockService({ db, FieldValue, HttpsError });
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -412,3 +414,8 @@ exports.saveWeeklyStocktakeCounts = onCall({ cors: ALLOWED_ORIGINS }, async (req
 exports.evaluateWeeklyStocktake = onCall({ cors: ALLOWED_ORIGINS }, async (request) => legacyStocktakingService.evaluateStocktake(request));
 exports.finaliseWeeklyStocktake = onCall({ cors: ALLOWED_ORIGINS }, async (request) => legacyStocktakingService.finaliseStocktake(request));
 exports.updateWeeklyStocktakeSchedule = onCall({ cors: ALLOWED_ORIGINS }, async (request) => legacyStocktakingService.updateWeeklySchedule(request));
+
+exports.configureOpeningStockProduct = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.configureProduct(request)
+);
