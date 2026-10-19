@@ -1,17 +1,15 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { DEFAULT_TAX_SETTINGS, createSaleTaxHelpers } = require("./saleTaxHelpers");
 
 const SALES_ROLES = new Set(["admin", "sales"]);
 const PAYMENT_METHODS = new Set(["cash", "mobile_money", "card", "credit", "other"]);
-const TAX_MODES = new Set(["standard", "zeroRated", "exempt"]);
 const BUSINESS_TIME_ZONE = "Africa/Accra";
 const MAX_ITEMS_PER_SALE = 20;
 const MAX_BATCHES_PER_PRODUCT = 10;
 const MAX_BATCH_WRITES_PER_SALE = MAX_ITEMS_PER_SALE * MAX_BATCHES_PER_PRODUCT;
-const DEFAULT_TAX_SETTINGS = {
-  enabled: true, vatRate: 15, nhilRate: 2.5, getfundRate: 2.5, withholdingVatRate: 7, effectiveDate: null, taxMode: "standard"
-};
+
 
 function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new Date() }) {
   const fail = (code, message) => { throw new HttpsError(code, message); };
@@ -35,6 +33,8 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
   const allowed = (value, fields, field) => Object.keys(value).forEach((key) => {
     if (!fields.has(key)) fail("invalid-argument", `${field}.${key} is not supported.`);
   });
+
+  const { normalizedTax, calculateTax, legacyTax } = createSaleTaxHelpers({ fail, add, multiply });
 
   function normalizeRequest(data, { requireIdempotencyKey = true, requireQuoteFingerprint = false } = {}) {
     const request = object(data, "request");
@@ -61,35 +61,6 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
     if (requireQuoteFingerprint && !/^[a-f0-9]{64}$/.test(expectedQuoteFingerprint)) fail("failed-precondition", "A current secure checkout quote is required before submission.");
     if (!requireQuoteFingerprint && expectedQuoteFingerprint) fail("invalid-argument", "Quotes cannot include an expectedQuoteFingerprint.");
     return { idempotencyKey, items, paymentMethod, expectedQuoteFingerprint };
-  }
-
-  function normalizedTax(data = {}) {
-    const settings = { ...DEFAULT_TAX_SETTINGS, ...data };
-    const taxMode = String(settings.taxMode || DEFAULT_TAX_SETTINGS.taxMode);
-    if (!TAX_MODES.has(taxMode)) fail("failed-precondition", "settings/tax contains an unsupported taxMode.");
-    const rate = (value, field) => {
-      const number = Number(value);
-      if (!Number.isFinite(number) || number < 0 || number > 100) fail("failed-precondition", `${field} must be a percentage from 0 to 100.`);
-      return Math.round(number * 100);
-    };
-    return {
-      enabled: settings.enabled !== false && taxMode !== "exempt", taxMode, effectiveDate: settings.effectiveDate || null,
-      vatRateBasisPoints: rate(settings.vatRate, "settings/tax.vatRate"),
-      nhilRateBasisPoints: rate(settings.nhilRate, "settings/tax.nhilRate"),
-      getfundRateBasisPoints: rate(settings.getfundRate, "settings/tax.getfundRate"),
-      withholdingVatRateBasisPoints: rate(settings.withholdingVatRate, "settings/tax.withholdingVatRate")
-    };
-  }
-
-  function calculateTax(subtotalPesewas, tax) {
-    const percentage = (basisPoints, field) => Math.round(multiply(subtotalPesewas, basisPoints, field) / 10000);
-    const chargeable = tax.enabled && tax.taxMode === "standard";
-    const vatAmountPesewas = chargeable ? percentage(tax.vatRateBasisPoints, "VAT") : 0;
-    const nhilAmountPesewas = chargeable ? percentage(tax.nhilRateBasisPoints, "NHIL") : 0;
-    const getfundAmountPesewas = chargeable ? percentage(tax.getfundRateBasisPoints, "GETFund") : 0;
-    const withholdingVatAmountPesewas = chargeable ? percentage(tax.withholdingVatRateBasisPoints, "withholding VAT") : 0;
-    const taxAmountPesewas = add(add(vatAmountPesewas, nhilAmountPesewas, "tax total"), getfundAmountPesewas, "tax total");
-    return { ...tax, enabled: chargeable, subtotalPesewas, vatAmountPesewas, nhilAmountPesewas, getfundAmountPesewas, withholdingVatAmountPesewas, taxAmountPesewas, totalAmountPesewas: add(subtotalPesewas, taxAmountPesewas, "sale total") };
   }
 
   function businessDate() {
@@ -160,14 +131,6 @@ function createSecureSalesService({ db, FieldValue, HttpsError, now = () => new 
     const basePricePesewas = safeInteger(product.sellingPricePesewas, "Product sellingPricePesewas", { min: 1 });
     const bulkPricePesewas = product.bulkSellingPricePesewas === undefined || product.bulkSellingPricePesewas === null ? null : safeInteger(product.bulkSellingPricePesewas, "Product bulkSellingPricePesewas", { min: 1 });
     return { unitsPerBulk, basePricePesewas, bulkPricePesewas, unitPricePesewas: unit === "base" ? basePricePesewas : (bulkPricePesewas ?? multiply(basePricePesewas, unitsPerBulk, "derived bulk price")) };
-  }
-
-  function legacyTax(tax) {
-    return {
-      subtotal: tax.subtotalPesewas / 100, vatRate: tax.vatRateBasisPoints / 100, nhilRate: tax.nhilRateBasisPoints / 100, getfundRate: tax.getfundRateBasisPoints / 100, withholdingVatRate: tax.withholdingVatRateBasisPoints / 100,
-      vatAmount: tax.vatAmountPesewas / 100, nhilAmount: tax.nhilAmountPesewas / 100, getfundAmount: tax.getfundAmountPesewas / 100, withholdingVatAmount: tax.withholdingVatAmountPesewas / 100,
-      taxAmount: tax.taxAmountPesewas / 100, totalAmount: tax.totalAmountPesewas / 100, taxMode: tax.taxMode, enabled: tax.enabled, effectiveDate: tax.effectiveDate
-    };
   }
 
   function createQuoteFingerprint({ paymentMethod, items, subtotalPesewas, taxBreakdown, totalAmountPesewas }) {
