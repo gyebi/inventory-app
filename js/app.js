@@ -14,6 +14,8 @@ import {
   fetchPriceChangesFromCloud,
   fetchSalesFromCloud,
   fetchStockAdjustmentsFromCloud,
+  fetchOpeningStockProductsFromCloud,
+  fetchOpeningStockBalancesFromCloud,
   fetchWeeklyStocktakingSettingsFromCloud,
   fetchStockBatchesFromCloud,
   fetchStockReceiptsFromCloud
@@ -28,6 +30,8 @@ import {
   listenToPriceChanges,
   listenToSales,
   listenToStockAdjustments,
+  listenToOpeningStockProducts,
+  listenToOpeningStockBalances,
   listenToStocktakeSessions,
   listenToWeeklyStocktakingSettings,
   listenToStockBatches,
@@ -57,6 +61,7 @@ import {
   isAuthoritativeV2Product,
   shouldUseLegacyStockReconstruction
 } from "./services/authoritativeInventory.js";
+import { resolvePersistedProductSellingPrice } from "./services/productPriceResolver.mjs";
 
 
 const app = document.getElementById("app");
@@ -76,6 +81,8 @@ const defaultState = {
   suppliers: [],
   stockReceipts: [],
   stockAdjustments: [],
+  openingStockProducts: [],
+  openingStockBalances: [],
   stocktakeSessions: [],
   weeklyStocktakingSettings: null,
   priceChanges: [],
@@ -106,6 +113,8 @@ let stopStockReceiptsListener = null;
 let stopStockBatchesListener = null;
 let stopSalesListener = null;
 let stopStockAdjustmentsListener = null;
+let stopOpeningStockProductsListener = null;
+let stopOpeningStockBalancesListener = null;
 let stopStocktakeSessionsListener = null;
 let stopWeeklyStocktakingSettingsListener = null;
 let stopUsersListener = null;
@@ -459,7 +468,32 @@ function rebuildStockFromCloudReceipts() {
     };
   });
 
-  const productsWithReceipts = new Set(state.stockReceipts.map((receipt) => receipt.productId));
+  const openingBalanceStock = (state.openingStockBalances || []).flatMap((balance) => {
+    const product = productsById.get(balance.productId);
+    if (!shouldUseLegacyStockReconstruction(product)) return [];
+    return (balance.batches || []).map((batch) => ({
+      id: batch.id,
+      productId: balance.productId,
+      productName: product?.name || balance.productId,
+      quantity: Math.max(Number(batch.baseQuantity || 0) - (soldByBatch.get(batch.id) || 0) - (adjustedByBatch.get(batch.id) || 0), 0),
+      unitsPerBulk: Number(balance.unitsPerBulk || product?.unitsPerBulk || 1),
+      receivedAt: balance.confirmedAt || null,
+      expiryDate: "",
+      inventoryStatus: batch.inventoryStatus || "active",
+      openingStockBalance: true,
+      costStatus: "unknown",
+      unitCost: null,
+      totalLandedCost: null
+    }));
+  });
+
+  const productsWithReceipts = new Set([
+    ...state.stockReceipts.map((receipt) => receipt.productId),
+    ...(state.openingStockBalances || []).map((balance) => balance.productId),
+    // A verified opening-stock product must never be turned into a synthetic
+    // "initial receipt" while its separately listened balance is arriving.
+    ...(state.openingStockProducts || []).filter((setup) => setup.status === "verified").map((setup) => setup.productId)
+  ]);
   const syntheticStock = state.products
     .filter((product) => shouldUseLegacyStockReconstruction(product) && !productsWithReceipts.has(product.id) && Number(product.quantity || 0) > 0)
     .map((product) => ({
@@ -482,7 +516,7 @@ function rebuildStockFromCloudReceipts() {
       isCloudInitial: true
     }));
 
-  state.stock = [...receiptStock, ...syntheticStock, ...stocktakeSurpluses];
+  state.stock = [...receiptStock, ...openingBalanceStock, ...syntheticStock, ...stocktakeSurpluses];
   applyPriceChangeHistoryToStock();
   syncProductSellingPricesFromStock();
 
@@ -602,19 +636,7 @@ function resolveCurrentSellingPrice(productOrProductId, saleUnit = "base") {
     }
   }
 
-  const productUnitPrice = Number(product.sellingPrice || 0);
-
-  if (Number.isFinite(productUnitPrice) && productUnitPrice > 0) {
-    return saleUnit === "bulk" ? productUnitPrice * unitsPerBulk : productUnitPrice;
-  }
-
-  const productBulkPrice = Number(product.bulkSellingPrice || 0);
-
-  if (Number.isFinite(productBulkPrice) && productBulkPrice > 0) {
-    return saleUnit === "bulk" ? productBulkPrice : productBulkPrice / unitsPerBulk;
-  }
-
-  return 0;
+  return resolvePersistedProductSellingPrice(product, saleUnit);
 }
 
 function syncProductSellingPricesFromStock() {
@@ -625,7 +647,7 @@ function syncProductSellingPricesFromStock() {
     const unitPrice = resolveCurrentSellingPrice(product, "base");
 
     if (unitPrice > 0) {
-      const bulkPrice = unitPrice * (Number(product.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk || 1) : 1);
+      const bulkPrice = resolveCurrentSellingPrice(product, "bulk");
 
       if (product.sellingPrice !== unitPrice) {
         product.sellingPrice = unitPrice;
@@ -666,6 +688,17 @@ function replaceSales(sales = []) {
 
 function replaceStockAdjustments(adjustments = []) {
   state.stockAdjustments = Array.isArray(adjustments) ? adjustments : [];
+  rebuildStockFromCloudReceipts();
+  saveState();
+}
+
+function replaceOpeningStockProducts(products = []) {
+  state.openingStockProducts = Array.isArray(products) ? products : [];
+  saveState();
+}
+
+function replaceOpeningStockBalances(balances = []) {
+  state.openingStockBalances = Array.isArray(balances) ? balances : [];
   rebuildStockFromCloudReceipts();
   saveState();
 }
@@ -754,6 +787,14 @@ function stopCloudListeners() {
     stopStockAdjustmentsListener();
     stopStockAdjustmentsListener = null;
   }
+  if (stopOpeningStockProductsListener) {
+    stopOpeningStockProductsListener();
+    stopOpeningStockProductsListener = null;
+  }
+  if (stopOpeningStockBalancesListener) {
+    stopOpeningStockBalancesListener();
+    stopOpeningStockBalancesListener = null;
+  }
 
   if (stopStocktakeSessionsListener) {
     stopStocktakeSessionsListener();
@@ -788,6 +829,8 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
     "Stock batch",
     "Sales",
     "Stock adjustment",
+    "Opening-stock setup",
+    "Opening-stock balance",
     "Stocktake session",
     "Stocktaking schedule",
     ...(canSyncAllUsers() ? ["User"] : []),
@@ -802,12 +845,14 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
 
   const syncUsers = canSyncAllUsers();
 
-  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudAdjustments, cloudWeeklyStocktakingSettings, cloudStockBatches, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
+  const [cloudProducts, cloudPriceChanges, cloudReceipts, cloudSales, cloudAdjustments, cloudOpeningStockProducts, cloudOpeningStockBalances, cloudWeeklyStocktakingSettings, cloudStockBatches, cloudUsers, cloudSuppliers, cloudSupplierPayments] = await Promise.all([
     fetchProductsFromCloud(),
     fetchPriceChangesFromCloud(),
     fetchStockReceiptsFromCloud(),
     fetchSalesFromCloud(),
     fetchStockAdjustmentsFromCloud(),
+    fetchOpeningStockProductsFromCloud(),
+    fetchOpeningStockBalancesFromCloud(),
     fetchWeeklyStocktakingSettingsFromCloud(),
     fetchStockBatchesFromCloud(),
     syncUsers ? fetchUsersFromCloud() : Promise.resolve([]),
@@ -823,6 +868,8 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
   replaceStockReceipts(cloudReceipts);
   replaceSales(cloudSales);
   replaceStockAdjustments(cloudAdjustments);
+  replaceOpeningStockProducts(cloudOpeningStockProducts);
+  replaceOpeningStockBalances(cloudOpeningStockBalances);
   replaceWeeklyStocktakingSettings(cloudWeeklyStocktakingSettings);
   replaceAuthoritativeStockBatches(cloudStockBatches);
   if (syncUsers) {
@@ -901,6 +948,21 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       markCloudUpdated("Stock adjustments synced", { listenerName: "Stock adjustment", fromCache: metadata.fromCache });
     },
     (error) => handleCloudListenerError("Stock adjustment", error)
+  );
+
+  stopOpeningStockProductsListener = listenToOpeningStockProducts(
+    (products, metadata) => {
+      replaceOpeningStockProducts(products);
+      markCloudUpdated("Opening-stock setup synced", { listenerName: "Opening-stock setup", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Opening-stock setup", error)
+  );
+  stopOpeningStockBalancesListener = listenToOpeningStockBalances(
+    (balances, metadata) => {
+      replaceOpeningStockBalances(balances);
+      markCloudUpdated("Opening-stock balance synced", { listenerName: "Opening-stock balance", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Opening-stock balance", error)
   );
 
   stopStocktakeSessionsListener = listenToStocktakeSessions(
@@ -1024,6 +1086,7 @@ const dashboardNavItems = [
   { page: "inventory", icon: "▣", title: "Inventory" },
   { page: "receiveStock", icon: "⇩", title: "Receive Stock" },
   { page: "addProduct", icon: "＋", title: "Products" },
+  { page: "openingStock", icon: "◉", title: "Opening Stock" },
   { page: "stockAdjustment", icon: "🧯", title: "Stock Adjustment" },
   { page: "supplierPayment", icon: "🧾", title: "Supplier Payment" },
   { page: "suppliers", icon: "♧", title: "Suppliers" },
@@ -1090,6 +1153,7 @@ function navigate(page) {
 
   if (page === "dashboard" || page === "reports") window["renderDashboard"]?.();
   if (page === "addProduct") window.renderAddProduct?.();
+  if (page === "openingStock") window["renderOpeningStock"]?.();
   if (page === "receiveStock") window.renderReceiveStock?.();
   if (page === "supplierPayment") window.renderSupplierPayment?.();
   if (page === "priceChanges") window.renderSellingPriceChanges?.();
@@ -1820,6 +1884,7 @@ const receiptModule = await import("./services/receiptService.js");
 window.app.formatReceiptCurrency = receiptModule.formatReceiptCurrency;
 
 await import("./pages/addProduct.js");
+await import("./pages/openingStock.js");
 await import("./pages/receiveStock.js");
 await import("./pages/supplierPayment.js");
 await import("./pages/sellingPriceChanges.js");

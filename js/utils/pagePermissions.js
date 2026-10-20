@@ -11,6 +11,7 @@ export const pagePermissions = {
   inventory: "manage_stock",
   suppliers: "manage_stock",
   addProduct: "add_product",
+  openingStock: "all",
   help: null,
   home: null,
   logout: null,

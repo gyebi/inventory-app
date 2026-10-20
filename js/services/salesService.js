@@ -5,6 +5,7 @@ import { createAppError, ERROR_FLAGS } from "../utils/errorUtils.js";
 import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 import { isSecureSalesEnabled, quoteSecureCheckout, submitSecureCheckout } from "./secureCheckoutService.js";
+import { quoteOpeningStockCheckout, submitOpeningStockCheckout } from "./openingStockCheckoutService.js";
 
 const createSaleId = () => {
   return `CDV-${Date.now()}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
@@ -131,6 +132,19 @@ const getUnitPrices = (product, saleUnitType) => {
   };
 };
 
+const getApprovedUnitPrices = (product, saleUnitType) => {
+  const prices = getUnitPrices(product, saleUnitType);
+
+  if (!Number.isFinite(prices.unitSellingPrice) || prices.unitSellingPrice <= 0) {
+    throw createAppError(`A valid approved ${saleUnitType === "bulk" ? "bulk" : "base"} selling price is required before checkout.`, {
+      code: "sale/invalid-selling-price",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
+  }
+
+  return prices;
+};
+
 const getTaxDefaults = () => ({
   enabled: true,
   vatRate: 15,
@@ -230,6 +244,7 @@ const createLegacySale = (cartItems = []) => {
   const saleDrafts = [];
   let totalAmount = 0;
   let profit = 0;
+  let hasUnknownAllocatedCost = false;
 
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
     throw createAppError("Add at least one item before recording a sale.", {
@@ -266,7 +281,7 @@ const createLegacySale = (cartItems = []) => {
     const normalizedSaleUnit = resolveSaleUnitType(product, unit);
     const actualQtySold = toBaseUnit(product, quantity, normalizedSaleUnit);
     const displayUnit = getDisplayUnit(product, unit);
-    const { unitCostPrice, unitSellingPrice } = getUnitPrices(product, normalizedSaleUnit);
+    const { unitCostPrice, unitSellingPrice } = getApprovedUnitPrices(product, normalizedSaleUnit);
     const sellableBatches = getSellableBatches(stockBatches, product.id);
     const sellableQuantity = sellableBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
 
@@ -280,6 +295,16 @@ const createLegacySale = (cartItems = []) => {
     const itemTotal = unitSellingPrice * quantity;
     const itemProfit = (unitSellingPrice - unitCostPrice) * quantity;
     const batchAllocations = previewBatchAllocations(sellableBatches, actualQtySold);
+    const unknownCostBatchIds = new Set(
+      sellableBatches
+        .filter((batch) => batch.costStatus === "unknown"
+          || batch.openingStockBalance === true
+          || batch.unitCost === null)
+        .map((batch) => batch.id)
+    );
+    if (batchAllocations.some((allocation) => unknownCostBatchIds.has(allocation.batchId))) {
+      hasUnknownAllocatedCost = true;
+    }
     saleDrafts.push({
       product,
       sellableBatches,
@@ -316,7 +341,7 @@ const createLegacySale = (cartItems = []) => {
     subtotalAmount: totalAmount,
     taxBreakdown,
     totalAmount: taxBreakdown.totalAmount,
-    profit,
+    profit: hasUnknownAllocatedCost ? null : profit,
     createdAt: new Date().toISOString(),
     createdBy: currentUser
       ? {
@@ -380,10 +405,35 @@ const createLegacySale = (cartItems = []) => {
 // Secure mode never falls back to legacy writes or its asynchronous sync queue.
 export const getCheckoutConfirmation = async (cartItems = [], paymentMethod = "Cash") => {
   if (await isSecureSalesEnabled()) return { secure: true, ...(await quoteSecureCheckout({ cartItems, paymentMethod })) };
+  const state = getState();
+  const opening = new Map((state.openingStockProducts || [])
+    .filter((setup) => setup?.status === "unverified")
+    .map((setup) => [setup.productId, setup]));
+  const openingItems = cartItems.filter((item) => opening.has(item.productId));
+  if (openingItems.length > 0 && openingItems.length !== cartItems.length) {
+    throw createAppError("Opening-stock items cannot be combined with verified stock. Complete them as a separate sale so stock is never partially deducted.", {
+      code: "opening-stock/mixed-cart", source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
+  }
+  if (openingItems.length === cartItems.length && openingItems.length > 0) {
+    const quote = /** @type {any} */ (await quoteOpeningStockCheckout({ cartItems, paymentMethod }));
+    return { secure: false, openingStock: true, ...quote };
+  }
+  for (const cartItem of cartItems) {
+    const product = state.products.find((item) => item.id === cartItem.productId);
+    if (!product) {
+      throw createAppError("One of the selected products could not be found. Refresh inventory and try again.", {
+        code: "sale/product-not-found",
+        source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
+    }
+    getApprovedUnitPrices(product, resolveSaleUnitType(product, cartItem.unit || "base"));
+  }
   return { secure: false };
 };
 
-export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "") => {
+export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "", openingStock = false) => {
+  if (openingStock) return submitOpeningStockCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
   if (expectedQuoteFingerprint || await isSecureSalesEnabled()) return submitSecureCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
   return createLegacySale(cartItems);
 };

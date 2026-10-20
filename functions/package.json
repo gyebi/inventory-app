@@ -6,10 +6,10 @@
     "node": "22"
   },
   "scripts": {
-    "lint": "node --check index.js && node --check runtime-config.js && node --check services/secureSalesService.js && node --check services/secureReceivingService.js && node --check services/legacyStocktakingService.js && node --check scripts/seed-local-emulators.mjs && node --check scripts/seed-secure-sales-rehearsal.mjs && node --check scripts/reconcile-secure-inventory.mjs && node --check test/index.test.js && node --check test/runtime-config.test.js && node --check test/secure-sales.test.js && node --check test/secure-receiving.test.js && node --check test/legacy-stocktaking.test.js",
+    "lint": "node --check index.js && node --check runtime-config.js && node --check services/secureSalesService.js && node --check services/secureReceivingService.js && node --check services/legacyStocktakingService.js && node --check scripts/seed-local-emulators.mjs && node --check scripts/seed-secure-sales-rehearsal.mjs && node --check scripts/reconcile-secure-inventory.mjs && node --check test/index.test.js && node --check test/runtime-config.test.js && node --check test/secure-sales.test.js && node --check test/secure-receiving.test.js && node --check test/legacy-stocktaking.test.js && node --check services/saleTaxHelpers.js && node --check services/openingStockService.js && node --check test/opening-stock.test.js",
     "seed:secure-rehearsal": "node scripts/seed-secure-sales-rehearsal.mjs",
     "reconcile:secure": "node scripts/reconcile-secure-inventory.mjs",
-    "test": "node test/index.test.js && node test/runtime-config.test.js && node test/secure-sales.test.js && node test/secure-receiving.test.js && node test/legacy-stocktaking.test.js",
+    "test": "node test/index.test.js && node test/runtime-config.test.js && node test/secure-sales.test.js && node test/secure-receiving.test.js && node test/legacy-stocktaking.test.js && node test/opening-stock.test.js",
     "smoke": "node -e \"require('./index.js'); console.log('Functions module loaded without invoking Firebase APIs.')\"",
     "verify": "npm run lint && npm test && npm run smoke",
     "serve": "firebase emulators:start --only functions",

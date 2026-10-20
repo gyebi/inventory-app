@@ -2,6 +2,7 @@ import { renderReceiptPage } from "../services/receiptService.js";
 import { renderAndroidRawBtReceiptPage } from "../services/androidRawBtReceiptService.js";
 import { createSale, getCheckoutConfirmation } from "../services/salesService.js";
 import { getUnresolvedSecureCheckout } from "../services/secureCheckoutService.js";
+import { getUnresolvedOpeningStockCheckout } from "../services/openingStockCheckoutService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 import { hasPermission } from "../services/authService.js";
 import { fetchPrinterBridgeStatus } from "../services/printerBridgeService.js";
@@ -18,6 +19,10 @@ let posPrinterStatus = { checked: false, loading: false, ready: null, message: "
 let saleSubmissionInFlight = false;
 let pendingCheckoutQuote = null;
 
+function openingStockSetup(productId) {
+  return (state.openingStockProducts || []).find((setup) => setup.productId === productId && setup.status === "unverified") || null;
+}
+
 function formatSaleStock(product) {
   const quantity = getCommittedBaseQuantity(product);
   const unitsPerBulk = Number(product?.unitsPerBulk || 1) > 0 ? Number(product.unitsPerBulk) : 1;
@@ -33,9 +38,10 @@ function getProductUnitLabel(product, saleUnit = "bulk") {
     return saleUnit;
   }
 
+  const opening = openingStockSetup(product.id);
   return saleUnit === "base"
-    ? (product.baseUnit || "base unit")
-    : (product.bulkUnit || "bulk unit");
+    ? (opening?.baseUnit || product.baseUnit || "base unit")
+    : (opening?.bulkUnit || product.bulkUnit || "bulk unit");
 }
 
 function getSaleUnitPrice(product, saleUnit = "bulk") {
@@ -60,6 +66,9 @@ function getSaleUnitPrice(product, saleUnit = "bulk") {
     }
   }
 
+  const opening = openingStockSetup(product.id);
+  if (opening) return Number(saleUnit === "base" ? opening.basePricePesewas : opening.bulkPricePesewas) / 100;
+
   const resolveCurrentSellingPrice = window.app?.resolveCurrentSellingPrice;
 
   if (typeof resolveCurrentSellingPrice === "function") {
@@ -78,9 +87,10 @@ function toBaseQuantity(product, quantity, saleUnit = "bulk") {
     return 0;
   }
 
+  const opening = openingStockSetup(product.id);
   return saleUnit === "base"
     ? quantity
-    : quantity * Number(product.unitsPerBulk || 1);
+    : quantity * Number(opening?.unitsPerBulk || product.unitsPerBulk || 1);
 }
 
 function getCartProductBaseQuantity(product) {
@@ -109,9 +119,10 @@ function getSaleAvailabilitySummary(product, saleUnit = "bulk") {
     };
   }
 
+  const opening = openingStockSetup(product.id);
   const committedBaseQuantity = getCommittedBaseQuantity(product);
   const reservedBaseQuantity = getCartProductBaseQuantity(product);
-  const availableBaseQuantity = Math.max(committedBaseQuantity - reservedBaseQuantity, 0);
+  const availableBaseQuantity = opening ? null : Math.max(committedBaseQuantity - reservedBaseQuantity, 0);
 
   return {
     committedBaseQuantity,
@@ -164,7 +175,7 @@ function renderCartItems() {
 
 function renderSales(error = "") {
   ensureStockState();
-  const unresolvedCheckout = getUnresolvedSecureCheckout();
+  const unresolvedCheckout = getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout();
 
   // An uncertain callable response can still have committed. Restore its exact
   // persisted request after a refresh so the cashier can only retry that key.
@@ -213,7 +224,7 @@ function renderSales(error = "") {
     unitLabel: quantityUnitLabel
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
   const productCards = state.products
-    .filter((product) => getCommittedBaseQuantity(product) > 0)
+    .filter((product) => getCommittedBaseQuantity(product) > 0 || openingStockSetup(product.id))
     .map((product) => {
       const price = getSaleUnitPrice(product, selectedSaleUnit);
       const isSelected = product.id === selectedProduct.id;
@@ -241,19 +252,19 @@ function renderSales(error = "") {
     </div>
 
     ${error ? `<div class="message error">${error}</div>` : ""}
-    ${unresolvedCheckout ? `<div class="message error">A secure checkout is awaiting confirmation. Its cart cannot be changed. Use “Review & complete sale” to retry the same server request.</div>` : ""}
+    ${unresolvedCheckout ? `<div class="message error">A server checkout is awaiting confirmation. Its cart cannot be changed. Use “Review & complete sale” to retry the same server request.</div>` : ""}
 
     <div class="sale-panel sale-pos-layout">
       <div class="sale-summary">
         <strong>Available Stock</strong>
-        <span>${formatSaleStock(selectedProduct)}</span>
-        <small>Available for next sale: ${formatBaseQuantity(selectedProduct, availableBaseQuantity)}</small>
+        <span>${openingStockSetup(selectedProduct.id) ? "Opening stock: count still required" : formatSaleStock(selectedProduct)}</span>
+        <small>${openingStockSetup(selectedProduct.id) ? "This Admin-approved item records sales without a stock deduction until the physical count is confirmed." : `Available for next sale: ${formatBaseQuantity(selectedProduct, availableBaseQuantity)}`}</small>
       </div>
 
       <section class="sale-product-picker" aria-label="Product selection">
         <div class="sale-section-heading"><div><h3>Find products</h3><p>Search, then tap an item to select it.</p></div></div>
         <input id="saleProductSearch" class="sale-product-search" type="search" inputmode="search" autocomplete="off" placeholder="Search products or categories" oninput="filterSaleProducts(this.value)">
-        <div id="saleProductCards" class="sale-product-cards">${productCards || '<p class="sale-cart-empty">No in-stock products match the current list.</p>'}</div>
+        <div id="saleProductCards" class="sale-product-cards">${productCards || '<p class="sale-cart-empty">No sellable or approved opening-stock products match the current list.</p>'}</div>
       </section>
 
       <div class="form-column sale-entry-form">
@@ -372,7 +383,7 @@ function updateSalePreview() {
 
 function addSaleCartItem() {
   ensureStockState();
-  if (getUnresolvedSecureCheckout()) return;
+  if (getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout()) return;
 
   const productId = document.getElementById("productIndex")?.value;
   const saleUnit = document.getElementById("saleUnit")?.value || "bulk";
@@ -395,8 +406,16 @@ function addSaleCartItem() {
   const requestedBaseQuantity = toBaseQuantity(product, quantity, saleUnit);
   const existingCartItem = saleCart.find((item) => item.productId === productId && item.saleUnit === saleUnit);
   const existingBaseQuantity = getCartProductBaseQuantity(product);
+  const opening = openingStockSetup(productId);
+  const cartHasOpening = saleCart.some((item) => openingStockSetup(item.productId));
+  const cartHasVerified = saleCart.some((item) => !openingStockSetup(item.productId));
 
-  if (requestedBaseQuantity + existingBaseQuantity > getCommittedBaseQuantity(product)) {
+  if ((opening && cartHasVerified) || (!opening && cartHasOpening)) {
+    renderSales("Opening-stock items must be completed separately from verified stock. This prevents a partial checkout or stock deduction.");
+    return;
+  }
+
+  if (!opening && requestedBaseQuantity + existingBaseQuantity > getCommittedBaseQuantity(product)) {
     renderSales(`Not enough stock available for ${product.name}. Reduce the quantity or refresh inventory before trying again.`);
     return;
   }
@@ -421,13 +440,13 @@ function addSaleCartItem() {
 }
 
 function removeSaleCartItem(index) {
-  if (getUnresolvedSecureCheckout()) return;
+  if (getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout()) return;
   saleCart.splice(index, 1);
   renderSales();
 }
 
 function adjustSaleCartItem(index, change) {
-  if (getUnresolvedSecureCheckout()) return;
+  if (getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout()) return;
   const item = saleCart[index];
   const product = state.products.find((candidate) => candidate.id === item?.productId);
   if (!item || !product) return;
@@ -440,7 +459,7 @@ function adjustSaleCartItem(index, change) {
     .filter((_, itemIndex) => itemIndex !== index)
     .filter((candidate) => candidate.productId === product.id)
     .reduce((sum, candidate) => sum + toBaseQuantity(product, candidate.quantity, candidate.saleUnit), 0);
-  if (toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > getCommittedBaseQuantity(product)) {
+  if (!openingStockSetup(product.id) && toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > getCommittedBaseQuantity(product)) {
     renderSales(`Not enough stock available for ${product.name}.`);
     return;
   }
@@ -462,7 +481,7 @@ function filterSaleProducts(query = "") {
 }
 
 function setSalePaymentMethod(method) {
-  if (getUnresolvedSecureCheckout()) return;
+  if (getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout()) return;
   selectedSalePaymentMethod = method;
   renderSales();
 }
@@ -477,9 +496,9 @@ async function confirmSale() {
     saleSubmissionInFlight = true;
     setSaleProcessing(true);
     const confirmation = /** @type {any} */ (await getCheckoutConfirmation(saleCart, selectedSalePaymentMethod));
-    pendingCheckoutQuote = confirmation.secure ? confirmation : null;
+    pendingCheckoutQuote = confirmation.secure || confirmation.openingStock ? confirmation : null;
     const tax = confirmation.sale?.taxBreakdown;
-    const authoritativeTotals = confirmation.secure ? `
+    const authoritativeTotals = (confirmation.secure || confirmation.openingStock) ? `
       <div class="sale-confirmation-totals">
         <span>Subtotal <b>${app.formatReceiptCurrency(confirmation.sale.subtotalAmount)}</b></span>
         <span>NHIL (${Number(tax.nhilRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.nhilAmount)}</b></span>
@@ -521,7 +540,7 @@ async function recordSale() {
     saleSubmissionInFlight = true;
     setSaleProcessing(true);
     document.getElementById("confirmSaleButton")?.setAttribute("disabled", "disabled");
-    const sale = await createSale(saleCart, selectedSalePaymentMethod, pendingCheckoutQuote?.quoteFingerprint || "");
+    const sale = await createSale(saleCart, selectedSalePaymentMethod, pendingCheckoutQuote?.quoteFingerprint || "", pendingCheckoutQuote?.openingStock === true);
 
     if (!state.sales.some((entry) => entry.id === sale.id)) state.sales.push(sale);
     app.saveState();
