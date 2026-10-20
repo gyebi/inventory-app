@@ -1,4 +1,5 @@
 import { renderReceiptPage } from "../services/receiptService.js";
+import { renderAndroidRawBtReceiptPage } from "../services/androidRawBtReceiptService.js";
 import { createSale, getCheckoutConfirmation } from "../services/salesService.js";
 import { getUnresolvedSecureCheckout } from "../services/secureCheckoutService.js";
 import { getUnresolvedOpeningStockCheckout } from "../services/openingStockCheckoutService.js";
@@ -231,7 +232,10 @@ function renderSales(error = "") {
     }).join("");
   const localPrinter = localStorage.getItem("receiptPrinterType") === "mpt58";
   const canManagePrinter = hasPermission("manage_settings");
-  const printerMessage = localPrinter
+  const printerMessage =
+    localStorage.getItem("receiptPrinterType") === "android-rawbt"
+      ? "Android / RawBT selected"
+      : localPrinter
     ? (posPrinterStatus.loading
       ? "Checking local printer…"
       : posPrinterStatus.ready === true
@@ -546,7 +550,9 @@ async function recordSale() {
 
     const printerType = getSelectedPrinterType();
 
-    if (printerType === "mpt58") {
+    if (printerType === "android-rawbt") {
+      renderAndroidRawBtReceiptPage(sale);
+    } else if (printerType === "mpt58") {
       renderMptReceiptPage(sale);
     } else if (printerType === "web-serial") {
       renderWebSerialReceiptPage(sale);
