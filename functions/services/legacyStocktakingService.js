@@ -74,16 +74,24 @@ function createLegacyStocktakingService({ db, FieldValue, HttpsError, now = () =
   };
 
   async function legacyAvailability(transaction, productId) {
-    const [receipts, sales, adjustments] = await Promise.all([
+    const [receipts, sales, adjustments, openingBalance] = await Promise.all([
       transaction.get(db.collection("stockReceipts").where("productId", "==", productId)),
       transaction.get(db.collection("sales")),
-      transaction.get(db.collection("stockAdjustments").where("productId", "==", productId))
+      transaction.get(db.collection("stockAdjustments").where("productId", "==", productId)),
+      transaction.get(db.collection("openingStockBalances").doc(productId))
     ]);
     const batches = new Map();
     receipts.docs.forEach((entry) => {
       const receipt = entry.data() || {};
       if (receipt.batchId) batches.set(receipt.batchId, { id: receipt.batchId, quantity: integer(Number(receipt.quantityReceived || 0), "receipt quantity", { min: 0 }), expiryDate: receipt.expiryDate || "", receivedAt: receipt.receivedAt || "" });
     });
+    // Opening balances are inventory provenance records, not receipts. They
+    // deliberately have no supplier, cost, or expiry invented for them.
+    if (openingBalance.exists) {
+      (openingBalance.data()?.batches || []).forEach((batch) => {
+        if (batch?.id) batches.set(batch.id, { id: batch.id, quantity: integer(Number(batch.baseQuantity || 0), "opening balance quantity", { min: 0 }), expiryDate: "", receivedAt: "" });
+      });
+    }
     const deduct = (allocation) => {
       const batch = batches.get(allocation.batchId);
       if (batch) batch.quantity -= integer(Number(allocation.quantity ?? allocation.baseQuantity ?? 0), "allocation quantity", { min: 0 });
@@ -116,8 +124,9 @@ function createLegacyStocktakingService({ db, FieldValue, HttpsError, now = () =
       const caller = await getCaller(transaction, request.auth.uid, STOCK_ROLES);
       const retry = await existingRequest(transaction, requestRef("adjustment", caller.uid, payload.idempotencyKey), caller.uid, fingerprint);
       if (retry) return retry;
-      const [modeSnapshot, productSnapshot] = await Promise.all([transaction.get(db.collection("settings").doc("secureSales")), transaction.get(db.collection("products").doc(payload.productId))]);
+      const [modeSnapshot, productSnapshot, openingSetupSnapshot] = await Promise.all([transaction.get(db.collection("settings").doc("secureSales")), transaction.get(db.collection("products").doc(payload.productId)), transaction.get(db.collection("openingStockProducts").doc(payload.productId))]);
       if (modeSnapshot.exists && modeSnapshot.data()?.enabled === true) fail("failed-precondition", "Secure inventory mode is enabled; legacy adjustments are unavailable.");
+      if (openingSetupSnapshot.exists && openingSetupSnapshot.data()?.status === "counting") fail("failed-precondition", "This product has an active opening-stock count. Cancel or confirm that count before adjusting stock.");
       if (!productSnapshot.exists) fail("not-found", "Product was not found.");
       const product = productSnapshot.data() || {};
       if (Number(product.inventorySchemaVersion) === 2) fail("failed-precondition", "Authoritative v2 products are not supported by legacy adjustments.");

@@ -4,8 +4,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   increment,
   runTransaction,
+  query,
   serverTimestamp,
   setDoc,
   writeBatch
@@ -19,6 +21,8 @@ const stockReceiptsCollection = collection(db, "stockReceipts");
 const stockBatchesCollection = collection(db, "stockBatches");
 const priceChangesCollection = collection(db, "priceChanges");
 const stockAdjustmentsCollection = collection(db, "stockAdjustments");
+const openingStockProductsCollection = collection(db, "openingStockProducts");
+const openingStockBalancesCollection = collection(db, "openingStockBalances");
 const secureSalesSettingsRef = doc(db, "settings", "secureSales");
 const weeklyStocktakingSettingsRef = doc(db, "settings", "weeklyStocktaking");
 
@@ -140,6 +144,24 @@ export async function fetchStockAdjustmentsFromCloud() {
     return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to load stock adjustments from Firestore. Check your connection and try again.");
+  }
+}
+
+export async function fetchOpeningStockProductsFromCloud() {
+  try {
+    const snapshot = await getDocs(query(openingStockProductsCollection, limit(500)));
+    return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load opening-stock setup. Check your connection and try again.");
+  }
+}
+
+export async function fetchOpeningStockBalancesFromCloud() {
+  try {
+    const snapshot = await getDocs(query(openingStockBalancesCollection, limit(500)));
+    return snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to load opening-stock balances. Check your connection and try again.");
   }
 }
 

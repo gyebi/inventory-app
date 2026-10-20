@@ -419,3 +419,23 @@ exports.configureOpeningStockProduct = onCall(
   { cors: ALLOWED_ORIGINS },
   async (request) => openingStockService.configureProduct(request)
 );
+exports.quoteOpeningStockSale = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.quoteSale(request)
+);
+exports.submitOpeningStockSale = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.submitSale(request)
+);
+exports.startOpeningStockCount = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.startCount(request)
+);
+exports.cancelOpeningStockCount = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.cancelCount(request)
+);
+exports.confirmOpeningStockCount = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.confirmCount(request)
+);

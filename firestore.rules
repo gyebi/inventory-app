@@ -56,6 +56,14 @@ service cloud.firestore {
         get(/databases/$(database)/documents/settings/secureSales).data.enabled == true;
     }
 
+    // A server-owned opening-stock count is a per-product lock. This check is
+    // intentionally in the rules as well as callables so an older tab cannot
+    // update a product, receipt, or legacy checkout after counting begins.
+    function openingCountActive(productId) {
+      return exists(/databases/$(database)/documents/openingStockProducts/$(productId)) &&
+        get(/databases/$(database)/documents/openingStockProducts/$(productId)).data.status == "counting";
+    }
+
     function doesNotChangeAuthoritativeStock() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         "quantity",
@@ -76,8 +84,9 @@ service cloud.firestore {
       );
     }
 
-    function canUpdateProductStockForSale() {
+    function canUpdateProductStockForSale(productId) {
       return canCreateSale() &&
+        !openingCountActive(productId) &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
             "quantity",
@@ -94,15 +103,18 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if signedIn();
-      allow create, delete: if !secureSalesEnabled() && canManageStock();
-      allow update: if (!secureSalesEnabled() && (canManageStock()
-        || canUpdateProductStockForSale()))
+      allow create: if !secureSalesEnabled() && canManageStock();
+      allow delete: if !secureSalesEnabled() && canManageStock() && !openingCountActive(productId);
+      allow update: if (!secureSalesEnabled() && !openingCountActive(productId) && (canManageStock()
+        || canUpdateProductStockForSale(productId)))
         || (secureSalesEnabled() && canUpdateSecureProduct());
     }
 
     match /stockReceipts/{receiptId} {
       allow read: if signedIn();
-      allow create, update, delete: if !secureSalesEnabled() && canManageStock();
+      allow create: if !secureSalesEnabled() && canManageStock() && !openingCountActive(request.resource.data.productId);
+      allow update: if !secureSalesEnabled() && canManageStock() && !openingCountActive(resource.data.productId) && !openingCountActive(request.resource.data.productId);
+      allow delete: if !secureSalesEnabled() && canManageStock() && !openingCountActive(resource.data.productId);
     }
 
     match /suppliers/{supplierId} {
@@ -117,8 +129,8 @@ service cloud.firestore {
 
     match /sales/{saleId} {
       allow read: if signedIn();
-      allow create: if !secureSalesEnabled() && canCreateSale();
-      allow update, delete: if !secureSalesEnabled() && isAdmin();
+      allow create: if !secureSalesEnabled() && canCreateSale() && request.resource.data.get("openingStock", false) != true;
+      allow update, delete: if !secureSalesEnabled() && isAdmin() && resource.data.get("openingStock", false) != true;
     }
 
     // Immutable server-controlled legacy loss and stocktake correction ledger.
@@ -131,6 +143,22 @@ service cloud.firestore {
     match /openingStockProducts/{productId} {
       allow read: if hasUserProfile();
       allow write: if false;
+    }
+
+    match /openingStockCounts/{productId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    // These are opening balances, not purchases or supplier batches. Only the
+    // callable count confirmation can create one, and it is immutable.
+    match /openingStockBalances/{productId} {
+      allow read: if hasUserProfile();
+      allow write: if false;
+    }
+
+    match /openingStockSaleRequests/{requestId} {
+      allow read, write: if false;
     }
 
     match /stocktakeSessions/{sessionId} {

@@ -1,5 +1,5 @@
 import { db } from "../firebase.js";
-import { collection, doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, query } from "firebase/firestore";
 
 function listenToCollection(path, onChange, onError) {
   return onSnapshot(
@@ -39,6 +39,18 @@ export function listenToSales(onChange, onError) {
 
 export function listenToStockAdjustments(onChange, onError) {
   return listenToCollection("stockAdjustments", onChange, onError);
+}
+
+export function listenToOpeningStockProducts(onChange, onError) {
+  return onSnapshot(query(collection(db, "openingStockProducts"), limit(500)), { includeMetadataChanges: true }, (snapshot) => {
+    onChange(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), { fromCache: snapshot.metadata.fromCache, hasPendingWrites: snapshot.metadata.hasPendingWrites });
+  }, onError);
+}
+
+export function listenToOpeningStockBalances(onChange, onError) {
+  return onSnapshot(query(collection(db, "openingStockBalances"), limit(500)), { includeMetadataChanges: true }, (snapshot) => {
+    onChange(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), { fromCache: snapshot.metadata.fromCache, hasPendingWrites: snapshot.metadata.hasPendingWrites });
+  }, onError);
 }
 
 export function listenToStocktakeSessions(onChange, onError) {
