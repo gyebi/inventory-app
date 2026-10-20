@@ -10,6 +10,14 @@ on:
         options:
           - staging
           - production
+      scope:
+        description: "Hosting only or full release"
+        required: true
+        default: hosting
+        type: choice
+        options:
+          - hosting
+          - full
 
 permissions:
   contents: read
@@ -31,7 +39,15 @@ jobs:
         with:
           node-version: '22.x'
           cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - run: npm ci
+      - run: npm ci --prefix functions
+      - name: Verify application
+        run: npm run verify
+      - name: Verify Functions
+        run: npm --prefix functions run verify
       - id: auth
         uses: google-github-actions/auth@v3
         with:
@@ -44,7 +60,28 @@ jobs:
         run: printf '%s' "$FIREBASE_WEB_CONFIG" > .env.staging
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.30.0
-      - name: Deploy Hosting only to staging
+      - name: Write staging Functions configuration
+        if: inputs.scope == 'full'
+        run: |
+          printf '%s\n' \
+            'JYAANO_DEPLOYMENT_ENV=staging' \
+            'FUNCTIONS_ALLOWED_ORIGINS=https://jyaano-staging.web.app,https://jyaano-staging.firebaseapp.com' \
+            > functions/.env.jyaano-staging
+      - name: Deploy staging Functions
+        if: inputs.scope == 'full'
+        env:
+          FIREBASE_STAGING_PROJECT_ID: ${{ vars.FIREBASE_STAGING_PROJECT_ID }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+        run: |
+          test "$FIREBASE_STAGING_PROJECT_ID" = "jyaano-staging"
+          npm run deploy:staging:functions
+      - name: Deploy staging Firestore rules
+        if: inputs.scope == 'full'
+        env:
+          FIREBASE_STAGING_PROJECT_ID: ${{ vars.FIREBASE_STAGING_PROJECT_ID }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+        run: node scripts/deploy-firebase.mjs staging firestore:rules
+      - name: Deploy staging Hosting
         env:
           FIREBASE_STAGING_PROJECT_ID: ${{ vars.FIREBASE_STAGING_PROJECT_ID }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
@@ -61,7 +98,15 @@ jobs:
         with:
           node-version: '22.x'
           cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - run: npm ci
+      - run: npm ci --prefix functions
+      - name: Verify application
+        run: npm run verify
+      - name: Verify Functions
+        run: npm --prefix functions run verify
       - id: auth
         uses: google-github-actions/auth@v3
         with:
@@ -74,7 +119,26 @@ jobs:
         run: printf '%s' "$FIREBASE_WEB_CONFIG" > .env.production
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.30.0
-      - name: Deploy Hosting only after protected-environment approval
+      - name: Write production Functions configuration
+        if: inputs.scope == 'full'
+        run: |
+          printf '%s\n' \
+            'JYAANO_DEPLOYMENT_ENV=production' \
+            'FUNCTIONS_ALLOWED_ORIGINS=https://inventory-app-19d04.web.app,https://inventory-app-19d04.firebaseapp.com' \
+            > functions/.env.inventory-app-19d04
+      - name: Deploy production Functions
+        if: inputs.scope == 'full'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          JYAANO_ALLOW_PRODUCTION_DEPLOY: "yes"
+        run: npm run deploy:functions
+      - name: Deploy production Firestore rules
+        if: inputs.scope == 'full'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          JYAANO_ALLOW_PRODUCTION_DEPLOY: "yes"
+        run: npm run deploy:rules
+      - name: Deploy Hosting after protected-environment approval
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
           JYAANO_ALLOW_PRODUCTION_DEPLOY: yes
