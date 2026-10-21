@@ -6,6 +6,8 @@ const PRINTER_ERROR_CODES = Object.freeze({
   DRIVER_ERROR: "driver-error",
   PERMISSION_DENIED: "permission-denied",
   PRINT_JOB_FAILED: "print-job-failed",
+  PRINT_RESULT_UNKNOWN: "print-result-unknown",
+  PRINT_JOB_IN_PROGRESS: "print-job-in-progress",
   PRINTER_DISCOVERY_FAILED: "printer-discovery-failed",
   UNSUPPORTED_PLATFORM: "unsupported-platform",
 });
