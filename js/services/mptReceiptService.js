@@ -361,7 +361,9 @@ function renderThermalReceiptPage(sale, { webSerial = false } = {}) {
         statusElement.textContent =
           webSerial
             ? (printer.connected ? "Connected" : "Not connected")
-            : (printer.ready ? "Ready" : "Offline");
+            : (printer.type === "windows-bluetooth"
+                ? (printer.configured ? "Configured - confirm paper after printing" : "Setup required")
+                : (printer.ready ? "Ready" : "Offline"));
       }
     } catch (error) {
       if (nameElement) {

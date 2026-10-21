@@ -8,6 +8,8 @@ export const PRINTER_BRIDGE_ERROR_CODES = Object.freeze({
   DRIVER_ERROR: "driver-error",
   PERMISSION_DENIED: "permission-denied",
   PRINT_JOB_FAILED: "print-job-failed",
+  PRINT_RESULT_UNKNOWN: "print-result-unknown",
+  PRINT_JOB_IN_PROGRESS: "print-job-in-progress",
   PRINTER_DISCOVERY_FAILED: "printer-discovery-failed",
 });
 
@@ -69,6 +71,14 @@ export async function fetchAvailablePrinters() {
   };
 }
 
+export async function fetchAvailableSerialPorts() {
+  const result = await requestBridge("/serial-ports");
+  return {
+    ports: Array.isArray(result.ports) ? result.ports : [],
+    supported: result.supported === true,
+  };
+}
+
 export async function savePrinterConfiguration(printer) {
   return requestBridge("/configure", {
     method: "POST",
@@ -78,9 +88,10 @@ export async function savePrinterConfiguration(printer) {
   });
 }
 
-export async function testPrinterBridge() {
+export async function testPrinterBridge(printer) {
   return requestBridge("/test-print", {
     method: "POST",
+    ...(printer ? { body: JSON.stringify({ printer }) } : {}),
   });
 }
 

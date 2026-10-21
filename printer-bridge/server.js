@@ -12,6 +12,9 @@ const {
   discoverWindowsPrinters,
 } = require("./services/windowsPrinterDiscovery");
 const { toPrinterErrorPayload } = require("./services/printerErrors");
+const {
+  discoverWindowsSerialPorts,
+} = require("./services/windowsSerialDiscovery");
 
 let runtimeConfig = loadPrinterConfig();
 let printer = createPrinter(runtimeConfig.printer, {
@@ -292,24 +295,67 @@ async function handleRequest(req, res) {
       return await handleListPrinters(res, origin);
     }
 
+    if (req.method === "GET" && pathname === "/serial-ports") {
+      const ports = await discoverWindowsSerialPorts();
+      return sendJson(res, 200, {
+        ok: true,
+        ports,
+        supported: process.platform === "win32",
+      }, origin);
+    }
+
     if (req.method === "POST" && pathname === "/configure") {
       return await handleConfigure(req, res, origin);
     }
 
     if (req.method === "POST" && pathname === "/test-print") {
-      return printReceipt(createTestReceipt(), (error, result) => {
-        if (error) {
-          return sendJson(res, 500, {
+      return readJsonBody(req, (bodyError, body) => {
+        if (bodyError || !body || typeof body !== "object" || Array.isArray(body)) {
+          return sendJson(res, 400, {
             ok: false,
-            ...toPrinterErrorPayload(error),
+            error: "Invalid test request.",
           }, origin);
         }
 
-        return sendJson(res, 200, {
-          ok: true,
-          message: "Test print job accepted by the local print service. Confirm the physical receipt.",
-          printJob: result || null,
-        }, origin);
+        let testPrinter = printer;
+        let testConfig = runtimeConfig.printer;
+
+        try {
+          if (Object.prototype.hasOwnProperty.call(body, "printer")) {
+            if (!body.printer ||
+                body.printer.type !== "windows-bluetooth" ||
+                process.platform !== "win32") {
+              throw new Error("Selected-printer testing requires Windows Bluetooth.");
+            }
+            testConfig = normalizePrinterConfig(body.printer);
+            testPrinter = createPrinter(testConfig);
+          }
+        } catch (error) {
+          return sendJson(res, 400, {
+            ok: false,
+            error: error.message || "Invalid test printer settings.",
+          }, origin);
+        }
+
+        const text = buildReceipt({
+          ...createTestReceipt(),
+          paperWidthMm: testConfig.paperWidthMm,
+        });
+
+        testPrinter.print(text, (error, result) => {
+          if (error) {
+            return sendJson(res, 500, {
+              ok: false,
+              ...toPrinterErrorPayload(error),
+            }, origin);
+          }
+
+          return sendJson(res, 200, {
+            ok: true,
+            message: "Test submitted. Confirm the physical receipt.",
+            printJob: result || null,
+          }, origin);
+        });
       });
     }
 

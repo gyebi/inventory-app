@@ -1,5 +1,6 @@
 import {
   fetchAvailablePrinters,
+  fetchAvailableSerialPorts,
   fetchPrinterBridgeStatus,
   savePrinterConfiguration,
   testPrinterBridge,
@@ -22,6 +23,10 @@ const printerSettingsState = {
   printerStatus: null,
   printerConfig: null,
   availablePrinters: [],
+  availableSerialPorts: [],
+  serialDiscoveryError: "",
+  bluetoothTestFingerprint: "",
+  bluetoothOperationInProgress: false,
   bridgeMessage: "",
   bridgeError: "",
   loading: false,
@@ -93,7 +98,9 @@ function getPrinterStatusSummary(receiptOutputMode) {
     const errorCode = printerSettingsState.printerStatus.errorCode;
 
     return {
-      label: printerSettingsState.printerStatus.ready ? "Ready" : (errorLabels[errorCode] || "Offline"),
+      label: printerSettingsState.printerStatus.type === "windows-bluetooth"
+        ? (printerSettingsState.printerStatus.configured ? "Configured" : "Setup required")
+        : (printerSettingsState.printerStatus.ready ? "Ready" : (errorLabels[errorCode] || "Offline")),
       detail: printerSettingsState.printerStatus.message || printerSettingsState.bridgeMessage || "Print service responded.",
       className: printerSettingsState.printerStatus.ready ? "online" : "warning",
     };
@@ -133,6 +140,8 @@ function renderPrinterSettings(error = "", success = "") {
     : Number(printerConfig.paperWidthMm || printerStatus.paperWidthMm || 58);
   const printerTypeName = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE
     ? "Bluetooth / Web Serial (Chrome)"
+    : selectedType === "windows-bluetooth"
+    ? "Windows Bluetooth"
     : selectedType === "windows-usb"
     ? "Windows Printer (USB/Bluetooth)"
     : "Linux RFCOMM";
@@ -172,6 +181,7 @@ function renderPrinterSettings(error = "", success = "") {
           <select id="printerType" onchange="togglePrinterTypeFields()">
             <option value="linux-rfcomm" ${selectedType === "linux-rfcomm" ? "selected" : ""}>Linux Bluetooth Printer</option>
             <option value="windows-usb" ${selectedType === "windows-usb" ? "selected" : ""}>Windows USB Printer</option>
+            <option value="windows-bluetooth" ${selectedType === "windows-bluetooth" ? "selected" : ""}>Windows Bluetooth Printer</option>
           </select>
         </div>
 
@@ -191,6 +201,41 @@ function renderPrinterSettings(error = "", success = "") {
             value="${escapeHtml(printerConfig.device || printerStatus.device || "/dev/rfcomm0")}"
             placeholder="/dev/rfcomm0"
           >
+        </div>
+
+        <div id="windowsBluetoothFields" style="${selectedType === "windows-bluetooth" ? "" : "display:none;"}">
+          <div class="form-row">
+            <label for="windowsBluetoothPort">Bluetooth printer port</label>
+            <select id="windowsBluetoothPort">
+              <option value="">Choose outgoing COM port</option>
+              ${printerSettingsState.availableSerialPorts.map((entry) => `
+                <option value="${escapeHtml(entry.portName)}"
+                  ${entry.portName === printerConfig.portName ? "selected" : ""}>
+                  ${escapeHtml(entry.label || entry.portName)}
+                </option>
+              `).join("")}
+            </select>
+            <small class="field-hint">
+              Choose the outgoing port shown for your printer in Windows
+              Bluetooth Settings. Port numbers vary between computers.
+              ${escapeHtml(printerSettingsState.serialDiscoveryError)}
+            </small>
+          </div>
+          <details>
+            <summary>Advanced connection settings</summary>
+            <div class="form-row">
+              <label for="windowsBluetoothBaudRate">Baud rate</label>
+              <select id="windowsBluetoothBaudRate">
+                ${[9600, 19200, 38400, 57600, 115200].map((rate) => `
+                  <option value="${rate}"
+                    ${rate === Number(printerConfig.baudRate || 9600) ? "selected" : ""}>
+                    ${rate}
+                  </option>
+                `).join("")}
+              </select>
+            </div>
+          </details>
+          <p class="field-hint">MPT-II receipts use 58 mm paper.</p>
         </div>
 
         <div class="form-row" id="windowsPrinterFields" style="${selectedType === "windows-usb" ? "" : "display:none;"}">
@@ -267,10 +312,18 @@ async function hydratePrinterSettings() {
   printerSettingsState.bridgeMessage = "";
 
   try {
-    const [statusResult, printersResult] = await Promise.allSettled([
+    const [statusResult, printersResult, serialResult] = await Promise.allSettled([
       fetchPrinterBridgeStatus(),
       fetchAvailablePrinters(),
+      fetchAvailableSerialPorts(),
     ]);
+
+    printerSettingsState.availableSerialPorts =
+      serialResult.status === "fulfilled" ? serialResult.value.ports : [];
+    printerSettingsState.serialDiscoveryError =
+      serialResult.status === "rejected"
+        ? "Unable to load COM ports. Check that the updated Windows helper is running."
+        : "";
 
     if (statusResult.status === "fulfilled") {
       printerSettingsState.printerStatus = statusResult.value;
@@ -346,6 +399,11 @@ function togglePrinterTypeFields() {
   const printerType = document.getElementById("printerType")?.value || "linux-rfcomm";
   const linuxFields = document.getElementById("linuxPrinterFields");
   const windowsFields = document.getElementById("windowsPrinterFields");
+  const bluetoothFields = document.getElementById("windowsBluetoothFields");
+  if (bluetoothFields) {
+    bluetoothFields.style.display =
+      printerType === "windows-bluetooth" ? "block" : "none";
+  }
 
   if (linuxFields) {
     linuxFields.style.display = printerType === "linux-rfcomm" ? "block" : "none";
@@ -356,6 +414,50 @@ function togglePrinterTypeFields() {
   }
 }
 
+function getWindowsBluetoothSelection() {
+  const portName = String(
+    (/** @type {HTMLSelectElement | null} */ (document.getElementById("windowsBluetoothPort")))?.value || ""
+  ).trim().toUpperCase();
+  const baudRate = Number(
+    (/** @type {HTMLSelectElement | null} */ (document.getElementById("windowsBluetoothBaudRate")))?.value || 9600
+  );
+  if (!/^COM[1-9][0-9]{0,3}$/.test(portName)) {
+    throw new Error("Choose the printer's outgoing COM port.");
+  }
+  if (![9600, 19200, 38400, 57600, 115200].includes(baudRate)) {
+    throw new Error("Choose a supported baud rate.");
+  }
+  const name = (/** @type {HTMLInputElement | null} */ (document.getElementById("printerDisplayName")))?.value.trim() || "MPT-II";
+  return {
+    type: "windows-bluetooth",
+    name,
+    displayName: name,
+    portName,
+    baudRate,
+    paperWidthMm: 58,
+  };
+}
+
+async function saveWindowsBluetoothSelection() {
+  if (printerSettingsState.bluetoothOperationInProgress) return;
+  try {
+    const payload = getWindowsBluetoothSelection();
+    if (JSON.stringify(payload) !== printerSettingsState.bluetoothTestFingerprint) {
+      throw new Error("Test this selection and confirm the paper before saving.");
+    }
+    printerSettingsState.bluetoothOperationInProgress = true;
+    const result = await savePrinterConfiguration(payload);
+    printerSettingsState.printerStatus = result.printer;
+    printerSettingsState.printerConfig = result.config || payload;
+    setReceiptOutputMode("mpt58");
+    renderPrinterSettings("", "Windows Bluetooth printer saved for this computer.");
+  } catch (error) {
+    alert(describePrinterError(error, "Unable to save Bluetooth printer."));
+  } finally {
+    printerSettingsState.bluetoothOperationInProgress = false;
+  }
+}
+
 async function savePrinterSettings(event) {
   event?.preventDefault?.();
 
@@ -363,6 +465,11 @@ async function savePrinterSettings(event) {
   if (receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE &&
       !/Android/i.test(navigator.userAgent)) {
     renderPrinterSettings("Android / RawBT requires an Android phone or tablet.");
+    return;
+  }
+  if (receiptOutputMode === "mpt58" &&
+      (/** @type {HTMLSelectElement | null} */ (document.getElementById("printerType")))?.value === "windows-bluetooth") {
+    await saveWindowsBluetoothSelection();
     return;
   }
   setReceiptOutputMode(receiptOutputMode);
@@ -428,6 +535,29 @@ async function savePrinterSettings(event) {
 }
 
 async function testPrinterSettings() {
+  if ((/** @type {HTMLSelectElement | null} */ (document.getElementById("printerType")))?.value === "windows-bluetooth") {
+    if (printerSettingsState.bluetoothOperationInProgress) return;
+    printerSettingsState.bluetoothTestFingerprint = "";
+    try {
+      const payload = getWindowsBluetoothSelection();
+      printerSettingsState.bluetoothOperationInProgress = true;
+      await testPrinterBridge(payload);
+      const confirmed = window.confirm(
+        "Did the complete test receipt physically print correctly?"
+      );
+      if (confirmed) {
+        printerSettingsState.bluetoothTestFingerprint = JSON.stringify(payload);
+        alert("Test confirmed. Click Save Printer Settings.");
+      } else {
+        alert("Printer not confirmed. Check the connection before testing again.");
+      }
+    } catch (error) {
+      alert(describePrinterError(error, "Bluetooth test failed."));
+    } finally {
+      printerSettingsState.bluetoothOperationInProgress = false;
+    }
+    return;
+  }
   try {
     await testPrinterBridge();
     renderPrinterSettings("", "Test job submitted. Confirm that a physical receipt was printed.");
