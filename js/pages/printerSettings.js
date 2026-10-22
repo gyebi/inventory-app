@@ -19,6 +19,9 @@ import {
 
 const { renderPage } = window.app;
 
+// Keep the selected mode available during setup without saving it prematurely.
+let selectedReceiptOutputMode = null;
+
 const printerSettingsState = {
   printerStatus: null,
   printerConfig: null,
@@ -48,7 +51,8 @@ function describePrinterError(error, fallback) {
 }
 
 function getReceiptOutputMode() {
-  const mode = localStorage.getItem("receiptPrinterType");
+  const mode = selectedReceiptOutputMode ??
+    localStorage.getItem("receiptPrinterType");
   return ["browser", "mpt58", WEB_SERIAL_OUTPUT_MODE, ANDROID_RAWBT_OUTPUT_MODE].includes(mode) ? mode : "browser";
 }
 
@@ -371,28 +375,13 @@ async function refreshPrinterSettings() {
 }
 
 function togglePrinterServicePanel() {
-  const receiptOutputMode = document.getElementById("receiptOutputMode")?.value || "browser";
-  const servicePanel = document.getElementById("printerServicePanel");
-  const webSerialPanel = document.getElementById("webSerialPrinterPanel");
-  const androidPanel = document.getElementById("androidRawBtPanel");
-  const summary = document.getElementById("printerConnectionSummary");
+  selectedReceiptOutputMode =
+    (/** @type {HTMLSelectElement | null} */ (
+      document.getElementById("receiptOutputMode")
+    ))?.value || "browser";
 
-  if (androidPanel) {
-    androidPanel.style.display =
-      receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "block" : "none";
-  }
-  if (summary) {
-    summary.style.display =
-      receiptOutputMode === ANDROID_RAWBT_OUTPUT_MODE ? "none" : "block";
-  }
-
-  if (servicePanel) {
-    servicePanel.style.display = receiptOutputMode === "mpt58" ? "block" : "none";
-  }
-
-  if (webSerialPanel) {
-    webSerialPanel.style.display = receiptOutputMode === WEB_SERIAL_OUTPUT_MODE ? "block" : "none";
-  }
+  // Render the selected mode's controls and trigger existing helper discovery.
+  renderPrinterSettings();
 }
 
 function togglePrinterTypeFields() {
