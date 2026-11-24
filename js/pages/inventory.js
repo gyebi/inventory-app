@@ -1,3 +1,5 @@
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
+
 const app = /** @type {any} */ (window).app;
 const {
   ensureStockState,
@@ -30,7 +32,7 @@ function renderInventory() {
   }
 
   const normalizedQuery = inventorySearchQuery.trim().toLowerCase();
-  const filteredProducts = normalizedQuery
+  const filteredProducts = sortProductsForPresentation(normalizedQuery
     ? state.products.filter((product) => {
         const searchableText = [
           product.name,
@@ -44,7 +46,7 @@ function renderInventory() {
 
         return searchableText.includes(normalizedQuery);
       })
-    : state.products;
+    : state.products);
 
   let html = `
     <div class="page-title">
@@ -120,8 +122,9 @@ function renderInventory() {
   renderPage(html);
 }
 
-window.renderInventory = renderInventory;
-window.updateInventorySearch = updateInventorySearch;
+const globalWindow = /** @type {any} */ (window);
+globalWindow.renderInventory = renderInventory;
+globalWindow.updateInventorySearch = updateInventorySearch;
 
 function getUnitsPerBulk(product) {
   const unitsPerBulk = Number(product.unitsPerBulk);
@@ -164,7 +167,7 @@ function updateInventorySearch(value = "") {
   inventorySearchQuery = value;
   renderInventory();
 
-  const searchInput = document.getElementById("inventorySearch");
+  const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById("inventorySearch"));
 
   if (searchInput) {
     searchInput.focus();

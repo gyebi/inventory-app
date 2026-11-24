@@ -11,6 +11,7 @@ import {
 import { hasPermission } from "../services/authService.js";
 import { canAccessReportAction } from "../utils/hubNavigation.js";
 import { getWeeklyStocktakingAlert } from "../utils/weeklyStocktakingSchedule.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 const app = /** @type {any} */ (window).app;
 const {
@@ -440,9 +441,7 @@ function buildProductReport() {
 
   return buildTableMarkup(
     ["Product", "Category", "Base Price", "Bulk Price", "Units per Bulk"],
-    state.products
-      .slice()
-      .sort((left, right) => left.name.localeCompare(right.name))
+    sortProductsForPresentation(state.products)
       .map((product) => [
         product.name,
         product.category || "N/A",
@@ -454,7 +453,7 @@ function buildProductReport() {
 }
 
 function buildLowStockReport() {
-  const lowStockProducts = getLowStockProducts();
+  const lowStockProducts = sortProductsForPresentation(getLowStockProducts());
 
   if (lowStockProducts.length === 0) {
     return `<div class="card">No low stock items right now.</div>`;
@@ -473,9 +472,8 @@ function buildLowStockReport() {
 }
 
 function buildReorderReport() {
-  const reorderProducts = state.products
-    .filter((product) => getSellableProductQuantity(product) <= getProductLowStockThreshold(product))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const reorderProducts = sortProductsForPresentation(state.products
+    .filter((product) => getSellableProductQuantity(product) <= getProductLowStockThreshold(product)));
 
   if (reorderProducts.length === 0) {
     return `<div class="card">No products currently require reordering.</div>`;
@@ -788,9 +786,7 @@ function buildInventoryValuationReport() {
     return `<div class="card">No products added yet.</div>`;
   }
 
-  const rows = state.products
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name))
+  const rows = sortProductsForPresentation(state.products)
     .map((product) => {
       const batchSummary = getInventoryValueSummary(product.id);
 

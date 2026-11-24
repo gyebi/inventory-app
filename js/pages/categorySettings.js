@@ -1,4 +1,5 @@
 import { saveCategorySettingsToCloud, normalizeCategories } from "../services/categorySettingsService.js";
+import { sortPresentationValues } from "../utils/presentationSort.js";
 
 const { renderPage, saveState, state } = window.app;
 
@@ -11,6 +12,7 @@ function getCategoryValues() {
 }
 
 function renderCategorySettings(error = "", values = getCategoryValues()) {
+  const displayedCategories = sortPresentationValues(values);
   renderPage(`
     <div class="page-title">
       <h2>Product Categories</h2>
@@ -30,7 +32,7 @@ function renderCategorySettings(error = "", values = getCategoryValues()) {
       <div class="card">
         <strong>Current Categories</strong>
         <div class="category-list">
-          ${values.map((category) => `
+          ${displayedCategories.map((category) => `
             <div class="category-item">
               <span>${escapeHtml(category)}</span>
               <button type="button" onclick="removeCategory('${escapeJs(category)}')">Remove</button>

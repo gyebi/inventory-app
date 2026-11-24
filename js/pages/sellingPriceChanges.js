@@ -1,13 +1,12 @@
 import { savePriceChangeAndProductToCloud } from "../services/cloudProductService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 const app = /** @type {any} */ (window).app;
 const { renderPage, saveState, state } = app;
 
 function renderSellingPriceChanges(error = "", success = "") {
-  const products = state.products
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const products = sortProductsForPresentation(state.products);
 
   renderPage(`
     <div class="page-title">

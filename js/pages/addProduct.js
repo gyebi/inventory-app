@@ -1,5 +1,6 @@
 import { saveProductToCloud } from "../services/cloudProductService.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
+import { sortPresentationValues } from "../utils/presentationSort.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 20000;
 
@@ -14,7 +15,7 @@ function getCategoryOptions() {
 }
 
 function renderAddProduct(error = "") {
-  const categoryOptions = getCategoryOptions();
+  const categoryOptions = sortPresentationValues(getCategoryOptions());
   const canEditCategory = state.user?.role === "admin";
 
   renderPage(`

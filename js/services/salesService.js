@@ -6,6 +6,7 @@ import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 import { isSecureSalesEnabled, quoteSecureCheckout, submitSecureCheckout } from "./secureCheckoutService.js";
 import { quoteOpeningStockCheckout, submitOpeningStockCheckout } from "./openingStockCheckoutService.js";
+import { normalizeLegacySalePaymentMethod } from "./legacySalePayment.js";
 
 const createSaleId = () => {
   return `CDV-${Date.now()}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
@@ -236,9 +237,19 @@ const resolveSaleUnitType = (product, unit) => {
   });
 };
 
-const createLegacySale = (cartItems = []) => {
+const createLegacySale = (cartItems = [], paymentMethod = "Cash") => {
   const state = getState();
   const currentUser = getCurrentUser();
+  let normalizedPaymentMethod;
+
+  try {
+    normalizedPaymentMethod = normalizeLegacySalePaymentMethod(paymentMethod);
+  } catch (error) {
+    throw createAppError(error.message, {
+      code: "sale/invalid-payment-method",
+      source: ERROR_FLAGS.SOURCE_VALIDATION
+    });
+  }
   const stockBatches = Array.isArray(state.stock) ? state.stock : [];
   const taxSettings = normalizeTaxSettings(state.settings?.tax);
   const saleDrafts = [];
@@ -325,7 +336,7 @@ const createLegacySale = (cartItems = []) => {
 
   const taxBreakdown = calculateTaxBreakdown(totalAmount, taxSettings);
 
-  const sale = {
+  const sale = /** @type {any} */ ({
     id: createSaleId(),
     items: saleDrafts.map((item) => ({
       productId: item.productId,
@@ -341,6 +352,7 @@ const createLegacySale = (cartItems = []) => {
     subtotalAmount: totalAmount,
     taxBreakdown,
     totalAmount: taxBreakdown.totalAmount,
+    paymentMethod: normalizedPaymentMethod,
     profit: hasUnknownAllocatedCost ? null : profit,
     createdAt: new Date().toISOString(),
     createdBy: currentUser
@@ -354,7 +366,7 @@ const createLegacySale = (cartItems = []) => {
     user: currentUser?.fullName || currentUser?.username || "unknown",
     taxSettingsSnapshot: taxSettings,
     ...buildSaleSyncMetadata()
-  };
+  });
 
   const stockDeductions = saleDrafts.map((item) => ({
     productId: item.productId,
@@ -435,7 +447,7 @@ export const getCheckoutConfirmation = async (cartItems = [], paymentMethod = "C
 export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "", openingStock = false) => {
   if (openingStock) return submitOpeningStockCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
   if (expectedQuoteFingerprint || await isSecureSalesEnabled()) return submitSecureCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
-  return createLegacySale(cartItems);
+  return createLegacySale(cartItems, paymentMethod);
 };
 
 export const recordSale = ({ productId, quantity, saleUnit }) => {

@@ -1,4 +1,5 @@
 import { persistLegacyStockAdjustment, createPersistedRequestKey } from "../services/legacyStocktakingService.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 const {
   ensureStockState,
@@ -35,9 +36,7 @@ function renderStockAdjustment(error = "", values = {}) {
     return;
   }
 
-  const productOptions = state.products
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name))
+  const productOptions = sortProductsForPresentation(state.products)
     .map((product) => `
       <option value="${product.id}" ${product.id === values.productId ? "selected" : ""}>
         ${escapeHtml(product.name)}

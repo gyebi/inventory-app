@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase.js";
 import { toUserMessage } from "../utils/errorUtils.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 const app = /** @type {any} */ (window).app;
 const { renderPage, state } = app;
@@ -8,7 +9,7 @@ let selectedProductId = "";
 let message = "";
 
 const setupFor = (productId) => (state.openingStockProducts || []).find((entry) => entry.productId === productId) || null;
-const eligible = () => state.products.filter((product) => Number(product.inventorySchemaVersion) !== 2 && product.active !== false && product.isActive !== false && Number(product.quantity || 0) === 0 && Number(product.sellableQuantity || 0) === 0);
+const eligible = () => sortProductsForPresentation(state.products.filter((product) => Number(product.inventorySchemaVersion) !== 2 && product.active !== false && product.isActive !== false && Number(product.quantity || 0) === 0 && Number(product.sellableQuantity || 0) === 0));
 const pesewas = (value) => {
   const amount = Number(value);
   return Number.isFinite(amount) && amount > 0 && Math.round(amount * 100) === amount * 100 ? Math.round(amount * 100) : null;
