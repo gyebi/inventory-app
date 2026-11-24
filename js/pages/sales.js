@@ -6,6 +6,8 @@ import { getUnresolvedOpeningStockCheckout } from "../services/openingStockCheck
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 import { hasPermission } from "../services/authService.js";
 import { fetchPrinterBridgeStatus } from "../services/printerBridgeService.js";
+import { LEGACY_SALE_PAYMENT_METHODS } from "../services/legacySalePayment.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 import { renderMptReceiptPage, renderWebSerialReceiptPage } from "../services/mptReceiptService.js";
 
@@ -205,16 +207,18 @@ function renderSales(error = "") {
     return;
   }
 
-  if (!selectedProductId || !state.products.some((product) => product.id === selectedProductId)) {
-    selectedProductId = state.products[0]?.id || "";
+  const products = sortProductsForPresentation(state.products);
+
+  if (!selectedProductId || !products.some((product) => product.id === selectedProductId)) {
+    selectedProductId = products[0]?.id || "";
   }
 
-  const selectedProduct = state.products.find((product) => product.id === selectedProductId) || state.products[0];
+  const selectedProduct = products.find((product) => product.id === selectedProductId) || products[0];
   if (!selectedProduct) {
     return;
   }
 
-  const options = state.products.map(
+  const options = products.map(
     (product) => `<option value="${product.id}" ${product.id === selectedProduct.id ? "selected" : ""}>${product.name}</option>`
   ).join("");
   const baseUnitLabel = selectedProduct.baseUnit || "base unit";
@@ -223,8 +227,8 @@ function renderSales(error = "") {
     availableBaseQuantity,
     unitLabel: quantityUnitLabel
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
-  const productCards = state.products
-    .filter((product) => getCommittedBaseQuantity(product) > 0 || openingStockSetup(product.id))
+  const productCards = sortProductsForPresentation(products
+    .filter((product) => getCommittedBaseQuantity(product) > 0 || openingStockSetup(product.id)))
     .map((product) => {
       const price = getSaleUnitPrice(product, selectedSaleUnit);
       const isSelected = product.id === selectedProduct.id;
@@ -299,7 +303,7 @@ function renderSales(error = "") {
         </div>
         <div class="sale-payment-methods" role="group" aria-label="Payment method">
           <span>Payment method</span>
-          ${["Cash", "MoMo", "Card"].map((method) => `<button class="${selectedSalePaymentMethod === method ? "is-selected" : ""}" type="button" aria-pressed="${selectedSalePaymentMethod === method}" onclick="setSalePaymentMethod('${method}')" ${unresolvedCheckout ? "disabled" : ""}>${method}</button>`).join("")}
+          ${LEGACY_SALE_PAYMENT_METHODS.map((method) => `<button class="${selectedSalePaymentMethod === method ? "is-selected" : ""}" type="button" aria-pressed="${selectedSalePaymentMethod === method}" onclick="setSalePaymentMethod('${method}')" ${unresolvedCheckout ? "disabled" : ""}>${method}</button>`).join("")}
         </div>
         <div class="sale-checkout-total"><span>Cart total</span><strong>${window.app.formatReceiptCurrency(getCartTotal())}</strong></div>
         <button id="completeSaleButton" class="sale-complete-button" onclick="confirmSale()" ${saleCart.length ? "" : "disabled"}>${unresolvedCheckout ? "Retry secure checkout" : "Review & complete sale"}</button>

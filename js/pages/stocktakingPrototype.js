@@ -6,6 +6,7 @@ import {
   startWeeklyStocktake,
   updateWeeklyStocktakeSchedule
 } from "../services/legacyStocktakingService.js";
+import { sortPresentationValues } from "../utils/presentationSort.js";
 
 const { renderPage, state } = /** @type {any} */ (window).app;
 let selectedSessionId = "";
@@ -45,7 +46,7 @@ function rememberSession(session) {
 function renderStocktakingPrototype(message = "", error = false) {
   capturePendingInputs();
   const session = currentSession();
-  const legacyCategories = [...new Set((state.products || []).filter((product) => Number(product.inventorySchemaVersion) !== 2 && product.active !== false && product.isActive !== false).map((product) => product.category).filter(Boolean))].sort();
+  const legacyCategories = sortPresentationValues([...new Set((state.products || []).filter((product) => Number(product.inventorySchemaVersion) !== 2 && product.active !== false && product.isActive !== false).map((product) => product.category).filter(Boolean))]);
   const v2Categories = new Set((state.products || []).filter((product) => Number(product.inventorySchemaVersion) === 2 && product.active !== false && product.isActive !== false).map((product) => product.category));
   const reports = (state.stocktakeSessions || []).slice().sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || ""))).slice(0, 10);
   renderPage(`

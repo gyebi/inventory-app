@@ -1163,7 +1163,7 @@ function navigate(page) {
   if (page === "categorySettings") window.renderCategorySettings?.();
   if (page === "taxSettings") window.renderTaxSettings?.();
   if (page === "sales") window.renderSales?.();
-  if (page === "inventory") window.renderInventory?.();
+  if (page === "inventory") window["renderInventory"]?.();
   if (page === "staff") window.renderStaff?.();
   if (page === "help") window.renderHelp?.();
   if (page === "stocktakingPrototype") window["renderStocktakingPrototype"]?.();

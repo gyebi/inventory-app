@@ -4,6 +4,7 @@ import { getUnresolvedSecureReceive, submitSecureReceive } from "../services/sec
 import { parsePesewas, purchaseFromSecureReceiveAttempt } from "../services/secureReceivingCore.js";
 import { applyInitialLegacySellingPrice, calculateLegacyReceivedQuantity } from "../services/legacyReceivingCore.js";
 import { createAppError, ERROR_FLAGS, logAppError, toUserMessage } from "../utils/errorUtils.js";
+import { sortProductsForPresentation } from "../utils/presentationSort.js";
 
 const CLOUD_SAVE_TIMEOUT_MS = 12000;
 
@@ -245,9 +246,7 @@ function renderPurchaseLine(index, line = {}, { locked, secureModeEnabled }) {
 }
 
 function renderProductOptions(selectedProductId = "") {
-  return state.products
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name))
+  return sortProductsForPresentation(state.products)
     .map((product) => `<option value="${product.id}" ${product.id === selectedProductId ? "selected" : ""}>${escapeHtml(product.name)}</option>`)
     .join("");
 }
@@ -598,7 +597,7 @@ function valuesFromUnresolvedAttempt(attempt) {
 
 function createEmptyLine() {
   return {
-    productId: state.products[0]?.id || "",
+    productId: sortProductsForPresentation(state.products)[0]?.id || "",
     batchId: createStockBatchId(),
     bulkQuantityReceived: "",
     looseBaseQuantityReceived: "",
