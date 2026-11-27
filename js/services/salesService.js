@@ -6,6 +6,7 @@ import { getCurrentUser } from "./authService.js";
 import { buildSaleSyncMetadata, getSaleSyncStatus } from "./syncService.js";
 import { isSecureSalesEnabled, quoteSecureCheckout, submitSecureCheckout } from "./secureCheckoutService.js";
 import { quoteOpeningStockCheckout, submitOpeningStockCheckout } from "./openingStockCheckoutService.js";
+import { quoteProvisionalOpeningStockCheckout, submitProvisionalOpeningStockCheckout } from "./provisionalOpeningStockCheckoutService.js";
 import { normalizeLegacySalePaymentMethod } from "./legacySalePayment.js";
 
 const createSaleId = () => {
@@ -422,6 +423,18 @@ export const getCheckoutConfirmation = async (cartItems = [], paymentMethod = "C
     .filter((setup) => setup?.status === "unverified")
     .map((setup) => [setup.productId, setup]));
   const openingItems = cartItems.filter((item) => opening.has(item.productId));
+  const provisionalItems = cartItems.filter((item) => item.provisionalOpeningStock === true);
+  if (provisionalItems.length > 0) {
+    if (provisionalItems.length !== cartItems.length || provisionalItems.length > 20) {
+      throw createAppError("Provisional opening-stock items cannot be mixed with verified or approved-opening-stock items, and are limited to 20 distinct products per sale.", {
+        code: "provisional-opening/mixed-cart", source: ERROR_FLAGS.SOURCE_VALIDATION
+      });
+    }
+    const quote = /** @type {any} */ (await quoteProvisionalOpeningStockCheckout({
+      cartItems: provisionalItems, paymentMethod
+    }));
+    return { secure: false, openingStock: false, provisionalOpeningStock: true, ...quote };
+  }
   if (openingItems.length > 0 && openingItems.length !== cartItems.length) {
     throw createAppError("Opening-stock items cannot be combined with verified stock. Complete them as a separate sale so stock is never partially deducted.", {
       code: "opening-stock/mixed-cart", source: ERROR_FLAGS.SOURCE_VALIDATION
@@ -444,7 +457,10 @@ export const getCheckoutConfirmation = async (cartItems = [], paymentMethod = "C
   return { secure: false };
 };
 
-export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "", openingStock = false) => {
+export const createSale = async (cartItems = [], paymentMethod = "Cash", expectedQuoteFingerprint = "", openingStock = false, provisionalOpeningStock = false) => {
+  if (provisionalOpeningStock) {
+    return submitProvisionalOpeningStockCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
+  }
   if (openingStock) return submitOpeningStockCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
   if (expectedQuoteFingerprint || await isSecureSalesEnabled()) return submitSecureCheckout({ cartItems, paymentMethod, expectedQuoteFingerprint });
   return createLegacySale(cartItems, paymentMethod);

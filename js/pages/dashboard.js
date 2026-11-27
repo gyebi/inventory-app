@@ -12,6 +12,7 @@ import { hasPermission } from "../services/authService.js";
 import { canAccessReportAction } from "../utils/hubNavigation.js";
 import { getWeeklyStocktakingAlert } from "../utils/weeklyStocktakingSchedule.js";
 import { sortProductsForPresentation } from "../utils/presentationSort.js";
+import { getReportSaleProfit } from "../services/reportProfit.js";
 
 const app = /** @type {any} */ (window).app;
 const {
@@ -512,7 +513,7 @@ function buildSalesByProductReport() {
       `${entry.baseUnits} ${entry.baseUnit}(s)`,
       `${entry.bulkUnits} ${entry.bulkUnit}(s)`,
       formatReceiptCurrency(entry.amount),
-      formatReceiptCurrency(entry.profit),
+      formatReportProfit(entry.profit),
       String(entry.transactions)
     ])
   );
@@ -535,7 +536,7 @@ function buildSalesPeriodReport() {
       String(period.units),
       String(period.bulkUnits),
       formatReceiptCurrency(period.amount),
-      formatReceiptCurrency(period.profit)
+      formatReportProfit(period.profit)
     ])
   );
 }
@@ -557,7 +558,7 @@ function buildSalesBySalesPersonReport() {
         getSalePersonName(sale),
         getSalePrimaryName(sale),
         formatReceiptCurrency(sale.totalAmount),
-        formatReceiptCurrency(getSaleProfit(sale))
+        formatReportProfit(getSaleProfit(sale))
       ])
   );
 }
@@ -1077,7 +1078,11 @@ function getSaleBulkUnitsSold(sale) {
 }
 
 function getSaleProfit(sale) {
-  return sale.profit ?? sale.totalProfit ?? 0;
+  return getReportSaleProfit(sale);
+}
+
+function formatReportProfit(value) {
+  return value === null ? "Unknown" : formatReceiptCurrency(value);
 }
 
 function getSalePrimaryName(sale) {
@@ -1112,6 +1117,7 @@ function getSalesGroupedByProduct(sales = state.sales) {
         bulkUnits: 0,
         amount: 0,
         profit: 0,
+        profitUnknown: false,
         transactions: 0
       };
 
@@ -1142,7 +1148,13 @@ function getSalesGroupedByProduct(sales = state.sales) {
 
       const itemUnits = Number(item.actualQtySold || item.quantity || 0);
       const share = totalUnits > 0 ? itemUnits / totalUnits : 0;
-      entry.profit += Number(getSaleProfit(sale) || 0) * share;
+      const profit = getSaleProfit(sale);
+      if (profit === null) {
+        entry.profitUnknown = true;
+        entry.profit = null;
+      } else if (!entry.profitUnknown) {
+        entry.profit += profit * share;
+      }
     });
   });
 
@@ -1161,7 +1173,13 @@ function buildSalesPeriodSummary(sales, label, matcher) {
     summary.units += getSaleBaseUnitsSold(sale);
     summary.bulkUnits += getSaleBulkUnitsSold(sale);
     summary.amount += Number(sale.totalAmount || 0);
-    summary.profit += Number(getSaleProfit(sale) || 0);
+    const profit = getSaleProfit(sale);
+    if (profit === null) {
+      summary.profitUnknown = true;
+      summary.profit = null;
+    } else if (!summary.profitUnknown) {
+      summary.profit += profit;
+    }
     return summary;
   }, {
     label,
@@ -1169,7 +1187,8 @@ function buildSalesPeriodSummary(sales, label, matcher) {
     units: 0,
     bulkUnits: 0,
     amount: 0,
-    profit: 0
+    profit: 0,
+    profitUnknown: false
   });
 }
 

@@ -31,6 +31,7 @@ import {
   listenToSales,
   listenToStockAdjustments,
   listenToOpeningStockProducts,
+  listenToProvisionalOpeningStockProducts,
   listenToOpeningStockBalances,
   listenToStocktakeSessions,
   listenToWeeklyStocktakingSettings,
@@ -82,6 +83,7 @@ const defaultState = {
   stockReceipts: [],
   stockAdjustments: [],
   openingStockProducts: [],
+  provisionalOpeningStockProducts: [],
   openingStockBalances: [],
   stocktakeSessions: [],
   weeklyStocktakingSettings: null,
@@ -114,6 +116,7 @@ let stopStockBatchesListener = null;
 let stopSalesListener = null;
 let stopStockAdjustmentsListener = null;
 let stopOpeningStockProductsListener = null;
+let stopProvisionalOpeningStockProductsListener = null;
 let stopOpeningStockBalancesListener = null;
 let stopStocktakeSessionsListener = null;
 let stopWeeklyStocktakingSettingsListener = null;
@@ -697,6 +700,11 @@ function replaceOpeningStockProducts(products = []) {
   saveState();
 }
 
+function replaceProvisionalOpeningStockProducts(products = []) {
+  state.provisionalOpeningStockProducts = Array.isArray(products) ? products : [];
+  saveState();
+}
+
 function replaceOpeningStockBalances(balances = []) {
   state.openingStockBalances = Array.isArray(balances) ? balances : [];
   rebuildStockFromCloudReceipts();
@@ -790,6 +798,10 @@ function stopCloudListeners() {
   if (stopOpeningStockProductsListener) {
     stopOpeningStockProductsListener();
     stopOpeningStockProductsListener = null;
+  }
+  if (stopProvisionalOpeningStockProductsListener) {
+    stopProvisionalOpeningStockProductsListener();
+    stopProvisionalOpeningStockProductsListener = null;
   }
   if (stopOpeningStockBalancesListener) {
     stopOpeningStockBalancesListener();
@@ -956,6 +968,13 @@ async function startCloudProductSync({ forceReplaceProducts = false } = {}) {
       markCloudUpdated("Opening-stock setup synced", { listenerName: "Opening-stock setup", fromCache: metadata.fromCache });
     },
     (error) => handleCloudListenerError("Opening-stock setup", error)
+  );
+  stopProvisionalOpeningStockProductsListener = listenToProvisionalOpeningStockProducts(
+    (products, metadata) => {
+      replaceProvisionalOpeningStockProducts(products);
+      markCloudUpdated("Provisional opening-stock setup synced", { listenerName: "Provisional opening-stock", fromCache: metadata.fromCache });
+    },
+    (error) => handleCloudListenerError("Provisional opening-stock", error)
   );
   stopOpeningStockBalancesListener = listenToOpeningStockBalances(
     (balances, metadata) => {

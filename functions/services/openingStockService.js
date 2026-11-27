@@ -93,13 +93,14 @@ function createOpeningStockService({ db, FieldValue, HttpsError }) {
       const modeRef = db.collection("settings").doc("secureSales");
       const taxRef = db.collection("settings").doc("tax");
 
-      const [profileDoc, productDoc, setupDoc, modeDoc, taxDoc] =
+      const [profileDoc, productDoc, setupDoc, modeDoc, taxDoc, provisionalDoc] =
         await Promise.all([
           transaction.get(profileRef),
           transaction.get(productRef),
           transaction.get(setupRef),
           transaction.get(modeRef),
-          transaction.get(taxRef)
+          transaction.get(taxRef),
+          transaction.get(db.collection("provisionalOpeningStockProducts").doc(input.productId))
         ]);
 
       const profile = profileDoc.exists ? profileDoc.data() : null;
@@ -121,6 +122,10 @@ function createOpeningStockService({ db, FieldValue, HttpsError }) {
 
       if (!productDoc.exists) fail("not-found", "Product not found.");
       const product = productDoc.data();
+
+      if (provisionalDoc.exists && provisionalDoc.data()?.status === "needs_review") {
+        fail("failed-precondition", "Resolve the provisional details through the Opening Stock review list before approved setup.");
+      }
 
       if (Number(product.inventorySchemaVersion) === 2) {
         fail("failed-precondition",
@@ -202,6 +207,218 @@ function createOpeningStockService({ db, FieldValue, HttpsError }) {
 
   const { normalizedTax, calculateTax, legacyTax } =
     createSaleTaxHelpers({ fail, add: safeAdd, multiply: safeMultiply });
+
+  // Provisional details are deliberately kept out of products and out of the
+  // approved openingStockProducts document.  A product only becomes an
+  // approved opening-stock product through an explicit reviewer decision.
+  function productId(value) {
+    if (typeof value !== "string" || !value || value.length > 128 ||
+        value.includes("/") || value !== value.trim()) {
+      fail("invalid-argument", "A valid product ID is required.");
+    }
+    return value;
+  }
+
+  function shortLabel(value, field, { required = true } = {}) {
+    if (value === undefined && !required) return undefined;
+    if (typeof value !== "string" || !value.trim() || value.trim().length > 40 ||
+        /[\x00-\x1f\x7f]/.test(value)) {
+      fail("invalid-argument", field + " must be a short unit label.");
+    }
+    return value.trim();
+  }
+
+  function boundedInteger(value, field, min, max) {
+    if (!Number.isSafeInteger(value) || value < min || value > max) {
+      fail("invalid-argument", field + " is outside the supported range.");
+    }
+    return value;
+  }
+
+  function provisionalDetails(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value) ||
+        Object.keys(value).some((key) => ![
+          "baseUnit", "saleUnit", "bulkUnit", "unitsPerBulk", "unitPricePesewas"
+        ].includes(key))) {
+      fail("invalid-argument", "Invalid provisional selling details.");
+    }
+    const baseUnit = shortLabel(value.baseUnit, "Base unit");
+    const saleUnit = value.saleUnit;
+    if (!["base", "bulk"].includes(saleUnit)) {
+      fail("invalid-argument", "Choose a supported sale unit.");
+    }
+    const unitPricePesewas = boundedInteger(
+      value.unitPricePesewas, "Selling price", 1, 1000000000
+    );
+    if (saleUnit === "base") {
+      if (value.bulkUnit != null || value.unitsPerBulk != null) {
+        fail("invalid-argument", "Base-only sales cannot include a bulk conversion.");
+      }
+      return { baseUnit, saleUnit, unitPricePesewas, bulkUnit: null, unitsPerBulk: null };
+    }
+    const bulkUnit = shortLabel(value.bulkUnit, "Bulk unit");
+    const unitsPerBulk = boundedInteger(value.unitsPerBulk, "Units per bulk", 1, 1000000);
+    if (baseUnit.toLowerCase() === bulkUnit.toLowerCase() && unitsPerBulk !== 1) {
+      fail("invalid-argument", "Identical base and bulk labels require a conversion of one.");
+    }
+    return { baseUnit, saleUnit, bulkUnit, unitsPerBulk, unitPricePesewas };
+  }
+
+  function sameProvisionalDetails(left, right) {
+    return left && right && left.baseUnit === right.baseUnit &&
+      left.saleUnit === right.saleUnit && left.bulkUnit === right.bulkUnit &&
+      left.unitsPerBulk === right.unitsPerBulk &&
+      left.unitPricePesewas === right.unitPricePesewas;
+  }
+
+  function activeSeller(profile) {
+    return profile && ["admin", "sales"].includes(profile.role) &&
+      profile.active !== false && profile.isActive !== false;
+  }
+
+  function activeReviewer(profile) {
+    return profile && ["admin", "manager"].includes(profile.role) &&
+      profile.active !== false && profile.isActive !== false;
+  }
+
+  async function historyExists(transaction, productId) {
+    // These collections contain authoritative inventory history. A zero
+    // projection is never enough to infer that a legacy item was uncounted.
+    const queries = ["stockReceipts", "stockBatches", "stockMovements", "stockAdjustments", "sales"]
+      .map((name) => transaction.get(db.collection(name).where("productId", "==", productId).limit(1)));
+    const snapshots = await Promise.all(queries);
+    return snapshots.some((snapshot) => !snapshot.empty);
+  }
+
+  async function assertProvisionalEligibility(transaction, { uid, productId: id, requireSeller = true }) {
+    const [profileDoc, modeDoc, productDoc, setupDoc, countDoc, balanceDoc, provisionalDoc] = await Promise.all([
+      transaction.get(db.collection("users").doc(uid)),
+      transaction.get(db.collection("settings").doc("secureSales")),
+      transaction.get(db.collection("products").doc(id)),
+      transaction.get(db.collection("openingStockProducts").doc(id)),
+      transaction.get(db.collection("openingStockCounts").doc(id)),
+      transaction.get(db.collection("openingStockBalances").doc(id)),
+      transaction.get(db.collection("provisionalOpeningStockProducts").doc(id))
+    ]);
+    const profile = profileDoc.exists ? profileDoc.data() : null;
+    if (requireSeller ? !activeSeller(profile) : !activeReviewer(profile)) {
+      fail("permission-denied", requireSeller ? "This staff account cannot create sales." : "Only an active Manager or Admin can review provisional details.");
+    }
+    if (modeDoc.exists && modeDoc.data().enabled === true) {
+      fail("failed-precondition", "Provisional opening-stock sales are unavailable in secure inventory mode.");
+    }
+    const product = productDoc.exists ? productDoc.data() : null;
+    const approved = setupDoc.exists ? setupDoc.data() : null;
+    const count = countDoc.exists ? countDoc.data() : null;
+    const balance = balanceDoc.exists ? balanceDoc.data() : null;
+    const provisional = provisionalDoc.exists ? provisionalDoc.data() : null;
+    if (!product || product.active === false || product.isActive === false ||
+        Number(product.inventorySchemaVersion) === 2) {
+      fail("failed-precondition", "This product is not eligible for provisional opening-stock sales.");
+    }
+    if (approved || balance || count?.status === "counting" || approved?.status === "counting") {
+      fail("failed-precondition", "This product has approved setup or an active physical count.");
+    }
+    if (!Number.isSafeInteger(product.quantity) || product.quantity !== 0 ||
+        (product.sellableQuantity !== undefined && product.sellableQuantity !== 0)) {
+      fail("failed-precondition", "This product has a recorded stock balance.");
+    }
+    // An approved product-level setup must never be replaced by an emergency
+    // cashier price. Legacy informal fields are not treated as approvals.
+    if (product.pricingStatus === "approved" || product.packagingStatus === "approved") {
+      fail("failed-precondition", "Approved product details cannot be overridden provisionally.");
+    }
+    if (!provisional) {
+      if (await historyExists(transaction, id)) {
+        fail("failed-precondition", "This product has inventory history and cannot use provisional setup.");
+      }
+    } else if (provisional.status !== "needs_review") {
+      fail("failed-precondition", "This product is no longer available for provisional sales.");
+    }
+    return { profile, product, provisional, provisionalRef: provisionalDoc.ref };
+  }
+
+  function provisionalQuoteInput(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data) ||
+        Object.keys(data).some((key) => !["items", "paymentMethod"].includes(key))) {
+      fail("invalid-argument", "Invalid provisional opening-stock quote request.");
+    }
+    if (!Array.isArray(data.items) || data.items.length < 1 || data.items.length > 20) {
+      fail("invalid-argument", "A provisional sale must contain 1 to 20 lines.");
+    }
+    const paymentMethod = data.paymentMethod;
+    if (!["cash", "mobile_money", "card"].includes(paymentMethod)) fail("invalid-argument", "Choose a supported payment method.");
+    const seen = new Set();
+    const items = data.items.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item) ||
+          Object.keys(item).some((key) => !["productId", "quantity", "details", "expectedRevision"].includes(key))) {
+        fail("invalid-argument", "Invalid provisional sale line.");
+      }
+      const id = productId(item.productId);
+      if (seen.has(id)) fail("invalid-argument", "Combine duplicate provisional product lines.");
+      seen.add(id);
+      return { productId: id, quantity: boundedInteger(item.quantity, "Quantity", 1, 1000000),
+        details: provisionalDetails(item.details),
+        expectedRevision: boundedInteger(item.expectedRevision, "Revision", 0, 1000000000) };
+    });
+    return {
+      items,
+      paymentMethod
+    };
+  }
+
+  async function quoteProvisionalSale(request) {
+    const uid = request.auth?.uid;
+    if (!uid) fail("unauthenticated", "Sign in before reviewing a sale.");
+    const input = provisionalQuoteInput(request.data);
+    return db.runTransaction(async (transaction) => {
+      const eligible = await Promise.all(input.items.map(async (line) => {
+        const current = await assertProvisionalEligibility(transaction, { uid, productId: line.productId });
+        if ((current.provisional?.revision || 0) !== line.expectedRevision) fail("aborted", "Provisional details changed. Reload before confirming the sale.");
+        return { ...current, line };
+      }));
+      const taxDoc = await transaction.get(db.collection("settings").doc("tax"));
+      if (!taxDoc.exists) fail("failed-precondition", "Business tax settings must be saved first.");
+      const tax = normalizedTax(taxDoc.data());
+      let subtotalPesewas = 0;
+      const revisions = [];
+      const items = eligible.map(({ product, provisional, line }) => {
+        const revision = sameProvisionalDetails(provisional?.latest, line.details) ? provisional.revision : line.expectedRevision + 1;
+        const baseQuantity = line.details.saleUnit === "bulk" ? safeMultiply(line.quantity, line.details.unitsPerBulk, "Base quantity") : line.quantity;
+        const lineTotalPesewas = safeMultiply(line.details.unitPricePesewas, line.quantity, "Line total");
+        subtotalPesewas = safeAdd(subtotalPesewas, lineTotalPesewas, "Subtotal");
+        revisions.push(revision);
+        return { productId: line.productId, name: String(product.name || line.productId), quantity: line.quantity,
+          saleUnit: line.details.saleUnit, unit: line.details.saleUnit === "bulk" ? line.details.bulkUnit : line.details.baseUnit,
+          unitLabel: line.details.saleUnit === "bulk" ? line.details.bulkUnit : line.details.baseUnit,
+          baseUnit: line.details.baseUnit, bulkUnit: line.details.bulkUnit, unitsPerBulk: line.details.unitsPerBulk,
+          baseQuantity, actualQtySold: baseQuantity, unitPricePesewas: line.details.unitPricePesewas,
+          lineTotalPesewas, unitPrice: line.details.unitPricePesewas / 100, total: lineTotalPesewas / 100,
+          provisionalRevision: revision, batchAllocations: [], costStatus: "unknown", stockEffect: "unverified" };
+      });
+      const calculatedTax = calculateTax(subtotalPesewas, tax);
+      const fingerprint = hash(JSON.stringify({ input, revisions, items, calculatedTax }));
+      return { provisionalOpeningStock: true, quoteFingerprint: fingerprint, sale: {
+        currency: "GHS", paymentMethod: input.paymentMethod, items,
+        subtotalPesewas, subtotalAmount: subtotalPesewas / 100,
+        taxBreakdown: legacyTax(calculatedTax), taxSettingsSnapshot: tax,
+        totalAmountPesewas: calculatedTax.totalAmountPesewas,
+        totalAmount: calculatedTax.totalAmountPesewas / 100,
+        costStatus: "unknown", profit: null, stockEffect: "unverified"
+      }};
+    });
+  }
+
+  async function provisionalEligibility(request) {
+    const uid = request.auth?.uid;
+    if (!uid) fail("unauthenticated", "Sign in before checking a product.");
+    const id = productId(request.data?.productId);
+    if (!request.data || Object.keys(request.data).length !== 1) fail("invalid-argument", "Invalid provisional eligibility request.");
+    return db.runTransaction(async (transaction) => {
+      const { provisional } = await assertProvisionalEligibility(transaction, { uid, productId: id });
+      return { eligible: true, expectedRevision: provisional?.revision || 0, details: provisional?.latest || null };
+    });
+  }
 
   async function quoteSale(request) {
     const uid = request.auth?.uid;
@@ -673,7 +890,167 @@ function createOpeningStockService({ db, FieldValue, HttpsError }) {
     });
   }
 
-  return { configureProduct, quoteSale, submitSale, startCount, cancelCount, confirmCount };
+  function provisionalSubmitInput(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data) ||
+        Object.keys(data).some((key) => !["idempotencyKey", "expectedQuoteFingerprint", "items", "paymentMethod"].includes(key))) {
+      fail("invalid-argument", "Invalid provisional opening-stock sale request.");
+    }
+    const idempotencyKey = requestKey(data.idempotencyKey);
+    if (typeof data.expectedQuoteFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(data.expectedQuoteFingerprint)) {
+      fail("failed-precondition", "Review the current provisional quote before completing this sale.");
+    }
+    return { idempotencyKey, expectedQuoteFingerprint: data.expectedQuoteFingerprint,
+      quoteData: provisionalQuoteInput({ items: data.items, paymentMethod: data.paymentMethod }) };
+  }
+
+  async function submitProvisionalSale(request) {
+    const uid = request.auth?.uid;
+    if (!uid) fail("unauthenticated", "Sign in before completing a sale.");
+    const input = provisionalSubmitInput(request.data);
+    const fingerprint = hash(JSON.stringify({ ...input.quoteData, expectedQuoteFingerprint: input.expectedQuoteFingerprint }));
+    const requestHash = hash(`${uid}\u0000${input.idempotencyKey}`);
+    const requestRef = db.collection("provisionalOpeningStockSaleRequests").doc(requestHash);
+    const saleId = `POSL-${requestHash.slice(0, 24)}`;
+
+    const recovered = await db.runTransaction(async (transaction) => {
+      const [profileDoc, savedDoc] = await Promise.all([transaction.get(db.collection("users").doc(uid)), transaction.get(requestRef)]);
+      if (!activeSeller(profileDoc.exists ? profileDoc.data() : null)) fail("permission-denied", "This staff account cannot create sales.");
+      if (!savedDoc.exists) return null;
+      const saved = savedDoc.data() || {};
+      if (saved.uid !== uid || saved.fingerprint !== fingerprint || !saved.response) fail("already-exists", "This idempotency key was already used with a different sale.");
+      return saved.response;
+    });
+    if (recovered) return recovered;
+
+    const quote = await quoteProvisionalSale({ auth: request.auth, data: input.quoteData });
+    if (quote.quoteFingerprint !== input.expectedQuoteFingerprint) {
+      fail("failed-precondition", "Provisional details, tax settings, or eligibility changed. Review the refreshed checkout before confirming.");
+    }
+
+    return db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(requestRef);
+      if (existing.exists) {
+        const saved = existing.data() || {};
+        if (saved.uid !== uid || saved.fingerprint !== fingerprint || !saved.response) fail("already-exists", "This idempotency key was already used with a different sale.");
+        return saved.response;
+      }
+      const eligible = await Promise.all(input.quoteData.items.map(async (line) => {
+        const current = await assertProvisionalEligibility(transaction, { uid, productId: line.productId });
+        if ((current.provisional?.revision || 0) !== line.expectedRevision) fail("aborted", "Provisional details changed. Reload before confirming the sale.");
+        return { ...current, line };
+      }));
+      const profile = eligible[0].profile;
+      const taxDoc = await transaction.get(db.collection("settings").doc("tax"));
+      if (!taxDoc.exists) fail("failed-precondition", "Business tax settings must be saved first.");
+      const calculatedTax = calculateTax(quote.sale.subtotalPesewas, normalizedTax(taxDoc.data()));
+      const revisions = eligible.map(({ provisional, line }) => sameProvisionalDetails(provisional?.latest, line.details) ? provisional.revision : line.expectedRevision + 1);
+      if (quote.sale.items.some((item, index) => item.provisionalRevision !== revisions[index]) ||
+          hash(JSON.stringify({ input: input.quoteData, revisions, items: quote.sale.items, calculatedTax })) !== quote.quoteFingerprint) {
+        fail("failed-precondition", "Provisional details, tax settings, or eligibility changed. Review the refreshed checkout before confirming.");
+      }
+      const createdBy = actor(profile, uid);
+      const committedAt = new Date().toISOString();
+      eligible.forEach(({ provisional, provisionalRef, line }, index) => {
+        const revisionNumber = revisions[index];
+        if (!sameProvisionalDetails(provisional?.latest, line.details)) {
+          const revision = { productId: line.productId, revision: revisionNumber, details: line.details,
+            source: "cashier_sale", enteredBy: createdBy, enteredAt: committedAt };
+          transaction.set(provisionalRef.collection("revisions").doc(String(revisionNumber)), { ...revision, serverEnteredAt: FieldValue.serverTimestamp() });
+          transaction.set(provisionalRef, { productId: line.productId, status: "needs_review", revision: revisionNumber,
+            latest: line.details, latestSource: "cashier_sale", latestEnteredBy: createdBy,
+            createdBy: provisional?.createdBy || createdBy, createdAt: provisional?.createdAt || FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(), salesStarted: true }, { merge: true });
+        } else {
+          transaction.update(provisionalRef, { salesStarted: true, updatedAt: FieldValue.serverTimestamp() });
+        }
+      });
+      const items = quote.sale.items.map((item) => ({ ...item }));
+      const sale = {
+        id: saleId, schemaVersion: 1, inventorySchemaVersion: 1,
+        openingStock: true, provisionalOpeningStock: true, stockEffect: "unverified",
+        costStatus: "unknown", profit: null, currency: "GHS", paymentMethod: quote.sale.paymentMethod,
+        createdBy, user: createdBy.fullName, items, productId: items.length === 1 ? items[0].productId : null,
+        product: items.length === 1 ? items[0].name : "Multiple Items", qty: items.length === 1 ? items[0].quantity : items.length,
+        saleUnit: items.length === 1 ? items[0].unitLabel : "items", saleUnitType: items.length === 1 ? items[0].saleUnit : "mixed",
+        actualQtySold: items.reduce((total, item) => safeAdd(total, item.baseQuantity, "sale quantity"), 0), subtotalPesewas: quote.sale.subtotalPesewas,
+        subtotalAmount: quote.sale.subtotalAmount, taxBreakdown: legacyTax(calculatedTax),
+        taxSettingsSnapshot: calculatedTax, totalAmountPesewas: calculatedTax.totalAmountPesewas,
+        totalAmount: calculatedTax.totalAmountPesewas / 100, quoteFingerprint: quote.quoteFingerprint,
+        provisionalRevisions: items.map((item) => ({ productId: item.productId, revision: item.provisionalRevision })), createdAt: committedAt,
+        committedAt, syncStatus: "synced", cloudSyncedAt: committedAt
+      };
+      const response = { committed: true, saleId, sale };
+      transaction.set(db.collection("sales").doc(saleId), { ...sale, serverCreatedAt: FieldValue.serverTimestamp() });
+      transaction.set(requestRef, { uid, fingerprint, response, saleId, createdAt: committedAt, serverCreatedAt: FieldValue.serverTimestamp() });
+      return response;
+    });
+  }
+
+  function reviewInput(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data) || Object.keys(data).some((key) => !["productId", "expectedRevision", "decision", "details", "approvedBasePricePesewas", "approvedBulkPricePesewas"].includes(key))) fail("invalid-argument", "Invalid provisional review request.");
+    const decision = data.decision;
+    if (!["correct", "approve"].includes(decision)) fail("invalid-argument", "Choose whether to correct or approve these details.");
+    const details = provisionalDetails(data.details);
+    let approvedBasePricePesewas = null;
+    let approvedBulkPricePesewas = null;
+    if (decision === "approve") {
+      if (details.saleUnit !== "bulk") fail("failed-precondition", "Approval needs explicit base and bulk setup; complete the missing bulk fields first.");
+      approvedBasePricePesewas = boundedInteger(data.approvedBasePricePesewas, "Approved base price", 1, 1000000000);
+      approvedBulkPricePesewas = boundedInteger(data.approvedBulkPricePesewas, "Approved bulk price", 1, 1000000000);
+    } else if (data.approvedBasePricePesewas !== undefined || data.approvedBulkPricePesewas !== undefined) {
+      fail("invalid-argument", "Approved prices are only accepted with an approval decision.");
+    }
+    return { productId: productId(data.productId), expectedRevision: boundedInteger(data.expectedRevision, "Revision", 1, 1000000000), decision, details, approvedBasePricePesewas, approvedBulkPricePesewas };
+  }
+
+  async function reviewProvisionalProduct(request) {
+    const uid = request.auth?.uid;
+    if (!uid) fail("unauthenticated", "Sign in before reviewing provisional details.");
+    const input = reviewInput(request.data);
+    return db.runTransaction(async (transaction) => {
+      const { profile, provisional, provisionalRef } = await assertProvisionalEligibility(transaction, { uid, productId: input.productId, requireSeller: false });
+      if (!provisional || provisional.revision !== input.expectedRevision) fail("aborted", "Provisional details changed. Reload and explicitly resolve the conflict.");
+      // The Firestore SDK requires every transaction read to precede its first
+      // write. Approval depends on the saved tax configuration, so load it
+      // before recording either the revision or review audit entry.
+      const taxDoc = input.decision === "approve"
+        ? await transaction.get(db.collection("settings").doc("tax"))
+        : null;
+      if (input.decision === "approve" && !taxDoc.exists) {
+        fail("failed-precondition", "Business tax settings must be saved before approval.");
+      }
+      const reviewer = actor(profile, uid);
+      const reviewedAt = new Date().toISOString();
+      const nextRevision = provisional.revision + 1;
+      const revision = { productId: input.productId, revision: nextRevision, details: input.details, source: "review", decision: input.decision, enteredBy: reviewer, enteredAt: reviewedAt, replacesRevision: provisional.revision };
+      transaction.set(provisionalRef.collection("revisions").doc(String(nextRevision)), { ...revision, serverEnteredAt: FieldValue.serverTimestamp() });
+      transaction.set(provisionalRef.collection("reviews").doc(String(nextRevision)), { ...revision, reviewedBy: reviewer, reviewedAt, serverReviewedAt: FieldValue.serverTimestamp() });
+      if (input.decision === "correct") {
+        transaction.update(provisionalRef, { revision: nextRevision, latest: input.details, latestSource: "review", latestEnteredBy: reviewer, updatedAt: FieldValue.serverTimestamp() });
+        return { committed: true, status: "needs_review", revision: nextRevision };
+      }
+      // Both prices are explicit reviewer input. In particular, do not derive a
+      // base price from the cashier's bulk price (or vice versa).
+      const approved = validateSetup({ productId: input.productId,
+        baseUnit: input.details.baseUnit, bulkUnit: input.details.bulkUnit,
+        unitsPerBulk: input.details.unitsPerBulk,
+        basePricePesewas: input.approvedBasePricePesewas,
+        bulkPricePesewas: input.approvedBulkPricePesewas,
+        expectedRevision: 0, confirmUncounted: true });
+      transaction.set(db.collection("openingStockProducts").doc(input.productId), {
+        ...approved, status: "unverified", revision: 1, salesStarted: provisional.salesStarted === true,
+        approvedBy: uid, approvedFromProvisionalRevision: nextRevision,
+        createdBy: uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+      });
+      transaction.update(provisionalRef, { status: "approved", revision: nextRevision, latest: input.details,
+        latestSource: "review", latestEnteredBy: reviewer, approvedSetupRevision: 1,
+        updatedAt: FieldValue.serverTimestamp() });
+      return { committed: true, status: "approved", revision: nextRevision, setupRevision: 1 };
+    });
+  }
+
+  return { configureProduct, quoteSale, submitSale, startCount, cancelCount, confirmCount,
+    provisionalEligibility, quoteProvisionalSale, submitProvisionalSale, reviewProvisionalProduct };
 
 }
 

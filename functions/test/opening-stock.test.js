@@ -24,12 +24,25 @@ function fixture(overrides = {}) {
 
   const db = {
     collection(name) {
-      return { doc(id) { return { path: `${name}/${id}` }; } };
+      const makeRef = (path) => ({ path, collection(child) { return { doc(id) { return makeRef(`${path}/${child}/${id}`); } }; } });
+      return {
+        doc(id) { return makeRef(`${name}/${id}`); },
+        where(field, operator, value) {
+          return { collection: name, field, operator, value, limit() { return this; } };
+        }
+      };
     },
     async runTransaction(callback) {
       const writes = [];
       const result = await callback({
         async get(ref) {
+          if (ref && typeof ref.collection === "string") {
+            const docs = [...documents.entries()]
+              .filter(([path, value]) => path.startsWith(`${ref.collection}/`) && path.split("/").length === 2 && ref.operator === "==" && value?.[ref.field] === ref.value)
+              .slice(0, 1)
+              .map(([path, value]) => ({ ref: { path }, exists: true, data: () => structuredClone(value) }));
+            return { empty: docs.length === 0, docs };
+          }
           const value = documents.get(ref.path);
           return {
             ref,
@@ -404,4 +417,130 @@ test("explicit zero opening count activates normal stock control without inventi
   assert.equal(documents.get("products/water").quantity, 0);
   assert.equal(documents.has("stockReceipts/water"), false);
   assert.equal(documents.get("openingStockBalances/water").batches.length, 0);
+});
+
+const provisionalDetails = (overrides = {}) => ({
+  baseUnit: "Bottle", saleUnit: "base", unitPricePesewas: 300, ...overrides
+});
+const provisionalRequest = (data, uid = "sales") => ({ auth: { uid }, data });
+const provisionalQuote = (overrides = {}, uid = "sales") => provisionalRequest({
+  items: [{ productId: "water", quantity: 2, details: provisionalDetails(), expectedRevision: 0 }],
+  paymentMethod: "cash", ...overrides
+}, uid);
+const provisionalLine = (overrides = {}) => ({ productId: "water", quantity: 2, details: provisionalDetails(), expectedRevision: 0, ...overrides });
+
+test("eligible unconfigured product commits a base-only provisional sale with immutable tax/payment snapshots", async () => {
+  const { api, documents } = fixture({
+    "settings/tax": { enabled: true, taxMode: "standard", vatRate: 15, nhilRate: 2.5, getfundRate: 2.5, withholdingVatRate: 7 }
+  });
+  const eligibility = await api.provisionalEligibility(provisionalRequest({ productId: "water" }));
+  assert.equal(eligibility.eligible, true);
+  assert.equal(eligibility.details, null);
+  const quote = await api.quoteProvisionalSale(provisionalQuote({ paymentMethod: "mobile_money" }));
+  assert.equal(quote.sale.items[0].baseQuantity, 2);
+  assert.equal(quote.sale.items[0].unitsPerBulk, null);
+  assert.equal(quote.sale.subtotalPesewas, 600);
+  const result = await api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote({ paymentMethod: "mobile_money" }).data, idempotencyKey: "provisional-base-retry-001", expectedQuoteFingerprint: quote.quoteFingerprint }));
+  const sale = documents.get(`sales/${result.saleId}`);
+  assert.equal(sale.provisionalOpeningStock, true);
+  assert.equal(sale.paymentMethod, "mobile_money");
+  assert.equal(sale.costStatus, "unknown");
+  assert.equal(sale.profit, null);
+  assert.equal(sale.stockEffect, "unverified");
+  assert.equal(documents.get("products/water").quantity, 0);
+  assert.equal(documents.get("provisionalOpeningStockProducts/water").revision, 1);
+  assert.equal(documents.get("provisionalOpeningStockProducts/water/revisions/1").source, "cashier_sale");
+});
+
+test("bulk provisional sales require explicit conversion and revisions remain auditable", async () => {
+  const { api, documents } = fixture();
+  const bulk = provisionalDetails({ saleUnit: "bulk", bulkUnit: "Carton", unitsPerBulk: 12, unitPricePesewas: 3200 });
+  const firstQuote = await api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine({ quantity: 2, details: bulk })] }));
+  assert.equal(firstQuote.sale.items[0].baseQuantity, 24);
+  const firstData = provisionalQuote({ items: [provisionalLine({ quantity: 2, details: bulk })] }).data;
+  await api.submitProvisionalSale(provisionalRequest({ ...firstData, idempotencyKey: "provisional-bulk-retry-001", expectedQuoteFingerprint: firstQuote.quoteFingerprint }));
+  const changed = provisionalDetails({ saleUnit: "bulk", bulkUnit: "Crate", unitsPerBulk: 24, unitPricePesewas: 6500 });
+  const secondQuote = await api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine({ quantity: 1, details: changed, expectedRevision: 1 })], paymentMethod: "card" }));
+  await api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote({ items: [provisionalLine({ quantity: 1, details: changed, expectedRevision: 1 })], paymentMethod: "card" }).data, idempotencyKey: "provisional-bulk-retry-002", expectedQuoteFingerprint: secondQuote.quoteFingerprint }));
+  assert.equal(documents.get("provisionalOpeningStockProducts/water").revision, 2);
+  assert.equal(documents.get("provisionalOpeningStockProducts/water/revisions/1").details.unitsPerBulk, 12);
+  assert.equal(documents.get("provisionalOpeningStockProducts/water/revisions/2").details.unitsPerBulk, 24);
+  assert.equal(documents.get(`sales/${[...documents.keys()].find((key) => key.startsWith("sales/POSL-") && documents.get(key).paymentMethod === "card").split("/")[1]}`).items[0].baseQuantity, 24);
+});
+
+test("multiple distinct provisional products commit atomically and duplicate or invalid lines do not partially write", async () => {
+  const { api, documents } = fixture({ "products/juice": { name: "Juice", quantity: 0, active: true } });
+  const items = [
+    provisionalLine(),
+    { productId: "juice", quantity: 3, expectedRevision: 0, details: provisionalDetails({ saleUnit: "bulk", bulkUnit: "Tray", unitsPerBulk: 6, unitPricePesewas: 1800 }) }
+  ];
+  const quote = await api.quoteProvisionalSale(provisionalRequest({ items, paymentMethod: "card" }));
+  assert.equal(quote.sale.items.length, 2);
+  assert.equal(quote.sale.subtotalPesewas, 6000);
+  const result = await api.submitProvisionalSale(provisionalRequest({ items, paymentMethod: "card", idempotencyKey: "provisional-multi-retry-001", expectedQuoteFingerprint: quote.quoteFingerprint }));
+  assert.equal(documents.get(`sales/${result.saleId}`).items.length, 2);
+  assert.equal(documents.get("provisionalOpeningStockProducts/water").revision, 1);
+  assert.equal(documents.get("provisionalOpeningStockProducts/juice").revision, 1);
+  const before = structuredClone([...documents.entries()]);
+  await rejectsCode(() => api.quoteProvisionalSale(provisionalRequest({ items: [provisionalLine({ productId: "water", expectedRevision: 1 }), provisionalLine({ productId: "water", expectedRevision: 1 })], paymentMethod: "cash" })), "invalid-argument");
+  await rejectsCode(() => api.quoteProvisionalSale(provisionalRequest({ items: [provisionalLine({ productId: "water", expectedRevision: 1 }), { productId: "juice", quantity: 1, expectedRevision: 1, details: provisionalDetails({ unitPricePesewas: 0 }) }], paymentMethod: "cash" })), "invalid-argument");
+  assert.deepEqual([...documents.entries()], before);
+});
+
+test("provisional eligibility rejects history, approved fields, v2, inactive and count locks", async () => {
+  for (const overrides of [
+    { "stockReceipts/r1": { productId: "water" } },
+    { "products/water": { name: "Water", quantity: 0, active: true, pricingStatus: "approved" } },
+    { "products/water": { name: "Water", quantity: 0, active: true, inventorySchemaVersion: 2 } },
+    { "products/water": { name: "Water", quantity: 0, active: false } },
+    { "openingStockProducts/water": { productId: "water", status: "verified", revision: 2 }, "products/water": { name: "Water", quantity: 0, active: true } },
+    { "openingStockCounts/water": { status: "counting" } }
+  ]) {
+    const { api } = fixture(overrides);
+    await rejectsCode(() => api.provisionalEligibility(provisionalRequest({ productId: "water" })), "failed-precondition");
+  }
+  const { api } = fixture();
+  for (const bad of [
+    { quantity: 0 }, { quantity: 1.5 }, { details: provisionalDetails({ unitPricePesewas: 0 }) },
+    { details: provisionalDetails({ bulkUnit: "Carton" }) },
+    { details: provisionalDetails({ saleUnit: "bulk", bulkUnit: "Carton", unitsPerBulk: 0 }) }
+  ]) await rejectsCode(() => api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine(bad)] })), "invalid-argument");
+});
+
+test("provisional retries are idempotent and stale concurrent details reject without partial writes", async () => {
+  const { api, documents } = fixture();
+  const initial = await api.quoteProvisionalSale(provisionalQuote());
+  const payload = { ...provisionalQuote().data, idempotencyKey: "provisional-same-key-001", expectedQuoteFingerprint: initial.quoteFingerprint };
+  const first = await api.submitProvisionalSale(provisionalRequest(payload));
+  assert.deepEqual(await api.submitProvisionalSale(provisionalRequest(payload)), first);
+  await rejectsCode(() => api.submitProvisionalSale(provisionalRequest({ ...payload, items: [provisionalLine({ quantity: 3 })] })), "already-exists");
+  const stale = await api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine({ expectedRevision: 1 })] }));
+  const changed = provisionalDetails({ unitPricePesewas: 350 });
+  const fresh = await api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine({ details: changed, expectedRevision: 1 })] }));
+  await api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote({ items: [provisionalLine({ details: changed, expectedRevision: 1 })] }).data, idempotencyKey: "provisional-new-revision-1", expectedQuoteFingerprint: fresh.quoteFingerprint }));
+  await rejectsCode(() => api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote({ items: [provisionalLine({ expectedRevision: 1 })] }).data, idempotencyKey: "provisional-stale-quote-01", expectedQuoteFingerprint: stale.quoteFingerprint })), "aborted");
+  assert.equal(documents.get("provisionalOpeningStockProducts/water").revision, 2);
+});
+
+test("manager approval preserves provisional history and a later physical count does not deduct prior provisional sales", async () => {
+  const { api, documents } = fixture({ "users/manager": { role: "manager", active: true } });
+  const quote = await api.quoteProvisionalSale(provisionalQuote());
+  const first = await api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote().data, idempotencyKey: "provisional-review-sale-1", expectedQuoteFingerprint: quote.quoteFingerprint }));
+  const staleQuote = await api.quoteProvisionalSale(provisionalQuote({ items: [provisionalLine({ expectedRevision: 1 })] }));
+  const correction = await api.reviewProvisionalProduct(provisionalRequest({ productId: "water", expectedRevision: 1, decision: "correct", details: provisionalDetails({ unitPricePesewas: 350 }) }, "manager"));
+  assert.equal(correction.revision, 2);
+  assert.equal(documents.get(`sales/${first.saleId}`).items[0].unitPricePesewas, 300);
+  await rejectsCode(() => api.submitProvisionalSale(provisionalRequest({ ...provisionalQuote({ items: [provisionalLine({ expectedRevision: 1 })] }).data, idempotencyKey: "provisional-racing-review-1", expectedQuoteFingerprint: staleQuote.quoteFingerprint })), "aborted");
+  const countRaceData = provisionalQuote({ items: [provisionalLine({ expectedRevision: 2, details: provisionalDetails({ unitPricePesewas: 350 }) })] }).data;
+  const countRaceQuote = await api.quoteProvisionalSale(provisionalRequest(countRaceData));
+  const approvedDetails = provisionalDetails({ saleUnit: "bulk", bulkUnit: "Carton", unitsPerBulk: 12, unitPricePesewas: 3200 });
+  const review = await api.reviewProvisionalProduct(provisionalRequest({ productId: "water", expectedRevision: 2, decision: "approve", details: approvedDetails, approvedBasePricePesewas: 300, approvedBulkPricePesewas: 3200 }, "manager"));
+  assert.equal(review.status, "approved");
+  assert.equal(documents.get("openingStockProducts/water").status, "unverified");
+  assert.equal(documents.get("provisionalOpeningStockProducts/water/reviews/3").decision, "approve");
+  const started = await api.startCount(request({ productId: "water", expectedRevision: 1 }));
+  await rejectsCode(() => api.submitProvisionalSale(provisionalRequest({ ...countRaceData, idempotencyKey: "provisional-racing-count-1", expectedQuoteFingerprint: countRaceQuote.quoteFingerprint })), "failed-precondition");
+  await api.confirmCount(request({ productId: "water", expectedRevision: started.count.setupRevision, batches: [{ reference: "Shelf", baseQuantity: 20 }] }));
+  assert.equal(documents.get("products/water").quantity, 20);
+  assert.equal(documents.get("openingStockBalances/water").remainingBaseQuantity, 20);
 });

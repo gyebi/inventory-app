@@ -129,7 +129,9 @@ service cloud.firestore {
 
     match /sales/{saleId} {
       allow read: if signedIn();
-      allow create: if !secureSalesEnabled() && canCreateSale() && request.resource.data.get("openingStock", false) != true;
+      allow create: if !secureSalesEnabled() && canCreateSale() &&
+        request.resource.data.get("openingStock", false) != true &&
+        request.resource.data.get("provisionalOpeningStock", false) != true;
       allow update, delete: if !secureSalesEnabled() && isAdmin() && resource.data.get("openingStock", false) != true;
     }
 
@@ -158,6 +160,27 @@ service cloud.firestore {
     }
 
     match /openingStockSaleRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    // Cashiers may read the current provisional defaults they need to submit a
+    // sale; detailed revision/review audit records are reviewer-only. All
+    // writes remain callable-only.
+    match /provisionalOpeningStockProducts/{productId} {
+      allow read: if canCreateSale() || canManageSettings();
+      allow write: if false;
+
+      match /revisions/{revisionId} {
+        allow read: if canManageSettings();
+        allow write: if false;
+      }
+      match /reviews/{reviewId} {
+        allow read: if canManageSettings();
+        allow write: if false;
+      }
+    }
+
+    match /provisionalOpeningStockSaleRequests/{requestId} {
       allow read, write: if false;
     }
 
