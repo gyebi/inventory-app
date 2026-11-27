@@ -3,6 +3,7 @@ import { renderAndroidRawBtReceiptPage } from "../services/androidRawBtReceiptSe
 import { createSale, getCheckoutConfirmation } from "../services/salesService.js";
 import { getUnresolvedSecureCheckout } from "../services/secureCheckoutService.js";
 import { getUnresolvedOpeningStockCheckout } from "../services/openingStockCheckoutService.js";
+import { checkProvisionalOpeningStockEligibility, getUnresolvedProvisionalOpeningStockCheckout } from "../services/provisionalOpeningStockCheckoutService.js";
 import { logAppError, toUserMessage } from "../utils/errorUtils.js";
 import { hasPermission } from "../services/authService.js";
 import { fetchPrinterBridgeStatus } from "../services/printerBridgeService.js";
@@ -20,9 +21,83 @@ let selectedSalePaymentMethod = "Cash";
 let posPrinterStatus = { checked: false, loading: false, ready: null, message: "" };
 let saleSubmissionInFlight = false;
 let pendingCheckoutQuote = null;
+let provisionalEligibility = { productId: "", loading: false, eligible: false, expectedRevision: 0, details: null };
+let provisionalDraft = {};
 
 function openingStockSetup(productId) {
   return (state.openingStockProducts || []).find((setup) => setup.productId === productId && setup.status === "unverified") || null;
+}
+
+function isPotentialProvisionalProduct(product) {
+  return product && Number(product.inventorySchemaVersion) !== 2 &&
+    product.active !== false && product.isActive !== false &&
+    Number(product.quantity || 0) === 0 && Number(product.sellableQuantity || 0) === 0;
+}
+
+function rememberProvisionalDraft() {
+  const value = (id) => /** @type {HTMLInputElement|HTMLSelectElement|null} */ (document.getElementById(id))?.value || "";
+  provisionalDraft = {
+    baseUnit: value("provisionalBaseUnit") || provisionalDraft.baseUnit || "",
+    saleUnit: value("provisionalSaleUnit") || provisionalDraft.saleUnit || "base",
+    bulkUnit: value("provisionalBulkUnit") || provisionalDraft.bulkUnit || "",
+    unitsPerBulk: value("provisionalUnitsPerBulk") || provisionalDraft.unitsPerBulk || "",
+    unitPrice: value("provisionalUnitPrice") || provisionalDraft.unitPrice || "",
+    quantity: value("provisionalQuantity") || provisionalDraft.quantity || ""
+  };
+}
+
+function renderProvisionalEntry(product, unresolvedCheckout) {
+  if (provisionalEligibility.productId !== product.id || provisionalEligibility.loading) {
+    if (provisionalEligibility.productId !== product.id && !provisionalEligibility.loading) void loadProvisionalEligibility(product.id);
+    return `<p class="field-hint">Checking whether this unconfigured legacy product can be sold provisionally…</p>`;
+  }
+  if (!provisionalEligibility.eligible) return `<p class="field-hint">This product needs approved setup or stock review before it can be sold.</p>`;
+  const defaults = provisionalEligibility.details || {};
+  const draft = { baseUnit: defaults.baseUnit || "", saleUnit: defaults.saleUnit || "base", bulkUnit: defaults.bulkUnit || "", unitsPerBulk: defaults.unitsPerBulk || "", unitPrice: defaults.unitPricePesewas ? Number(defaults.unitPricePesewas) / 100 : "", quantity: "", ...provisionalDraft };
+  const bulk = draft.saleUnit === "bulk";
+  const conversion = bulk && Number.isInteger(Number(draft.unitsPerBulk)) && Number(draft.unitsPerBulk) > 0 && Number(draft.quantity) > 0
+    ? `<p class="field-hint">${escapeHtml(draft.quantity)} ${escapeHtml(draft.bulkUnit || "bulk units")} × ${escapeHtml(draft.unitsPerBulk)} ${escapeHtml(draft.baseUnit || "base units")} = ${Number(draft.quantity) * Number(draft.unitsPerBulk)} ${escapeHtml(draft.baseUnit || "base units")}</p>` : "";
+  return `<div class="message success"><strong>Complete details to sell</strong><br><small>These details are provisional and await manager review. They do not change approved product setup.</small></div>
+    <div class="form-row"><label for="provisionalBaseUnit">Base-unit label</label><input id="provisionalBaseUnit" maxlength="40" value="${escapeHtml(draft.baseUnit)}" oninput="rememberProvisionalDraft()"></div>
+    <div class="form-row"><label for="provisionalSaleUnit">Selected sale unit</label><select id="provisionalSaleUnit" onchange="rememberProvisionalDraft(); renderSales()"><option value="base" ${!bulk ? "selected" : ""}>Base</option><option value="bulk" ${bulk ? "selected" : ""}>Bulk</option></select></div>
+    ${bulk ? `<div class="form-row"><label for="provisionalBulkUnit">Bulk-unit label</label><input id="provisionalBulkUnit" maxlength="40" value="${escapeHtml(draft.bulkUnit)}" oninput="rememberProvisionalDraft()"></div><div class="form-row"><label for="provisionalUnitsPerBulk">Base units per bulk</label><input id="provisionalUnitsPerBulk" type="number" min="1" step="1" value="${escapeHtml(draft.unitsPerBulk)}" oninput="rememberProvisionalDraft(); renderSales()"></div>` : ""}
+    <div class="form-row"><label for="provisionalUnitPrice">Selling price per selected unit (GHS)</label><input id="provisionalUnitPrice" type="number" min="0.01" step="0.01" value="${escapeHtml(draft.unitPrice)}" oninput="rememberProvisionalDraft()"></div>
+    <div class="form-row"><label for="provisionalQuantity">Quantity</label><input id="provisionalQuantity" type="number" min="1" step="1" value="${escapeHtml(draft.quantity)}" oninput="rememberProvisionalDraft(); renderSales()"></div>${conversion}
+    <button class="sale-add-button" type="button" onclick="addProvisionalSaleCartItem()" ${unresolvedCheckout ? "disabled" : ""}>Add provisional sale</button>`;
+}
+
+async function loadProvisionalEligibility(productId) {
+  provisionalEligibility = { productId, loading: true, eligible: false, expectedRevision: 0, details: null };
+  try {
+    const result = /** @type {any} */ (await checkProvisionalOpeningStockEligibility(productId));
+    if (provisionalEligibility.productId === productId) provisionalEligibility = { productId, loading: false, eligible: result?.eligible === true, expectedRevision: Number(result?.expectedRevision || 0), details: result?.details || null };
+  } catch {
+    if (provisionalEligibility.productId === productId) provisionalEligibility = { productId, loading: false, eligible: false, expectedRevision: 0, details: null };
+  }
+  if (app.getCurrentPage?.() === "sales") renderSales();
+}
+
+function provisionalPesewas(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 && Math.round(amount * 100) === amount * 100 ? Math.round(amount * 100) : null;
+}
+
+function addProvisionalSaleCartItem() {
+  rememberProvisionalDraft();
+  const product = state.products.find((item) => item.id === selectedProductId);
+  const quantity = Number(provisionalDraft.quantity);
+  const saleUnit = provisionalDraft.saleUnit;
+  const details = { baseUnit: String(provisionalDraft.baseUnit || "").trim(), saleUnit, unitPricePesewas: provisionalPesewas(provisionalDraft.unitPrice) };
+  if (saleUnit === "bulk") { details.bulkUnit = String(provisionalDraft.bulkUnit || "").trim(); details.unitsPerBulk = Number(provisionalDraft.unitsPerBulk); }
+  if (!product || !provisionalEligibility.eligible || !Number.isInteger(quantity) || quantity < 1 || !details.baseUnit || !details.unitPricePesewas || (saleUnit === "bulk" && (!details.bulkUnit || !Number.isInteger(details.unitsPerBulk) || details.unitsPerBulk < 1))) {
+    renderSales("Complete valid provisional unit, price, and quantity details before adding the sale."); return;
+  }
+  if (saleCart.some((item) => !item.provisionalOpeningStock)) { renderSales("Provisional opening-stock items cannot be mixed with verified or approved-opening-stock items."); return; }
+  if (saleCart.some((item) => item.productId === product.id)) { renderSales("Combine this provisional product on its existing cart line before checkout."); return; }
+  if (saleCart.length >= 20) { renderSales("A provisional opening-stock sale supports up to 20 distinct products."); return; }
+  saleCart.push({ productId: product.id, quantity, saleUnit, unit: saleUnit === "bulk" ? details.bulkUnit : details.baseUnit, provisionalOpeningStock: true, provisionalDetails: details, provisionalExpectedRevision: provisionalEligibility.expectedRevision });
+  provisionalDraft = {};
+  renderSales();
 }
 
 function formatSaleStock(product) {
@@ -137,6 +212,7 @@ function getSaleAvailabilitySummary(product, saleUnit = "bulk") {
 
 function getCartTotal() {
   return saleCart.reduce((sum, item) => {
+    if (item.provisionalOpeningStock) return sum + (Number(item.provisionalDetails?.unitPricePesewas || 0) / 100 * item.quantity);
     const product = state.products.find((candidate) => candidate.id === item.productId);
     const unitPrice = getSaleUnitPrice(product, item.saleUnit);
 
@@ -151,8 +227,8 @@ function renderCartItems() {
 
   return saleCart.map((item, index) => {
     const product = state.products.find((candidate) => candidate.id === item.productId);
-    const unitLabel = getProductUnitLabel(product, item.saleUnit);
-    const unitPrice = getSaleUnitPrice(product, item.saleUnit);
+    const unitLabel = item.provisionalOpeningStock ? (item.provisionalDetails.saleUnit === "bulk" ? item.provisionalDetails.bulkUnit : item.provisionalDetails.baseUnit) : getProductUnitLabel(product, item.saleUnit);
+    const unitPrice = item.provisionalOpeningStock ? Number(item.provisionalDetails.unitPricePesewas) / 100 : getSaleUnitPrice(product, item.saleUnit);
     const itemTotal = unitPrice * item.quantity;
 
     return `
@@ -177,21 +253,24 @@ function renderCartItems() {
 
 function renderSales(error = "") {
   ensureStockState();
-  const unresolvedCheckout = getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout();
+  const unresolvedCheckout = getUnresolvedSecureCheckout() || getUnresolvedOpeningStockCheckout() || getUnresolvedProvisionalOpeningStockCheckout();
 
   // An uncertain callable response can still have committed. Restore its exact
   // persisted request after a refresh so the cashier can only retry that key.
   if (unresolvedCheckout && saleCart.length === 0) {
     const payload = JSON.parse(unresolvedCheckout.payloadJson);
-    saleCart = payload.items.map((item) => {
+    saleCart = Array.isArray(payload.items) ? payload.items.map((item) => {
       const product = state.products.find((entry) => entry.id === item.productId);
-      return {
-        productId: item.productId,
-        quantity: item.quantity,
-        saleUnit: item.unit,
-        unit: getProductUnitLabel(product, item.unit)
-      };
-    });
+      if (item.details) return { productId: item.productId, quantity: item.quantity, saleUnit: item.details.saleUnit,
+        unit: item.details.saleUnit === "bulk" ? item.details.bulkUnit : item.details.baseUnit,
+        provisionalOpeningStock: true, provisionalDetails: item.details, provisionalExpectedRevision: item.expectedRevision };
+      return { productId: item.productId, quantity: item.quantity, saleUnit: item.unit, unit: getProductUnitLabel(product, item.unit) };
+    }) : payload.details ? [{
+      productId: payload.productId, quantity: payload.quantity, saleUnit: payload.details.saleUnit,
+      unit: payload.details.saleUnit === "bulk" ? payload.details.bulkUnit : payload.details.baseUnit,
+      provisionalOpeningStock: true, provisionalDetails: payload.details,
+      provisionalExpectedRevision: payload.expectedRevision
+    }] : [];
     selectedSalePaymentMethod = ({ cash: "Cash", mobile_money: "MoMo", card: "Card" })[payload.paymentMethod] || "Cash";
   }
 
@@ -228,7 +307,7 @@ function renderSales(error = "") {
     unitLabel: quantityUnitLabel
   } = getSaleAvailabilitySummary(selectedProduct, selectedSaleUnit);
   const productCards = sortProductsForPresentation(products
-    .filter((product) => getCommittedBaseQuantity(product) > 0 || openingStockSetup(product.id)))
+    .filter((product) => getCommittedBaseQuantity(product) > 0 || openingStockSetup(product.id) || isPotentialProvisionalProduct(product)))
     .map((product) => {
       const price = getSaleUnitPrice(product, selectedSaleUnit);
       const isSelected = product.id === selectedProduct.id;
@@ -277,7 +356,7 @@ function renderSales(error = "") {
           <select id="productIndex" onchange="updateSalePreview()">${options}</select>
         </div>
 
-        <div class="form-row">
+        ${isPotentialProvisionalProduct(selectedProduct) && !openingStockSetup(selectedProduct.id) ? renderProvisionalEntry(selectedProduct, unresolvedCheckout) : `<div class="form-row">
           <label for="saleUnit">Unit Type</label>
           <select id="saleUnit" onchange="updateSalePreview()">
             <option value="bulk" ${selectedSaleUnit === "bulk" ? "selected" : ""}>Bulk Unit (${bulkUnitLabel})</option>
@@ -290,7 +369,7 @@ function renderSales(error = "") {
           <input id="qty" class="number-field" type="number" inputmode="numeric" min="1" step="1" enterkeyhint="done">
         </div>
 
-        <button class="sale-add-button" type="button" onclick="addSaleCartItem()" ${unresolvedCheckout ? "disabled" : ""}>Add to cart</button>
+        <button class="sale-add-button" type="button" onclick="addSaleCartItem()" ${unresolvedCheckout ? "disabled" : ""}>Add to cart</button>`}
       </div>
 
       <div class="sale-cart">
@@ -368,6 +447,11 @@ function updateSalePreview() {
 
   selectedProductId = product.id;
   selectedSaleUnit = saleUnit;
+  if (isPotentialProvisionalProduct(product) && !openingStockSetup(product.id) && provisionalEligibility.productId !== product.id) {
+    provisionalDraft = {};
+    void loadProvisionalEligibility(product.id);
+    return;
+  }
   const {
     availableBaseQuantity,
     unitLabel
@@ -399,6 +483,11 @@ function addSaleCartItem() {
     return;
   }
 
+  if (isPotentialProvisionalProduct(product) && !openingStockSetup(product.id)) {
+    renderSales("This unconfigured legacy product can only be added through the server-confirmed provisional details form.");
+    return;
+  }
+
   if (!Number.isInteger(quantity) || quantity <= 0) {
     renderSales("Quantity must be a whole number greater than zero.");
     return;
@@ -416,6 +505,10 @@ function addSaleCartItem() {
 
   if ((opening && cartHasVerified) || (!opening && cartHasOpening)) {
     renderSales("Opening-stock items must be completed separately from verified stock. This prevents a partial checkout or stock deduction.");
+    return;
+  }
+  if (saleCart.some((item) => item.provisionalOpeningStock)) {
+    renderSales("Verified or approved-opening-stock items cannot be mixed with provisional opening-stock items.");
     return;
   }
 
@@ -463,7 +556,7 @@ function adjustSaleCartItem(index, change) {
     .filter((_, itemIndex) => itemIndex !== index)
     .filter((candidate) => candidate.productId === product.id)
     .reduce((sum, candidate) => sum + toBaseQuantity(product, candidate.quantity, candidate.saleUnit), 0);
-  if (!openingStockSetup(product.id) && toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > getCommittedBaseQuantity(product)) {
+  if (!item.provisionalOpeningStock && !openingStockSetup(product.id) && toBaseQuantity(product, nextQuantity, item.saleUnit) + otherItemsBaseQuantity > getCommittedBaseQuantity(product)) {
     renderSales(`Not enough stock available for ${product.name}.`);
     return;
   }
@@ -474,6 +567,9 @@ function adjustSaleCartItem(index, change) {
 function selectSaleProduct(productId) {
   if (!state.products.some((product) => product.id === productId)) return;
   selectedProductId = productId;
+  provisionalDraft = {};
+  const product = state.products.find((entry) => entry.id === productId);
+  if (isPotentialProvisionalProduct(product) && !openingStockSetup(productId)) void loadProvisionalEligibility(productId);
   renderSales();
 }
 
@@ -500,9 +596,9 @@ async function confirmSale() {
     saleSubmissionInFlight = true;
     setSaleProcessing(true);
     const confirmation = /** @type {any} */ (await getCheckoutConfirmation(saleCart, selectedSalePaymentMethod));
-    pendingCheckoutQuote = confirmation.secure || confirmation.openingStock ? confirmation : null;
+    pendingCheckoutQuote = confirmation.secure || confirmation.openingStock || confirmation.provisionalOpeningStock ? confirmation : null;
     const tax = confirmation.sale?.taxBreakdown;
-    const authoritativeTotals = (confirmation.secure || confirmation.openingStock) ? `
+    const authoritativeTotals = (confirmation.secure || confirmation.openingStock || confirmation.provisionalOpeningStock) ? `
       <div class="sale-confirmation-totals">
         <span>Subtotal <b>${app.formatReceiptCurrency(confirmation.sale.subtotalAmount)}</b></span>
         <span>NHIL (${Number(tax.nhilRate || 0).toFixed(1)}%) <b>${app.formatReceiptCurrency(tax.nhilAmount)}</b></span>
@@ -544,7 +640,7 @@ async function recordSale() {
     saleSubmissionInFlight = true;
     setSaleProcessing(true);
     document.getElementById("confirmSaleButton")?.setAttribute("disabled", "disabled");
-    const sale = await createSale(saleCart, selectedSalePaymentMethod, pendingCheckoutQuote?.quoteFingerprint || "", pendingCheckoutQuote?.openingStock === true);
+    const sale = await createSale(saleCart, selectedSalePaymentMethod, pendingCheckoutQuote?.quoteFingerprint || "", pendingCheckoutQuote?.openingStock === true, pendingCheckoutQuote?.provisionalOpeningStock === true);
 
     if (!state.sales.some((entry) => entry.id === sale.id)) state.sales.push(sale);
     app.saveState();
@@ -589,6 +685,8 @@ globalWindow.filterSaleProducts = filterSaleProducts;
 globalWindow.setSalePaymentMethod = setSalePaymentMethod;
 globalWindow.confirmSale = confirmSale;
 globalWindow.recordSale = recordSale;
+globalWindow.addProvisionalSaleCartItem = addProvisionalSaleCartItem;
+globalWindow.rememberProvisionalDraft = rememberProvisionalDraft;
 
 function escapeHtml(value) {
   return String(value)

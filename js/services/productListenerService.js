@@ -47,6 +47,12 @@ export function listenToOpeningStockProducts(onChange, onError) {
   }, onError);
 }
 
+export function listenToProvisionalOpeningStockProducts(onChange, onError) {
+  return onSnapshot(query(collection(db, "provisionalOpeningStockProducts"), limit(500)), { includeMetadataChanges: true }, (snapshot) => {
+    onChange(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), { fromCache: snapshot.metadata.fromCache, hasPendingWrites: snapshot.metadata.hasPendingWrites });
+  }, onError);
+}
+
 export function listenToOpeningStockBalances(onChange, onError) {
   return onSnapshot(query(collection(db, "openingStockBalances"), limit(500)), { includeMetadataChanges: true }, (snapshot) => {
     onChange(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })), { fromCache: snapshot.metadata.fromCache, hasPendingWrites: snapshot.metadata.hasPendingWrites });

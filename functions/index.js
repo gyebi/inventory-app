@@ -439,3 +439,19 @@ exports.confirmOpeningStockCount = onCall(
   { cors: ALLOWED_ORIGINS },
   async (request) => openingStockService.confirmCount(request)
 );
+exports.checkProvisionalOpeningStockEligibility = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.provisionalEligibility(request)
+);
+exports.quoteProvisionalOpeningStockSale = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.quoteProvisionalSale(request)
+);
+exports.submitProvisionalOpeningStockSale = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.submitProvisionalSale(request)
+);
+exports.reviewProvisionalOpeningStockProduct = onCall(
+  { cors: ALLOWED_ORIGINS },
+  async (request) => openingStockService.reviewProvisionalProduct(request)
+);
