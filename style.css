@@ -344,6 +344,30 @@ body:has(.login-page) {
   line-height: 0.8;
 }
 
+.login-text-action {
+  align-self: flex-start;
+  background: transparent;
+  border: 0;
+  color: #005d4f;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-text-action:hover {
+  background: transparent;
+  color: #b0520a;
+}
+
+.login-text-action:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid rgba(255, 107, 11, 0.35);
+  outline-offset: 3px;
+}
+
 .login-security-note {
   color: #71818c;
   font-size: 12px;
