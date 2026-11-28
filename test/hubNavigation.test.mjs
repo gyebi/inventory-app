@@ -49,10 +49,10 @@ test("legacy home navigation aliases to Dashboard", () => {
   assert.equal(normalizeNavigationPage("dashboard"), DASHBOARD_PAGE);
 });
 
-test("login, session restoration, and required-password entry routes target Dashboard", async () => {
+test("login, session restoration, and required-password completion route target Dashboard", async () => {
   const appSource = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
 
-  for (const routeHandler of ["renderCurrentEntryPage", "login", "completeRequiredPasswordChange"]) {
+  for (const routeHandler of ["renderCurrentEntryPage", "login", "finishRequiredPasswordChange"]) {
     const handlerStart = appSource.indexOf(`function ${routeHandler}`);
     const handlerEnd = appSource.indexOf("\nfunction ", handlerStart + 1);
     const handler = appSource.slice(handlerStart, handlerEnd === -1 ? undefined : handlerEnd);

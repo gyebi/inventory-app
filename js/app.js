@@ -6,6 +6,8 @@ import {
   logoutUser,
   normalizeUserProfile,
   observeAuthState,
+  reauthenticateWithCurrentPassword,
+  sendPasswordReset,
   updateCurrentUserPassword,
   validateSessionProfile
 } from "./services/authService.js";
@@ -63,6 +65,8 @@ import {
   shouldUseLegacyStockReconstruction
 } from "./services/authoritativeInventory.js";
 import { resolvePersistedProductSellingPrice } from "./services/productPriceResolver.mjs";
+import { getPasswordResetResult, validatePasswordResetEmail } from "./services/passwordRecoveryCore.js";
+import { createPasswordChangeFlow } from "./services/passwordChangeCore.js";
 
 
 const app = document.getElementById("app");
@@ -136,6 +140,12 @@ let cloudStatus = {
   failedListenerNames: []
 };
 let isPrintingModal = false;
+let passwordResetProcessing = false;
+const passwordChangeFlow = createPasswordChangeFlow({
+  updatePassword: updateCurrentUserPassword,
+  reauthenticate: reauthenticateWithCurrentPassword,
+  clearRequiredPasswordChange
+});
 
 function sanitizePersistedUsers(users = []) {
   return users
@@ -1133,12 +1143,14 @@ function navigate(page) {
   page = normalizeNavigationPage(page);
 
   if (page === "login") {
+    passwordChangeFlow.cancel();
     currentPage = page;
     renderLogin();
     return;
   }
 
   if (page === "logout") {
+    passwordChangeFlow.cancel();
     void logout();
     return;
   }
@@ -1149,6 +1161,7 @@ function navigate(page) {
   }
 
   if (hasPendingRequiredPasswordChange() && page !== "logout" && page !== "changePassword") {
+    passwordChangeFlow.cancel();
     currentPage = "changePassword";
     renderRequiredPasswordChange();
     return;
@@ -1165,6 +1178,10 @@ function navigate(page) {
       <button onclick="navigate('dashboard')">Back to Dashboard</button>
     `);
     return;
+  }
+
+  if (page !== "changePassword") {
+    passwordChangeFlow.cancel();
   }
 
   currentPage = page;
@@ -1210,6 +1227,7 @@ function renderSplash() {
 function renderCurrentEntryPage() {
   if (isLoggedIn()) {
     if (hasPendingRequiredPasswordChange()) {
+      passwordChangeFlow.cancel();
       renderRequiredPasswordChange();
       return;
     }
@@ -1227,6 +1245,9 @@ function isLoggedIn() {
 }
 
 function renderLogin(error = "") {
+  // Rendering sign-in is also a navigation boundary for any in-memory
+  // password-change values (including the recovery screen's Back action).
+  passwordChangeFlow.cancel();
   app.innerHTML = `
     <section class="login-page">
       <aside class="login-brand-panel" aria-label="Kay-Flo Enterprise">
@@ -1265,13 +1286,55 @@ function renderLogin(error = "") {
 
           <button class="login-submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
         </form>
+        <button class="login-text-action" type="button" onclick="renderPasswordRecovery()">Forgot password?</button>
         <p class="login-security-note"><span aria-hidden="true">🔒</span> Your account is protected by secure staff authentication.</p>
       </div>
     </section>
   `;
 }
 
-function renderRequiredPasswordChange(error = "") {
+function renderPasswordRecovery({ error = "", notice = "", email = "" } = {}) {
+  app.innerHTML = `
+    <section class="login-page">
+      <aside class="login-brand-panel" aria-label="Kay-Flo Enterprise">
+        <img class="login-brand-logo" src="/jyaanc-kente-hat-logo.png" alt="Jyaano logo featuring a Ghanaian Kente hat">
+        <div class="login-brand-copy">
+          <p>Inventory made practical</p>
+          <h1>Making your business profitable</h1>
+          <span>Track every pesewa by managing stock, sales, suppliers, and receipts from one secure workspace.</span>
+        </div>
+        <div class="login-brand-highlights" aria-label="Application features">
+          <span><b aria-hidden="true">✓</b>Stock control</span>
+          <span><b aria-hidden="true">✓</b>Fast sales</span>
+          <span><b aria-hidden="true">✓</b>Every Device</span>
+        </div>
+      </aside>
+
+      <div class="login-panel">
+        <div class="login-panel-heading">
+          <p class="login-enterprise-name">Kay-Flo Enterprise</p>
+          <h2>Reset your password</h2>
+          <p>Enter your staff email address and we’ll send reset instructions if the account is eligible.</p>
+        </div>
+
+        ${error ? `<div class="message error" role="alert">${error}</div>` : ""}
+        ${notice ? `<div class="message success" role="status">${notice}</div>` : ""}
+
+        <form class="form-column" onsubmit="requestPasswordReset(event)">
+          <div class="form-row">
+            <label for="recoveryEmail">Staff email address</label>
+            <input id="recoveryEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@company.com" value="${escapeShellHtml(email)}">
+          </div>
+
+          <button id="passwordResetButton" class="login-submit" type="submit" ${passwordResetProcessing ? "disabled" : ""}>${passwordResetProcessing ? "Sending..." : "Send reset link <span aria-hidden=\"true\">→</span>"}</button>
+          <button class="login-text-action" type="button" onclick="renderLogin()">Return to sign in</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function renderRequiredPasswordChange(error = "", { partial = false } = {}) {
   currentPage = "changePassword";
   renderShell();
 
@@ -1286,20 +1349,51 @@ function renderRequiredPasswordChange(error = "") {
       <p>${helperText}</p>
     </div>
 
-    ${error ? `<div class="message error">${error}</div>` : ""}
+    ${error ? `<div class="message error" role="alert">${error}</div>` : ""}
+    ${partial ? `
+      <div class="message error" role="alert">Your password was changed, but we could not finish updating your account setup. Retry finishing setup without changing your password again.</div>
+      <div class="form-column panel">
+        <button id="retryPasswordProfileButton" type="button" onclick="retryRequiredPasswordProfileClear()">Finish account setup</button>
+        <button type="button" onclick="navigate('logout')">Sign Out</button>
+      </div>
+    ` : `
+      <form class="form-column panel" onsubmit="completeRequiredPasswordChange(event)">
+        <div class="form-row">
+          <label for="newPassword">New Password</label>
+          <input id="newPassword" type="password" autocomplete="new-password">
+        </div>
 
-    <form class="form-column panel" onsubmit="completeRequiredPasswordChange(event)">
+        <div class="form-row">
+          <label for="confirmPassword">Confirm Password</label>
+          <input id="confirmPassword" type="password" autocomplete="new-password">
+        </div>
+
+        <button id="completePasswordChangeButton" type="submit">Save New Password</button>
+        <button type="button" onclick="navigate('logout')">Sign Out</button>
+      </form>
+    `}
+  `);
+}
+
+function renderPasswordReauthentication(error = "") {
+  currentPage = "changePassword";
+  renderShell();
+  renderPage(`
+    <div class="page-title">
+      <h2>Confirm your identity</h2>
+      <p>For security, enter your current password before we save your new password.</p>
+    </div>
+
+    ${error ? `<div class="message error" role="alert">${error}</div>` : ""}
+
+    <form class="form-column panel" onsubmit="reauthenticateAndCompletePasswordChange(event)">
       <div class="form-row">
-        <label for="newPassword">New Password</label>
-        <input id="newPassword" type="password" autocomplete="new-password">
+        <label for="currentPassword">Current Password</label>
+        <input id="currentPassword" type="password" autocomplete="current-password">
       </div>
 
-      <div class="form-row">
-        <label for="confirmPassword">Confirm Password</label>
-        <input id="confirmPassword" type="password" autocomplete="new-password">
-      </div>
-
-      <button id="completePasswordChangeButton" type="submit">Save New Password</button>
+      <button id="reauthenticatePasswordButton" type="submit">Confirm and save password</button>
+      <button type="button" onclick="cancelPasswordReauthentication()">Cancel</button>
       <button type="button" onclick="navigate('logout')">Sign Out</button>
     </form>
   `);
@@ -1347,6 +1441,55 @@ async function login(event) {
   }
 }
 
+function setPasswordResetProcessing(isProcessing) {
+  const button = /** @type {HTMLButtonElement | null} */ (document.getElementById("passwordResetButton"));
+
+  if (!button) {
+    return;
+  }
+
+  button.disabled = isProcessing;
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Sending...`
+    : `Send reset link <span aria-hidden="true">→</span>`;
+}
+
+async function requestPasswordReset(event) {
+  event?.preventDefault?.();
+
+  if (passwordResetProcessing) {
+    return;
+  }
+
+  const input = /** @type {HTMLInputElement | null} */ (document.getElementById("recoveryEmail"));
+  const validation = validatePasswordResetEmail(input?.value);
+
+  if (!validation.valid) {
+    renderPasswordRecovery({ error: validation.message, email: validation.email });
+    return;
+  }
+
+  passwordResetProcessing = true;
+  setPasswordResetProcessing(true);
+
+  try {
+    await sendPasswordReset(validation.email);
+    renderPasswordRecovery({
+      notice: getPasswordResetResult().message,
+      email: validation.email
+    });
+  } catch (error) {
+    const resetResult = getPasswordResetResult(error);
+    renderPasswordRecovery({
+      [resetResult.type === "success" ? "notice" : "error"]: resetResult.message,
+      email: validation.email
+    });
+  } finally {
+    passwordResetProcessing = false;
+    setPasswordResetProcessing(false);
+  }
+}
+
 async function loadValidatedSessionProfile(uid) {
   let profile = validateSessionProfile(await getUserProfile(uid));
 
@@ -1386,6 +1529,7 @@ async function authenticateUser(identifier, password) {
 }
 
 async function logout() {
+  passwordChangeFlow.cancel();
   try {
     await logoutUser();
   } catch (error) {
@@ -1443,42 +1587,143 @@ async function syncAuthenticatedUser(uid) {
 
 async function completeRequiredPasswordChange(event) {
   event?.preventDefault?.();
-  const newPassword = document.getElementById("newPassword")?.value.trim() || "";
-  const confirmPassword = document.getElementById("confirmPassword")?.value.trim() || "";
+  const newPassword = (/** @type {HTMLInputElement | null} */ (document.getElementById("newPassword")))?.value.trim() || "";
+  const confirmPassword = (/** @type {HTMLInputElement | null} */ (document.getElementById("confirmPassword")))?.value.trim() || "";
 
-  if (!newPassword || !confirmPassword) {
-    renderRequiredPasswordChange("Enter and confirm your new password.");
+  setPasswordChangeProcessing(true);
+  await handlePasswordChangeResult(await passwordChangeFlow.start(newPassword, confirmPassword));
+}
+
+function setPasswordReauthenticationProcessing(isProcessing) {
+  const button = /** @type {HTMLButtonElement | null} */ (document.getElementById("reauthenticatePasswordButton"));
+
+  if (!button) {
     return;
   }
 
-  if (newPassword.length < 6) {
-    renderRequiredPasswordChange("New password must be at least 6 characters.");
-    return;
-  }
+  button.disabled = isProcessing;
+  button.innerHTML = isProcessing
+    ? `<span class="button-spinner" aria-hidden="true"></span>Confirming...`
+    : "Confirm and save password";
+}
 
-  if (newPassword !== confirmPassword) {
-    renderRequiredPasswordChange("The new password and confirmation do not match.");
-    return;
-  }
+function setPasswordProfileClearProcessing(isProcessing) {
+  const button = /** @type {HTMLButtonElement | null} */ (document.getElementById("retryPasswordProfileButton"));
 
-  try {
-    setPasswordChangeProcessing(true);
-    await updateCurrentUserPassword(newPassword);
-    const updatedProfile = validateSessionProfile(
-      await clearRequiredPasswordChange() || {
-        ...state.sessionUser,
-        mustChangePassword: false
+  if (button) {
+    button.disabled = isProcessing;
+    button.innerHTML = isProcessing
+      ? `<span class="button-spinner" aria-hidden="true"></span>Finishing...`
+      : "Finish account setup";
+  }
+}
+
+function passwordChangeErrorMessage(error, fallback) {
+  switch (error?.code) {
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "The current password is incorrect. Try again.";
+    case "auth/unsupported-provider":
+      return "This sign-in method does not support password reauthentication. Sign out and use the original sign-in method.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a few minutes before trying again.";
+    case "auth/network-request-failed":
+      return "Unable to reach Firebase. Check your internet connection and try again.";
+    case "auth/requires-recent-login":
+      return "Your sign-in needs to be refreshed. Sign out and sign in again before trying to change your password.";
+    default:
+      return toUserMessage(error, fallback);
+  }
+}
+
+async function finishRequiredPasswordChange(profile) {
+  const updatedProfile = validateSessionProfile(profile || {
+    ...state.sessionUser,
+    mustChangePassword: false
+  });
+
+  state.user = buildSessionUser(updatedProfile);
+  state.sessionUser = updatedProfile;
+  saveState();
+  navigate("dashboard");
+}
+
+async function handlePasswordChangeResult(changeResult, { reauthentication = false } = {}) {
+  switch (changeResult.type) {
+    case "validation-error":
+      renderRequiredPasswordChange(changeResult.message);
+      return;
+    case "reauthentication-required":
+      renderPasswordReauthentication();
+      return;
+    case "complete":
+      try {
+        await finishRequiredPasswordChange(changeResult.profile);
+      } catch (error) {
+        renderRequiredPasswordChange(toUserMessage(error, "Your password was changed, but the account setup needs attention."));
       }
-    );
-
-    state.user = buildSessionUser(updatedProfile);
-    state.sessionUser = updatedProfile;
-    saveState();
-    navigate("dashboard");
-  } catch (error) {
-    logAppError("Required password change failed", error);
-    renderRequiredPasswordChange(toUserMessage(error, "Unable to change the password. Check the new password and try again."));
+      return;
+    case "profile-clear-failed":
+      renderRequiredPasswordChange("", { partial: true });
+      return;
+    case "reauthentication-failed":
+      renderPasswordReauthentication(passwordChangeErrorMessage(
+        changeResult.error,
+        "Unable to verify your current password. Try again."
+      ));
+      return;
+    case "reauthentication-unsupported":
+      renderRequiredPasswordChange(passwordChangeErrorMessage(
+        changeResult.error,
+        "This sign-in method does not support password reauthentication."
+      ));
+      return;
+    case "reauthentication-unavailable":
+      renderRequiredPasswordChange("Your password change was cancelled. Enter a new password to try again.");
+      return;
+    case "password-update-failed":
+      renderRequiredPasswordChange(passwordChangeErrorMessage(
+        changeResult.error,
+        reauthentication
+          ? "Unable to save the new password after confirming your identity. Try again."
+          : "Unable to change the password. Check the new password and try again."
+      ));
+      return;
+    case "profile-clear-unavailable":
+      renderRequiredPasswordChange("Your password was changed, but account setup still needs to be completed.", { partial: true });
+      return;
+    default:
+      renderRequiredPasswordChange("Unable to change the password. Try again.");
   }
+}
+
+async function reauthenticateAndCompletePasswordChange(event) {
+  event?.preventDefault?.();
+  const currentPassword = (/** @type {HTMLInputElement | null} */ (document.getElementById("currentPassword")))?.value || "";
+
+  if (!currentPassword) {
+    renderPasswordReauthentication("Enter your current password.");
+    return;
+  }
+
+  setPasswordReauthenticationProcessing(true);
+  const changeResult = await passwordChangeFlow.reauthenticateAndRetry(currentPassword);
+  // Clear the only DOM copy before rendering a result, including failures.
+  const currentPasswordInput = /** @type {HTMLInputElement | null} */ (document.getElementById("currentPassword"));
+  if (currentPasswordInput) {
+    currentPasswordInput.value = "";
+  }
+  await handlePasswordChangeResult(changeResult, { reauthentication: true });
+}
+
+function cancelPasswordReauthentication() {
+  passwordChangeFlow.cancel();
+  renderRequiredPasswordChange();
+}
+
+async function retryRequiredPasswordProfileClear() {
+  setPasswordProfileClearProcessing(true);
+  await handlePasswordChangeResult(await passwordChangeFlow.retryProfileClear());
 }
 
 function renderShell() {
@@ -1888,7 +2133,12 @@ window.app = {
 
 window.navigate = navigate;
 window.login = login;
+window["renderPasswordRecovery"] = renderPasswordRecovery;
+window["requestPasswordReset"] = requestPasswordReset;
 window.completeRequiredPasswordChange = completeRequiredPasswordChange;
+window["reauthenticateAndCompletePasswordChange"] = reauthenticateAndCompletePasswordChange;
+window["cancelPasswordReauthentication"] = cancelPasswordReauthentication;
+window["retryRequiredPasswordProfileClear"] = retryRequiredPasswordProfileClear;
 window.closeModal = closeModal;
 window.printReceipt = printReceipt;
 window.printMptReceipt = printMptReceipt;
@@ -1932,6 +2182,7 @@ const authReady = new Promise((resolve) => {
 observeAuthState(async (firebaseUser) => {
   try {
     if (!firebaseUser) {
+      passwordChangeFlow.cancel();
       stopCloudListeners();
       if (state.user || state.sessionUser) {
         state.user = null;
@@ -1947,6 +2198,7 @@ observeAuthState(async (firebaseUser) => {
     await syncAuthenticatedUser(firebaseUser.uid);
     void ensureAuthenticatedCloudSync();
   } catch (error) {
+    passwordChangeFlow.cancel();
     logAppError("Auth state sync failed", error);
     stopCloudListeners();
     state.user = null;

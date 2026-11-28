@@ -1,12 +1,15 @@
 import { getState, setState } from "../state.js";
 // js/services/authService.js
 import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   updatePassword
 } from "firebase/auth";
-import { auth } from "../firebase.js";
+import { auth, passwordResetContinueUrl } from "../firebase.js";
 import {
   createAppError,
   ERROR_FLAGS,
@@ -134,6 +137,36 @@ export async function updateCurrentUserPassword(newPassword) {
     await updatePassword(auth.currentUser, newPassword);
   } catch (error) {
     throw normalizeFirebaseError(error, "Unable to update the password. Check the new password and try again.", {
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
+  }
+}
+
+export async function sendPasswordReset(email) {
+  // Firebase sends its hosted action page. The fixed continue URL only returns
+  // the user to this validated application origin after the reset is complete.
+  return sendPasswordResetEmail(auth, email, {
+    url: passwordResetContinueUrl,
+    handleCodeInApp: false
+  });
+}
+
+export async function reauthenticateWithCurrentPassword(currentPassword) {
+  const user = auth.currentUser;
+  const supportsPassword = user?.providerData?.some((provider) => provider.providerId === "password");
+
+  if (!user || !supportsPassword || !user.email) {
+    throw createAppError("This sign-in method does not support password reauthentication.", {
+      code: "auth/unsupported-provider",
+      source: ERROR_FLAGS.SOURCE_AUTH
+    });
+  }
+
+  try {
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+  } catch (error) {
+    throw normalizeFirebaseError(error, "Unable to verify your current password. Try again.", {
       source: ERROR_FLAGS.SOURCE_AUTH
     });
   }

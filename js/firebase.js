@@ -7,6 +7,7 @@ import {
   SYNTHETIC_EMULATOR_FIREBASE_CONFIG,
   assertLocalEmulatorTarget
 } from "./utils/emulatorConfig.mjs";
+import { getPasswordResetContinueUrl } from "./utils/passwordResetUrl.mjs";
 
 const PRODUCTION_PROJECT_ID = "inventory-app-19d04";
 const isStagingBuild = import.meta.env.MODE === "staging";
@@ -40,6 +41,13 @@ if (isStagingBuild && firebaseConfig.projectId === PRODUCTION_PROJECT_ID) {
 if (isLocalEmulatorBuild) {
   assertLocalEmulatorTarget(firebaseConfig.projectId, LOCAL_EMULATOR_ENDPOINTS);
 }
+
+// This is derived only from the validated build mode/project configuration.
+// It is never taken from query parameters or user input.
+export const passwordResetContinueUrl = getPasswordResetContinueUrl({
+  mode: import.meta.env.MODE,
+  projectId: firebaseConfig.projectId
+});
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
