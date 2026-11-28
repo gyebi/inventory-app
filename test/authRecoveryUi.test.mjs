@@ -21,6 +21,8 @@ test("login exposes a password recovery form with return action and accessible e
   const recovery = sourceFor("renderPasswordRecovery");
   assert.match(recovery, /id="recoveryEmail" type="email" autocomplete="email"/);
   assert.match(recovery, /Return to sign in/);
+  assert.match(recovery, /data-password-recovery-return/);
+  assert.match(recovery, /wirePasswordRecoveryReturnAction\(app, returnToSignIn\)/);
   assert.match(recoverySource, /If an account exists for this email/);
 });
 
@@ -29,7 +31,14 @@ test("reset submission prevents repeat requests and does not read staff profiles
   assert.match(request, /if \(passwordResetProcessing\)/);
   assert.match(sourceFor("setPasswordResetProcessing"), /button\.disabled = isProcessing/);
   assert.match(request, /sendPasswordReset\(validation\.email\)/);
+  assert.match(request, /passwordRecoveryRequestGate\.isCurrent\(requestGeneration\)/);
   assert.doesNotMatch(request, /getUserProfile|fetchUsersFromCloud|users/);
+});
+
+test("leaving recovery clears its transient request state", () => {
+  assert.match(sourceFor("renderLogin"), /clearPasswordRecoveryState\(\)/);
+  assert.match(sourceFor("clearPasswordRecoveryState"), /passwordRecoveryRequestGate\.cancel\(\)/);
+  assert.match(sourceFor("clearPasswordRecoveryState"), /passwordResetProcessing = false/);
 });
 
 test("Firebase reset email uses the hosted action page and fixed configuration URL", () => {

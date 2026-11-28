@@ -66,6 +66,7 @@ import {
 } from "./services/authoritativeInventory.js";
 import { resolvePersistedProductSellingPrice } from "./services/productPriceResolver.mjs";
 import { getPasswordResetResult, validatePasswordResetEmail } from "./services/passwordRecoveryCore.js";
+import { createPasswordRecoveryRequestGate, wirePasswordRecoveryReturnAction } from "./services/passwordRecoveryUi.js";
 import { createPasswordChangeFlow } from "./services/passwordChangeCore.js";
 
 
@@ -141,6 +142,7 @@ let cloudStatus = {
 };
 let isPrintingModal = false;
 let passwordResetProcessing = false;
+const passwordRecoveryRequestGate = createPasswordRecoveryRequestGate();
 const passwordChangeFlow = createPasswordChangeFlow({
   updatePassword: updateCurrentUserPassword,
   reauthenticate: reauthenticateWithCurrentPassword,
@@ -1247,6 +1249,7 @@ function isLoggedIn() {
 function renderLogin(error = "") {
   // Rendering sign-in is also a navigation boundary for any in-memory
   // password-change values (including the recovery screen's Back action).
+  clearPasswordRecoveryState();
   passwordChangeFlow.cancel();
   app.innerHTML = `
     <section class="login-page">
@@ -1327,11 +1330,22 @@ function renderPasswordRecovery({ error = "", notice = "", email = "" } = {}) {
           </div>
 
           <button id="passwordResetButton" class="login-submit" type="submit" ${passwordResetProcessing ? "disabled" : ""}>${passwordResetProcessing ? "Sending..." : "Send reset link <span aria-hidden=\"true\">→</span>"}</button>
-          <button class="login-text-action" type="button" onclick="renderLogin()">Return to sign in</button>
+          <button class="login-text-action" type="button" data-password-recovery-return>Return to sign in</button>
         </form>
       </div>
     </section>
   `;
+
+  wirePasswordRecoveryReturnAction(app, returnToSignIn);
+}
+
+function clearPasswordRecoveryState() {
+  passwordRecoveryRequestGate.cancel();
+  passwordResetProcessing = false;
+}
+
+function returnToSignIn() {
+  renderLogin();
 }
 
 function renderRequiredPasswordChange(error = "", { partial = false } = {}) {
@@ -1470,23 +1484,32 @@ async function requestPasswordReset(event) {
   }
 
   passwordResetProcessing = true;
+  const requestGeneration = passwordRecoveryRequestGate.begin();
   setPasswordResetProcessing(true);
 
   try {
     await sendPasswordReset(validation.email);
+    if (!passwordRecoveryRequestGate.isCurrent(requestGeneration)) {
+      return;
+    }
     renderPasswordRecovery({
       notice: getPasswordResetResult().message,
       email: validation.email
     });
   } catch (error) {
+    if (!passwordRecoveryRequestGate.isCurrent(requestGeneration)) {
+      return;
+    }
     const resetResult = getPasswordResetResult(error);
     renderPasswordRecovery({
       [resetResult.type === "success" ? "notice" : "error"]: resetResult.message,
       email: validation.email
     });
   } finally {
-    passwordResetProcessing = false;
-    setPasswordResetProcessing(false);
+    if (passwordRecoveryRequestGate.isCurrent(requestGeneration)) {
+      passwordResetProcessing = false;
+      setPasswordResetProcessing(false);
+    }
   }
 }
 
