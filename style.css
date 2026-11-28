@@ -122,65 +122,78 @@ button {
   font: inherit;
 }
 
+/* Authentication screens own the viewport without affecting the app shell. */
+body:has(.login-page) {
+  background: #fff3d8;
+  padding: 0;
+}
+
 .login-page {
   align-items: center;
-  display: grid;
-  gap: clamp(24px, 5vw, 82px);
-  grid-template-columns: minmax(300px, 1.12fr) minmax(340px, 0.88fr);
-  margin: 0 auto;
-  max-width: 1200px;
-  min-height: calc(100vh - 48px);
-  padding: 24px;
-}
-
-.login-panel {
-  background: rgba(255, 250, 240, 0.98);
-  border: 1px solid #efd39f;
-  border-radius: 20px;
-  box-sizing: border-box;
-  box-shadow: 0 24px 55px rgba(103, 69, 11, 0.16);
-  padding: clamp(28px, 4vw, 46px);
-  width: min(560px, 100%);
-}
-
-.login-brand-panel {
   background:
-    radial-gradient(circle at 83% 10%, rgba(245, 179, 59, 0.5), transparent 25%),
-    radial-gradient(circle at 13% 90%, rgba(0, 103, 70, 0.22), transparent 30%),
-    linear-gradient(145deg, #fffaf0 0%, #fff0ca 52%, #f6d798 100%);
-  border-radius: 24px;
-  box-shadow: 0 24px 55px rgba(44, 80, 47, 0.2);
-  box-sizing: border-box;
-  color: #003f36;
-  min-height: 590px;
-  overflow: hidden;
-  padding: clamp(28px, 4.5vw, 54px);
+    radial-gradient(circle at 17% 88%, rgba(0, 92, 69, 0.19), transparent 28%),
+    radial-gradient(circle at 79% 12%, rgba(237, 170, 46, 0.24), transparent 27%),
+    linear-gradient(126deg, transparent 0 27%, rgba(0, 73, 57, 0.055) 27.15% 27.4%, transparent 27.55% 100%),
+    linear-gradient(22deg, transparent 0 62%, rgba(224, 126, 33, 0.11) 62.15% 62.45%, transparent 62.6% 100%),
+    linear-gradient(140deg, #fffaf0 0%, #fff0ca 56%, #f4d694 100%);
+  display: grid;
+  gap: clamp(34px, 6vw, 92px);
+  grid-template-columns: minmax(0, 650px) minmax(400px, 460px);
+  isolation: isolate;
+  justify-content: center;
+  margin: 0;
+  min-height: 100svh;
+  padding: clamp(32px, 6vw, 76px);
   position: relative;
 }
 
-.login-brand-panel::after {
+.login-page::after {
   background:
-    linear-gradient(102deg, transparent 0 34%, rgba(0, 63, 54, 0.08) 34.25% 35%, transparent 35.25% 100%),
-    linear-gradient(20deg, transparent 0 73%, rgba(255, 107, 11, 0.16) 73.25% 74%, transparent 74.25% 100%);
+    repeating-linear-gradient(126deg, transparent 0 94px, rgba(0, 73, 57, 0.035) 95px 96px, transparent 97px 188px),
+    repeating-linear-gradient(22deg, transparent 0 128px, rgba(197, 111, 26, 0.045) 129px 130px, transparent 131px 256px);
   content: "";
   inset: 0;
   pointer-events: none;
   position: absolute;
+  z-index: -1;
+}
+
+.login-page > * {
+  min-width: 0;
+}
+
+.login-panel {
+  background: rgba(255, 252, 244, 0.97);
+  border: 1px solid #e7c98f;
+  border-radius: 18px;
+  box-shadow: 0 22px 48px rgba(79, 53, 12, 0.16);
+  justify-self: end;
+  padding: clamp(28px, 3.2vw, 42px);
+  position: relative;
+  width: min(100%, 460px);
+}
+
+.login-brand-panel {
+  align-self: stretch;
+  color: #003f36;
+  min-height: min(590px, calc(100svh - clamp(64px, 12vw, 152px)));
+  padding: clamp(4px, 1vw, 16px) 0;
+  position: relative;
 }
 
 .login-brand-logo {
   display: block;
   filter: drop-shadow(0 8px 13px rgba(103, 69, 11, 0.18));
   height: auto;
-  max-width: 280px;
+  max-width: 250px;
   position: relative;
-  width: min(100%, 280px);
+  width: clamp(170px, 18vw, 250px);
   z-index: 1;
 }
 
 .login-brand-copy {
-  bottom: 100px;
-  max-width: 470px;
+  bottom: 78px;
+  max-width: 500px;
   position: absolute;
   z-index: 1;
 }
@@ -196,22 +209,22 @@ button {
 }
 
 .login-brand-copy h1 {
-  font-size: clamp(32px, 4vw, 53px);
-  letter-spacing: -1.6px;
-  line-height: 0.98;
-  margin: 0 0 17px;
+  font-size: clamp(34px, 3.7vw, 48px);
+  letter-spacing: -1.35px;
+  line-height: 1;
+  margin: 0 0 16px;
 }
 
 .login-brand-copy span {
   color: #36524c;
   display: block;
-  font-size: 16px;
+  font-size: clamp(15px, 1.25vw, 17px);
   line-height: 1.55;
-  max-width: 430px;
+  max-width: 460px;
 }
 
 .login-brand-highlights {
-  bottom: 35px;
+  bottom: 4px;
   display: flex;
   flex-wrap: wrap;
   gap: 9px 17px;
@@ -241,7 +254,7 @@ button {
 }
 
 .login-panel-heading {
-  margin-bottom: 30px;
+  margin-bottom: 28px;
 }
 
 .login-enterprise-name {
@@ -256,7 +269,7 @@ button {
 
 .login-panel-heading h2 {
   color: #003f36;
-  font-size: clamp(29px, 3vw, 38px);
+  font-size: clamp(28px, 2.5vw, 35px);
   letter-spacing: -1px;
   margin: 0 0 9px;
 }
@@ -294,6 +307,16 @@ button {
   border-color: #ff6b0b;
   box-shadow: 0 0 0 3px rgba(255, 107, 11, 0.16);
   outline: 0;
+}
+
+.login-panel input:focus-visible,
+.login-panel button:focus-visible {
+  outline: 3px solid rgba(255, 107, 11, 0.42);
+  outline-offset: 3px;
+}
+
+.login-panel .message {
+  overflow-wrap: anywhere;
 }
 
 .login-submit {
@@ -1437,18 +1460,34 @@ p {
 
 @media (max-width: 800px) {
   .login-page {
+    align-items: start;
+    gap: 30px;
     grid-template-columns: minmax(0, 1fr);
-    max-width: 620px;
-    min-height: auto;
+    min-height: 100svh;
+    padding: clamp(28px, 7vw, 54px);
   }
 
   .login-brand-panel {
-    min-height: 390px;
+    align-self: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .login-brand-copy,
+  .login-brand-highlights {
+    position: static;
+  }
+
+  .login-brand-copy {
+    margin-top: 26px;
+  }
+
+  .login-brand-highlights {
+    margin-top: 22px;
   }
 
   .login-panel {
-    justify-self: stretch;
-    width: 100%;
+    justify-self: start;
   }
 }
 
@@ -1532,14 +1571,14 @@ p {
 
   .login-page {
     align-items: stretch;
-    gap: 16px;
-    min-height: auto;
-    padding: 0;
+    gap: 24px;
+    min-height: 100svh;
+    padding: 24px 18px 30px;
   }
 
   .login-brand-panel {
     min-height: auto;
-    padding: 26px;
+    padding: 0;
   }
 
   .login-brand-logo {
@@ -1564,7 +1603,8 @@ p {
   }
 
   .login-panel {
-    padding: 18px;
+    border-radius: 15px;
+    padding: 24px 20px;
   }
 
   .login-panel-heading {
